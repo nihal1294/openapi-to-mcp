@@ -1,0 +1,71 @@
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import express from 'express';
+import { OpenApiMcpServer } from './server.js';
+import * as console from 'console';
+
+console.error(`Starting SSE transport using Express on port {{ port }}`);
+const serverInstance = new OpenApiMcpServer();
+const app = express();
+let sseTransport: SSEServerTransport | null = null;
+
+
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+        res.sendStatus(204);
+    } else {
+        next();
+    }
+});
+
+// SSE Endpoint
+app.get('/sse', async (req, res) => {
+    console.error("SSE connection requested from client.");
+
+    sseTransport = new SSEServerTransport("/messages", res);
+    try {
+        await serverInstance.server.connect(sseTransport);
+        console.error("MCP server connected via SSE transport.");
+    } catch (error) {
+        console.error("Failed to connect MCP server via SSE:", error);
+        if (!res.headersSent) {
+             res.writeHead(500, { 'Content-Type': 'text/plain' });
+             res.end('Failed to connect MCP server');
+        } else if (res.writableEnded === false) {
+             res.end();
+        }
+    }
+
+    req.on('close', () => {
+        console.error("SSE client disconnected.");
+        // Optional: Disconnect the server instance from this transport if needed
+        // serverInstance.server.disconnect(sseTransport);
+        sseTransport = null;
+        console.error("Cleaned up SSE transport reference on client disconnect.");
+    });
+});
+
+// Message Endpoint (for client to send requests to server)
+app.post('/messages', async (req, res) => {
+    console.error("Received POST request on /messages");
+    if (sseTransport) {
+        try {
+            await sseTransport.handlePostMessage(req, res);
+        } catch (error) {
+            console.error("Error handling POST message:", error);
+            if (!res.headersSent) {
+                res.status(500).send('Error processing message');
+            }
+        }
+    } else {
+        console.error("Received POST on /messages but no active/valid SSE transport found for this request.");
+        res.status(404).send('No active SSE connection found or transport is invalid');
+    }
+});
+
+// Start the Express server
+app.listen({{ port }}, () => {
+    console.error(`Express server for SSE transport listening on http://localhost:{{ port }}`);
+});

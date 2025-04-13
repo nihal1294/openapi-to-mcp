@@ -1,0 +1,212 @@
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import {
+  ListToolsRequestSchema,
+  CallToolRequestSchema,
+  CallToolResult,
+  McpError,
+  ErrorCode,
+  Tool,
+} from '@modelcontextprotocol/sdk/types.js';
+import axios, { AxiosError, Method } from 'axios';
+import * as console from 'console';
+
+// Environment variables are loaded by the main index.ts
+const TARGET_API_BASE_URL = process.env.TARGET_API_BASE_URL || '';
+const TARGET_API_AUTH_HEADER = process.env.TARGET_API_AUTH_HEADER;
+const PLACEHOLDER_BASE_URL = "YOUR_API_BASE_URL_HERE"; // Define placeholder
+
+const tools: Tool[] = {{ tools | tojson(indent=2) }};
+
+function mapApiErrorToMcpError(error: unknown): McpError {
+    if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError;
+        const status = axiosError.response?.status;
+        // Attempt to get a meaningful message from response data or default Axios message
+        const apiMessage = (axiosError.response?.data as any)?.message || (axiosError.response?.data as any)?.detail || axiosError.message;
+
+        console.error(`API Error: Status ${status}, Message: ${apiMessage}`, axiosError.response?.data);
+
+        switch (status) {
+            case 400: return new McpError(ErrorCode.InvalidParams, `API Bad Request: ${apiMessage}`);
+            case 404: return new McpError(ErrorCode.MethodNotFound, `API Not Found: ${apiMessage}`);
+            case 408: return new McpError(ErrorCode.RequestTimeout, `API Request Timeout: ${apiMessage}`);
+            case 500: case 502: case 503: case 504:
+                return new McpError(ErrorCode.InternalError, `API Server Error (${status}): ${apiMessage}`);
+            default:
+                return new McpError(ErrorCode.InternalError, `API Request Failed (${status}): ${apiMessage}`);
+        }
+    } else if (error instanceof Error) {
+         console.error(`Request Error: ${error.message}`, error);
+         return new McpError(ErrorCode.InternalError, `Request failed: ${error.message}`);
+    } else {
+        console.error('Unknown internal error occurred:', error);
+        return new McpError(ErrorCode.InternalError, 'An unknown internal error occurred');
+    }
+}
+
+
+export class OpenApiMcpServer {
+  public server: Server; // Make server public for transport connection
+  private axiosInstance = axios.create({
+      baseURL: TARGET_API_BASE_URL, // Axios will use this as the base for requests
+      timeout: 30000, // 30 second timeout
+  });
+
+  constructor() {
+    // Validate TARGET_API_BASE_URL on startup
+    if (!TARGET_API_BASE_URL || TARGET_API_BASE_URL === PLACEHOLDER_BASE_URL) {
+      console.error(`FATAL: TARGET_API_BASE_URL environment variable is not configured or is set to the placeholder value.`);
+      console.error(`Please set it in the .env file to the full base URL of your target API, including any necessary paths (e.g., https://api.example.com/v1).`);
+      process.exit(1);
+    }
+    console.error(`Initializing MCP Server: {{ server_name }} v{{ server_version }}`);
+    console.error(`Using Target API Base URL: ${TARGET_API_BASE_URL}`);
+    if (TARGET_API_AUTH_HEADER) {
+        console.error("Using TARGET_API_AUTH_HEADER for authentication.");
+    } else {
+        console.error("No TARGET_API_AUTH_HEADER found. Assuming public API or auth handled differently.");
+    }
+
+    this.server = new Server(
+      { name: '{{ server_name }}', version: '{{ server_version }}' },
+      { capabilities: { resources: {}, tools: {} } }
+    );
+    this.setupRequestHandlers();
+    this.setupGracefulShutdown();
+    this.server.onerror = (error) => console.error('[MCP Server Error]', error);
+  }
+
+  private setupGracefulShutdown(): void {
+    process.on('SIGINT', async () => {
+      console.error("Received SIGINT, shutting down server...");
+      await this.server.close();
+      console.error("Server closed.");
+      process.exit(0);
+    });
+    process.on('SIGTERM', async () => {
+      console.error("Received SIGTERM, shutting down server...");
+      await this.server.close();
+      console.error("Server closed.");
+      process.exit(0);
+    });
+  }
+
+  private setupRequestHandlers(): void {
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      console.error("Handling ListTools request");
+      return { tools };
+    });
+
+    this.server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
+      const toolName = request.params.name;
+      const args = request.params.arguments || {};
+      console.error(`Received CallTool request for: ${toolName}`, args);
+
+      const tool = tools.find(t => t.name === toolName);
+      if (!tool) {
+        console.error(`Tool not found: ${toolName}`);
+        throw new McpError(ErrorCode.MethodNotFound, `Tool '${toolName}' not found.`);
+      }
+
+      // Retrieve original OpenAPI details attached during generation
+      const originalMethod = (tool as any)._original_method as Method; // Cast to Axios Method type
+      const originalPath = (tool as any)._original_path as string;
+      const originalParameters = (tool as any)._original_parameters as any[] || [];
+      const originalRequestBodyInfo = (tool as any)._original_request_body as { required: boolean, content_type: string | null } | null;
+
+      if (!originalMethod || !originalPath) {
+          console.error(`Missing original operation details for tool: ${toolName}`);
+          throw new McpError(ErrorCode.InternalError, `Internal configuration error for tool '${toolName}'.`);
+      }
+
+      try {
+        let targetPath = originalPath;
+        const queryParams: Record<string, any> = {};
+        const headers: Record<string, string> = { 'Accept': 'application/json' };
+        let requestData: any = undefined;
+
+        // Add static auth header if configured
+        if (TARGET_API_AUTH_HEADER) {
+            const separatorIndex = TARGET_API_AUTH_HEADER.indexOf(':');
+            if (separatorIndex > 0) {
+                const headerName = TARGET_API_AUTH_HEADER.substring(0, separatorIndex).trim();
+                const headerValue = TARGET_API_AUTH_HEADER.substring(separatorIndex + 1).trim();
+                headers[headerName] = headerValue;
+            } else {
+                console.error(`Could not parse TARGET_API_AUTH_HEADER: ${TARGET_API_AUTH_HEADER}. Expected format 'Header-Name: Value'`);
+            }
+        }
+
+        // Process parameters based on their 'in' location
+        for (const param of originalParameters) {
+            const paramName = param.name;
+            const paramIn = param.in; // path, query, header
+            const paramValue = args[paramName];
+
+            if (paramValue !== undefined && paramValue !== null) {
+                if (paramIn === 'path') {
+                    targetPath = targetPath.replace(`{${paramName}}`, encodeURIComponent(String(paramValue)));
+                } else if (paramIn === 'query') {
+                    queryParams[paramName] = paramValue;
+                } else if (paramIn === 'header') {
+                    headers[paramName] = String(paramValue);
+                }
+            } else if (param.required) {
+                 console.error(`Missing required parameter '${paramName}' for tool ${toolName}`);
+                 throw new McpError(ErrorCode.InvalidParams, `Missing required parameter: ${paramName}`);
+            }
+        }
+
+        // Process requestBody
+        if (originalRequestBodyInfo && args.requestBody !== undefined && args.requestBody !== null) {
+            requestData = args.requestBody;
+            headers['Content-Type'] = originalRequestBodyInfo.content_type || 'application/json';
+        } else if (originalRequestBodyInfo?.required) {
+             console.error(`Missing required requestBody for tool ${toolName}`);
+             throw new McpError(ErrorCode.InvalidParams, `Missing required requestBody`);
+        } else if (requestData !== undefined) {
+             headers['Content-Type'] = 'application/json';
+        }
+
+        // Make API Call - Axios combines baseURL and url
+        const requestUrl = targetPath; // Use the path directly
+        console.error(`Making API call: ${originalMethod} ${this.axiosInstance.defaults.baseURL}${requestUrl}`);
+        const response = await this.axiosInstance.request({
+            method: originalMethod,
+            url: requestUrl, // Use the relative path; Axios combines it with baseURL
+            params: queryParams,
+            headers: headers,
+            data: requestData,
+            validateStatus: (status) => status >= 200 && status < 300, // Only 2xx are considered success
+        });
+
+        console.error(`API call successful for ${toolName}, Status: ${response.status}`);
+
+        // Format Response for MCP
+        let responseText: string;
+        const responseContentType = response.headers['content-type'];
+        if (responseContentType && responseContentType.includes('application/json') && typeof response.data === 'object') {
+             try {
+                 responseText = JSON.stringify(response.data, null, 2); // Pretty-print JSON
+             } catch (e) {
+                 console.error("Failed to stringify JSON response, returning as string.", e);
+                 responseText = String(response.data);
+             }
+        } else {
+             responseText = String(response.data); // Return non-JSON as plain text
+        }
+
+        return { content: [{ type: 'text', text: responseText }] };
+
+      } catch (error) {
+        console.error(`Error during API call for tool ${toolName}:`, error);
+        const mcpError = mapApiErrorToMcpError(error);
+        return {
+          content: [{ type: 'text', text: mcpError.message }],
+          isError: true,
+          error: mcpError, // Include structured error
+        };
+      }
+    });
+  }
+}

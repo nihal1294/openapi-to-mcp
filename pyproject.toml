@@ -1,0 +1,100 @@
+[tool.poetry]
+name = "openapi-to-mcp"
+version = "0.1.0"
+description = "Generates an MCP server from an OpenAPI specification."
+authors = ["Nihal Rao <nihaliddya@gmail.com>"]
+readme = "README.md"
+packages = [{include = "openapi_to_mcp"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+click = "^8.1.7"
+requests = "^2.31.0"
+pyyaml = "^6.0.1"
+jinja2 = "^3.1.5"
+openapi-spec-validator = "^0.7.1"
+python-json-logger = "^3.2.0"
+mcp = "^1.5.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.0"
+pytest-asyncio = "^0.25.0"
+pytest-cov = "^6.0.0"
+pytest-mock = "^3.13.0"
+pytest-instafail = "^0.5.0"
+ruff = "^0.10.0"
+poethepoet = "^0.32.0"
+
+[tool.poetry.scripts]
+openapi-to-mcp = "openapi_to_mcp.cli:cli"
+
+[tool.ruff]
+# Common settings
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "ALL", 
+]
+ignore = [
+    "D",        # Documentation rules
+    "A003",     # Builtin Attribute shadowing
+    "PTH118",   # os.path.join - pathlib is preferred
+    "PTH110",   # os.path.exists
+    "PTH112",   # os.path.isdir
+    "PTH123",   # builtin open - pathlib is preferred
+    "INP001",   # implicit namespace package
+    "E501",     # Line too long (handled by formatter)
+    "COM812",   # Missing trailing comma (conflicts with formatter)
+    "EM101",    # Exception string literal
+    "EM102",    # Exception f-string literal
+    "TRY003",   # Long exception message
+    "TRY301",   # Abstract raise to inner function (ignore for now)
+    "BLE001",   # Catching broad exception 'Exception' (sometimes needed)
+    # Ignore complexity warnings for now
+    "C901",     # Too complex
+    "PLR0912",  # Too many branches
+    "PLR0915",  # Too many statements
+    "PLR0913"   # Too many arguments
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore assert, private access, unused args, type annotations in tests
+"tests/**" = [
+    "S101",     # Use of assert detected
+    "SLF001",   # Private member access
+    "ARG001",   # Unused arguments
+    "ANN401",   # Any type annotation
+    "ANN001",   # Missing function argument annotation
+    "ANN002",   # Missing *args type annotation
+    "ANN003",   # Missing **kwargs type annotation
+    "ANN202",   # Missing return type annotation for private function
+    "B018",     # Useless expression
+    "RET504",   # Unnecessary assignment before return
+    "PLR2004",  # Magic value used in comparison
+    "PT017"     # Found assertion in except block
+]
+"openapi_to_mcp/tester.py" = ["S603"] # Ignore subprocess call warning (user-provided cmd, shlex used)
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q --cov-report=term-missing --cov-fail-under=60 --cov-report=xml:dist/test/coverage.xml --instafail -p no:cacheprovider"
+testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.poe.tasks]
+format = "ruff format ."
+lint   = "ruff check . --fix"
+test   = "pytest --cov=openapi_to_mcp"
+check  = ["format", "lint", "test"]
+clean.help = "Remove cache, coverage, and build artifacts"
+clean.cmd = """sh -c 'find . -name __pycache__ -type d -exec rm -rf {} + && rm -rf .pytest_cache .ruff_cache .coverage dist output mcp-server'
+"""
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

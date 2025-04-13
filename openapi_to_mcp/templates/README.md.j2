@@ -1,0 +1,65 @@
+# {{ server_name }} (MCP Server)
+
+Version: {{ server_version }}
+
+{% if server_description -%}
+{{ server_description }}
+{% else -%}
+This MCP server was automatically generated from an OpenAPI specification by the `openapi-to-mcp` tool. It exposes the API endpoints defined in the specification as MCP tools.
+{% endif %}
+
+## Setup
+
+1.  **Navigate to this directory:**
+    ```bash
+    cd path/to/this/directory
+    ```
+
+2.  **Configure Environment:**
+    Create a `.env` file in this directory by copying `.env.example`. Edit the `.env` file and provide the required values:
+
+    *   **`TARGET_API_BASE_URL` (Required & Critical):**
+        *   This **must** be the **complete base URL** for your target API, including any necessary base paths (e.g., `/api/v3`, `/v1`).
+        *   The generator attempts to pre-fill this value from the OpenAPI spec's `servers` field (if available), but **you must verify and correct it** in your `.env` file.
+        *   The MCP server combines this base URL with the specific endpoint paths (like `/pet/{petId}`) to make API calls. If the base URL is incomplete, API calls will fail (often with 404 errors).
+        *   *Example 1 (Spec had full path):* `TARGET_API_BASE_URL=https://api.example.com/v1`
+        *   *Example 2 (Spec only had domain, user adds path):* `TARGET_API_BASE_URL=https://petstore3.swagger.io/api/v3`
+
+    *   **`TARGET_API_AUTH_HEADER` (Optional):**
+        *   Provide the full authorization header string if required by the target API (e.g., `Authorization: Bearer your_token` or `X-API-Key: your_key`). Leave it commented out or blank if no auth header is needed.
+
+3.  **Install Dependencies:**
+    ```bash
+    npm install
+    ```
+
+## Running the Server
+
+1.  **Build the TypeScript code:**
+    ```bash
+    npm run build
+    ```
+
+2.  **Start the server:**
+    ```bash
+    npm start
+    ```
+    The server will connect using the configured transport ({{ transport }}{% if transport == 'sse' %} via HTTP on port {{ port }}{% endif %}).
+
+## Development
+
+To run the server in development mode with automatic rebuilding and restarting on file changes:
+
+```bash
+npm run dev
+```
+
+## MCP Tools
+
+This server exposes the following tools based on the OpenAPI specification:
+
+{% for tool in tools %}
+*   **`{{ tool.name }}`**: {{ tool.description }}
+{% endfor %}
+
+**Input Schema:** See `inputSchema` definition within the server's `ListTools` response.
