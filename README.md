@@ -20,7 +20,7 @@ The generated server acts as a proxy, receiving MCP tool calls and translating t
     *   Configurable port for SSE transport.
     *   Reads target API base URL and optional authentication header from a `.env` file.
     *   Includes basic error mapping from HTTP status codes to MCP error codes.
-    *   Includes `package.json`, `tsconfig.json` (with strict settings), and example `.env` file.
+    *   Includes `package.json`, `tsconfig.json` (with strict settings), and **an** example `.env` file.
     *   Provides clear setup and run instructions in a generated `README.md`.
 *   Integrated linting (`ruff`) and formatting (`black`).
 *   Unit and integration tests (`pytest`).
