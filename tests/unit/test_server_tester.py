@@ -216,9 +216,10 @@ def test_format_response_with_error() -> None:
     req_id = 123
 
     result = _format_response(response_data, req_id)
+    expected = {
+        "error": {"code": 100, "message": "Test error"},
+        "jsonrpc": "2.0",
+        "id": req_id,
+    }
 
-    assert "error" in result
-    assert result["error"]["code"] == 100
-    assert result["error"]["message"] == "Test error"
-    assert result["jsonrpc"] == "2.0"
-    assert result["id"] == req_id
+    assert result == expected
