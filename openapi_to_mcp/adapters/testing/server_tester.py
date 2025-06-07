@@ -210,11 +210,10 @@ def _format_response(
 
     response_data_json = response_data.model_dump(mode="json")
     logger.debug("Received response: %s", response_data_json)
-    if "error" not in response_data_json:
-        if "jsonrpc" not in response_data_json:
-            response_data_json["jsonrpc"] = "2.0"
-        if "id" not in response_data_json:
-            response_data_json["id"] = req_id
+    if "jsonrpc" not in response_data_json:
+        response_data_json["jsonrpc"] = "2.0"
+    if "id" not in response_data_json:
+        response_data_json["id"] = req_id
     return response_data_json
 
 

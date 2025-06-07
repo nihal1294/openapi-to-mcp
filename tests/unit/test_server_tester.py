@@ -220,3 +220,5 @@ def test_format_response_with_error() -> None:
     assert "error" in result
     assert result["error"]["code"] == 100
     assert result["error"]["message"] == "Test error"
+    assert result["jsonrpc"] == "2.0"
+    assert result["id"] == req_id
