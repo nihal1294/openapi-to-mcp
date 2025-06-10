@@ -12,8 +12,10 @@ def configure_logger(
     """
     Configures the root logger for the 'openapi_to_mcp' package.
 
-    Sets up a single StreamHandler with a JsonFormatter. Should be called
-    once at the start of the application.
+    Sets up a single StreamHandler. If ``log_format`` is ``'json'`` a
+    :class:`JsonFormatter` is used; otherwise a standard
+    :class:`logging.Formatter` is applied. Should be called once at the
+    start of the application.
 
     Args:
         logger_name (str): The name of the logger to configure.

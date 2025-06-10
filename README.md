@@ -20,7 +20,7 @@ The generated server acts as a proxy, receiving MCP tool calls and translating t
     *   Configurable port for SSE transport.
     *   Reads target API base URL and optional authentication header from a `.env` file.
     *   Includes basic error mapping from HTTP status codes to MCP error codes.
-    *   Includes `package.json`, `tsconfig.json` (with strict settings), and example `.env` file.
+    *   Includes `package.json`, `tsconfig.json` (with strict settings), and **an** example `.env` file.
     *   Provides clear setup and run instructions in a generated `README.md`.
 *   Integrated linting (`ruff`) and formatting (`black`).
 *   Unit and integration tests (`pytest`).
@@ -197,6 +197,103 @@ This command allows you to send basic JSON-RPC requests (`ListTools`, `CallTool`
       --tool-name addPet --tool-args '{"requestBody": {"name": "doggie", "photoUrls": []}}' \
       --env-source '{"TARGET_API_BASE_URL": "https://petstore3.swagger.io/api/v3"}'
     ```
+
+## Usage Examples
+
+For detailed, step-by-step usage examples—including sample OpenAPI v3 input specs, CLI commands, generated output structure, and before/after code samples—see [docs/USAGE_EXAMPLES.md](docs/USAGE_EXAMPLES.md).
+
+A summary is provided below:
+
+### Example OpenAPI v3 Input (JSON)
+```json
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Simple Pet API", "version": "1.0.0" },
+  "paths": {
+    "/pet/{petId}": {
+      "get": {
+        "operationId": "getPetById",
+        "parameters": [
+          { "name": "petId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "A pet object." } }
+      }
+    }
+  }
+}
+```
+
+### Example OpenAPI v3 Input (YAML)
+```yaml
+openapi: 3.0.3
+info:
+  title: Simple Pet API
+  version: 1.0.0
+paths:
+  /pet/{petId}:
+    get:
+      operationId: getPetById
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: A pet object.
+```
+
+### Generate an MCP Server
+```bash
+poetry run openapi-to-mcp generate \
+  --openapi-json pet-api.json \
+  --output-dir ./generated-pet-mcp \
+  --mcp-server-name pet-mcp-server \
+  --transport stdio
+```
+
+### Output Structure
+```
+generated-pet-mcp/
+├── README.md
+├── package.json
+├── tsconfig.json
+├── .env.example
+├── src/
+│   ├── index.ts
+│   ├── server.ts
+│   └── ...
+```
+
+### Before/After Example
+**Before (OpenAPI YAML):**
+```yaml
+paths:
+  /pet/{petId}:
+    get:
+      operationId: getPetById
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: integer
+```
+**After (Generated TypeScript):**
+```typescript
+{
+  name: 'getPetById',
+  inputSchema: {
+    type: 'object',
+    properties: { petId: { type: 'integer' } },
+    required: ['petId']
+  },
+  // ...handler code...
+}
+```
+
+See the [full usage guide](docs/USAGE_EXAMPLES.md) for more details and explanations.
 
 ## 🔍 Testing with MCP Inspector
 
