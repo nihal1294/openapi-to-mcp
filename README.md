@@ -26,6 +26,26 @@ The generated server acts as a proxy, receiving MCP tool calls and translating t
 *   Unit and integration tests (`pytest`).
 *   JSON logging.
 
+## Quickstart
+
+1. Install dependencies:
+```bash
+poetry install --no-dev
+```
+(Use `poetry install` for development.)
+
+2. Generate a server from your OpenAPI spec:
+```bash
+poetry run openapi-to-mcp generate 
+  --openapi-json <path_or_url> 
+  --output-dir ./mcp-server
+```
+
+3. Follow the instructions in the generated `README.md` in `./mcp-server` to build and run the server.
+
+See [docs/USAGE_EXAMPLES.md](docs/USAGE_EXAMPLES.md) for detailed examples.
+
+
 ## 🚀 Installation / Setup
 
 **Prerequisites:**
@@ -345,6 +365,7 @@ Ensure you have installed dependencies using `poetry install --with dev` (or `po
 
 ## 📄 License
 This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## 📚 References
 * [OpenAPI Specification](https://swagger.io/specification/)
