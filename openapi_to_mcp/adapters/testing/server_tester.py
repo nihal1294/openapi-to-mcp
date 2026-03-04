@@ -1,9 +1,13 @@
 """Server testing adapter for MCP servers."""
 
+import asyncio
+import json
 import logging
 import shlex
+from collections.abc import Mapping
 from typing import Any
 
+import requests
 from mcp import (
     ClientSession,
     ListToolsResult,
@@ -11,12 +15,12 @@ from mcp import (
     StdioServerParameters,
     stdio_client,
 )
-from mcp.client.sse import sse_client
 from mcp.types import CallToolResult
 
 from openapi_to_mcp.common import OpenApiMcpError
 
 logger = logging.getLogger(__name__)
+DEFAULT_PROTOCOL_VERSION = "2025-11-25"
 
 
 class UnsupportedMethodError(OpenApiMcpError):
@@ -33,20 +37,7 @@ class TransportStrategy:
     async def connect_and_execute(
         self, method: str, params: dict[str, Any] | None, req_id: int
     ) -> dict[str, Any]:
-        """
-        Connect to the server and execute the requested method.
-
-        Args:
-            method: The method name ('list' or 'call')
-            params: Parameters for the method
-            req_id: Request ID
-
-        Returns:
-            Response data as a dictionary
-
-        Raises:
-            OpenApiMcpError: If connection or execution fails
-        """
+        """Connect to the server and execute the requested method."""
         raise NotImplementedError("Subclasses must implement this method")
 
 
@@ -54,13 +45,6 @@ class StdioTransport(TransportStrategy):
     """Transport strategy for stdio connections."""
 
     def __init__(self, server_cmd: str, env: dict[str, str] | None = None) -> None:
-        """
-        Initialize the stdio transport.
-
-        Args:
-            server_cmd: Command to start the server process
-            env: Optional environment variables for the server process
-        """
         if not server_cmd:
             raise ValueError("server_cmd is required for stdio transport")
         self.server_cmd = server_cmd
@@ -69,20 +53,6 @@ class StdioTransport(TransportStrategy):
     async def connect_and_execute(
         self, method: str, params: dict[str, Any] | None, req_id: int
     ) -> dict[str, Any]:
-        """
-        Connect to the server via stdio and execute the requested method.
-
-        Args:
-            method: The method name ('list' or 'call')
-            params: Parameters for the method
-            req_id: Request ID
-
-        Returns:
-            Response data as a dictionary
-
-        Raises:
-            OpenApiMcpError: If connection or execution fails
-        """
         logger.info("Starting server process: %s", self.server_cmd)
         cmd_list = shlex.split(self.server_cmd)
         stdio_params = StdioServerParameters(
@@ -105,69 +75,144 @@ class StdioTransport(TransportStrategy):
             raise ServerConnectionError(f"Failed to connect via stdio: {e}") from e
 
 
-class SseTransport(TransportStrategy):
-    """Transport strategy for SSE connections."""
+class StreamableHttpTransport(TransportStrategy):
+    """Transport strategy for streamable HTTP endpoint calls."""
 
-    def __init__(self, sse_url: str) -> None:
-        """
-        Initialize the SSE transport.
+    def __init__(self, endpoint_url: str) -> None:
+        if not endpoint_url:
+            raise ValueError("endpoint_url is required for streamable-http transport")
+        self.endpoint_url = endpoint_url
+        self._session_id: str | None = None
+        self._protocol_version = DEFAULT_PROTOCOL_VERSION
 
-        Args:
-            sse_url: Base URL for the SSE server
-        """
-        if not sse_url:
-            raise ValueError("sse_url is required for SSE transport")
-        self.sse_url = f"{sse_url}/sse"
+    def _build_jsonrpc_payload(
+        self, method: str, params: dict[str, Any] | None, req_id: int
+    ) -> dict[str, Any]:
+        if method == "list":
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "method": "tools/list",
+                "params": {},
+            }
+
+        if method == "call":
+            if params is None or "tool_name" not in params:
+                raise ValueError("Missing 'tool_name' in params for tool call method.")
+
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "method": "tools/call",
+                "params": {
+                    "name": params["tool_name"],
+                    "arguments": params.get("tool_arguments", {}),
+                },
+            }
+
+        raise UnsupportedMethodError(f"Unsupported method for testing: {method}")
+
+    def _build_headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            "MCP-Protocol-Version": self._protocol_version,
+        }
+        if self._session_id:
+            headers["Mcp-Session-Id"] = self._session_id
+        return headers
+
+    def _parse_json_response(self, response: requests.Response) -> dict[str, Any]:
+        try:
+            response_data = response.json()
+        except json.JSONDecodeError as exc:
+            raise ServerConnectionError(
+                f"Invalid JSON response from streamable-http endpoint: {exc}"
+            ) from exc
+
+        if not isinstance(response_data, dict):
+            raise ServerConnectionError(
+                "Unexpected non-object JSON response from streamable-http endpoint"
+            )
+
+        return response_data
+
+    def _initialize(self, initialize_req_id: int) -> None:
+        initialize_payload: dict[str, Any] = {
+            "jsonrpc": "2.0",
+            "id": initialize_req_id,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": self._protocol_version,
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "openapi-to-mcp-tester",
+                    "version": "0.1.0",
+                },
+            },
+        }
+
+        initialize_response = requests.post(
+            self.endpoint_url,
+            json=initialize_payload,
+            timeout=30,
+            headers=self._build_headers(),
+        )
+        initialize_response.raise_for_status()
+        session_id = initialize_response.headers.get("Mcp-Session-Id")
+        if session_id:
+            self._session_id = session_id
+
+        initialize_data = self._parse_json_response(initialize_response)
+        if "error" in initialize_data:
+            raise ServerConnectionError(
+                f"Initialize request failed: {initialize_data['error']}"
+            )
+
+        initialized_notification: dict[str, Any] = {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {},
+        }
+        initialized_response = requests.post(
+            self.endpoint_url,
+            json=initialized_notification,
+            timeout=30,
+            headers=self._build_headers(),
+        )
+        initialized_response.raise_for_status()
+
+    def _post_jsonrpc(
+        self, method: str, params: dict[str, Any] | None, req_id: int
+    ) -> dict[str, Any]:
+        self._initialize(initialize_req_id=req_id * 1000 + 1)
+        payload = self._build_jsonrpc_payload(method, params, req_id)
+        response = requests.post(
+            self.endpoint_url,
+            json=payload,
+            timeout=30,
+            headers=self._build_headers(),
+        )
+        response.raise_for_status()
+        return self._parse_json_response(response)
 
     async def connect_and_execute(
         self, method: str, params: dict[str, Any] | None, req_id: int
     ) -> dict[str, Any]:
-        """
-        Connect to the server via SSE and execute the requested method.
-
-        Args:
-            method: The method name ('list' or 'call')
-            params: Parameters for the method
-            req_id: Request ID
-
-        Returns:
-            Response data as a dictionary
-
-        Raises:
-            OpenApiMcpError: If connection or execution fails
-        """
-        logger.info("Connecting to SSE server at %s", self.sse_url)
+        logger.info("Connecting to streamable-http endpoint at %s", self.endpoint_url)
         try:
-            async with sse_client(self.sse_url) as streams:
-                logger.info("SSE client connected.")
-                async with ClientSession(streams[0], streams[1]) as session:
-                    await session.initialize()
-                    logger.info("MCP session initialized.")
-                    response_data = await _perform_mcp_request(session, method, params)
-                    logger.info("Received response from MCP server.")
-                    return _format_response(response_data, req_id)
+            return await asyncio.to_thread(self._post_jsonrpc, method, params, req_id)
         except Exception as e:
-            logger.exception("Error during SSE connection")
-            raise ServerConnectionError(f"Failed to connect via SSE: {e}") from e
+            logger.exception("Error during streamable-http connection")
+            raise ServerConnectionError(
+                f"Failed to connect via streamable-http: {e}"
+            ) from e
 
 
 async def _perform_mcp_request(
     session: ClientSession, method: str, params: dict[str, Any] | None
 ) -> ListToolsResult | CallToolResult:
-    """
-    Perform the requested MCP action using the provided session.
-
-    Args:
-        session: Active MCP client session
-        method: Method name ('list' or 'call')
-        params: Parameters for the method
-
-    Returns:
-        The result object from the MCP request
-
-    Raises:
-        ValueError: If an unsupported method is requested
-    """
+    """Perform the requested MCP action using the provided session."""
     if method == "list":
         logger.info("Sending ListTools request")
         return await session.list_tools()
@@ -180,23 +225,13 @@ async def _perform_mcp_request(
         logger.info("Sending CallTool request for tool: %s", tool_name)
         return await session.call_tool(name=tool_name, arguments=tool_args)
 
-    # Support for test prompts, resources, etc. will be added in the future
     raise UnsupportedMethodError(f"Unsupported method for testing: {method}")
 
 
 def _format_response(
-    response_data: ListToolsResult | CallToolResult | None, req_id: int
+    response_data: ListToolsResult | CallToolResult | dict[str, Any] | None, req_id: int
 ) -> dict[str, Any]:
-    """
-    Format the MCP response as a dictionary.
-
-    Args:
-        response_data: The response from the MCP request
-        req_id: Request ID
-
-    Returns:
-        Dictionary with the formatted response
-    """
+    """Format the MCP response as a dictionary."""
     if response_data is None:
         logger.error("No response data received.")
         return {
@@ -208,7 +243,11 @@ def _format_response(
             },
         }
 
-    response_data_json = response_data.model_dump(mode="json")
+    if isinstance(response_data, Mapping):
+        response_data_json = dict(response_data)
+    else:
+        response_data_json = response_data.model_dump(mode="json")
+
     logger.debug("Received response: %s", response_data_json)
     if "jsonrpc" not in response_data_json:
         response_data_json["jsonrpc"] = "2.0"
@@ -220,32 +259,18 @@ def _format_response(
 def _create_transport_strategy(
     transport: str,
     server_cmd: str | None = None,
-    sse_url: str | None = None,
+    endpoint_url: str | None = None,
     env: dict[str, str] | None = None,
 ) -> TransportStrategy:
-    """
-    Create the appropriate transport strategy based on the transport type.
-
-    Args:
-        transport: The transport type ('stdio' or 'sse')
-        server_cmd: Command to start the server process (required for stdio)
-        sse_url: Base URL for the SSE server (required for sse)
-        env: Optional environment variables for the server process
-
-    Returns:
-        The appropriate transport strategy
-
-    Raises:
-        ValueError: If required parameters for the transport are missing
-    """
+    """Create transport strategy from transport type."""
     if transport == "stdio":
         if not server_cmd:
             raise ValueError("server_cmd is required for stdio transport")
         return StdioTransport(server_cmd=server_cmd, env=env)
-    if transport == "sse":
-        if not sse_url:
-            raise ValueError("sse_url is required for sse transport")
-        return SseTransport(sse_url=sse_url)
+    if transport == "streamable-http":
+        if not endpoint_url:
+            raise ValueError("endpoint_url is required for streamable-http transport")
+        return StreamableHttpTransport(endpoint_url=endpoint_url)
     raise ValueError(f"Unsupported transport type: {transport}")
 
 
@@ -256,36 +281,15 @@ async def execute_mcp_server(
     req_id: int = 1,
     *,
     server_cmd: str | None = None,
-    sse_url: str | None = None,
+    endpoint_url: str | None = None,
     env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """
-    Test an MCP server using the Python SDK.
-
-    Connects via the specified transport, sends a request, and returns the response
-    or a JSON-RPC error dictionary.
-
-    Args:
-        transport: 'stdio' or 'sse'
-        method: The method name ('list' or 'call')
-        params: Optional parameters for the method
-        req_id: Request ID
-        server_cmd: Command to start the server (for stdio)
-        sse_url: Base URL for the SSE server (for sse)
-        env: Optional dictionary of environment variables for stdio transport
-
-    Returns:
-        The parsed JSON-RPC response dictionary from the server, or a
-        JSON-RPC error dictionary if an error occurs
-
-    Raises:
-        ValueError: If required transport arguments are missing
-    """
+    """Test an MCP server using configured transport."""
     logger.info("Testing MCP server via %s transport. Method: %s", transport, method)
 
     try:
         transport_strategy = _create_transport_strategy(
-            transport, server_cmd, sse_url, env
+            transport, server_cmd, endpoint_url, env
         )
         return await transport_strategy.connect_and_execute(method, params, req_id)
 
@@ -296,7 +300,7 @@ async def execute_mcp_server(
             "jsonrpc": "2.0",
             "id": req_id,
             "error": {
-                "code": -32000,  # Generic server error code
+                "code": -32000,
                 "message": err_msg,
             },
         }

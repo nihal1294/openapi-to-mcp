@@ -19,11 +19,13 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.8.0",
     "axios": "^1.8.0",
-    "dotenv": "^16.4.0",
+    "dotenv": "^16.4.0"{% if transport == 'streamable-http' %},
     "express": "^5.0.0"
+    {% endif %}
   },
   "devDependencies": {
-    "@types/express": "^5.0.0",
+    {% if transport == 'streamable-http' %}"@types/express": "^5.0.0",
+    {% endif %}
     "@types/node": "^22.13.0",
     "nodemon": "^3.1.5",
     "typescript": "^5.7.0"

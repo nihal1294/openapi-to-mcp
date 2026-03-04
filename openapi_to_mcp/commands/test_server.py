@@ -16,11 +16,16 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--transport",
     required=True,
-    type=click.Choice(["sse", "stdio"], case_sensitive=False),
-    help="Transport mechanism (sse or stdio).",
+    type=click.Choice(["streamable-http", "stdio"], case_sensitive=False),
+    help="Transport mechanism (streamable-http or stdio).",
 )
-@click.option("--host", default="localhost", help="Hostname for SSE transport.")
-@click.option("--port", type=int, default=8080, help="Port for SSE transport.")
+@click.option("--host", default="localhost", help="Hostname for streamable-http.")
+@click.option("--port", type=int, default=8080, help="Port for streamable-http.")
+@click.option(
+    "--mcp-endpoint",
+    default="/mcp",
+    help="HTTP endpoint path for streamable-http transport.",
+)
 @click.option("--list-tools", is_flag=True, help="Perform a ListTools request.")
 @click.option(
     "--server-cmd",
@@ -39,6 +44,7 @@ def test_server(
     transport: str,
     host: str,
     port: int,
+    mcp_endpoint: str,
     *,  # Enforce keyword-only arguments after this
     list_tools: bool = False,
     server_cmd: str | None = None,
@@ -46,15 +52,15 @@ def test_server(
     tool_args: str | None = None,
     env_source: str | None = None,
 ) -> None:
-    """Tests a running MCP server via SSE or Stdio."""
+    """Tests a running MCP server via streamable-http or stdio."""
 
-    # Run the async logic within the synchronous Click command
     try:
         asyncio.run(
             _run_test(
                 transport,
                 host,
                 port,
+                mcp_endpoint,
                 list_tools=list_tools,
                 server_cmd=server_cmd,
                 tool_name=tool_name,
@@ -91,6 +97,7 @@ async def _run_test(
     transport: str,
     host: str,
     port: int,
+    mcp_endpoint: str,
     *,  # Enforce keyword-only arguments
     list_tools: bool,
     server_cmd: str | None,
@@ -102,6 +109,8 @@ async def _run_test(
 
     if transport == "stdio" and not server_cmd:
         raise click.UsageError("--server-cmd is required for stdio transport.")
+    if transport == "streamable-http" and not mcp_endpoint.startswith("/"):
+        raise click.UsageError("--mcp-endpoint must start with '/'.")
     if tool_name and not tool_args:
         logger.warning(
             "--tool-name provided without --tool-args. Sending empty arguments."
@@ -114,7 +123,10 @@ async def _run_test(
     response = None
     req_id_counter = 1
 
-    # --- ListTools Request ---
+    endpoint_url = (
+        f"http://{host}:{port}{mcp_endpoint}" if transport == "streamable-http" else None
+    )
+
     if list_tools:
         click.echo("--- Sending ListTools Request ---")
         response = await execute_mcp_server(
@@ -122,7 +134,7 @@ async def _run_test(
             method="list",
             req_id=req_id_counter,
             server_cmd=server_cmd,
-            sse_url=f"http://{host}:{port}" if transport == "sse" else None,
+            endpoint_url=endpoint_url,
             env=env_vars if transport == "stdio" else None,
         )
         req_id_counter += 1
@@ -130,7 +142,6 @@ async def _run_test(
         click.echo(json.dumps(response, indent=2))
         click.echo("-" * 30)
 
-    # --- CallTool Request ---
     if tool_name:
         click.echo(f"--- Sending CallTool Request for '{tool_name}' ---")
         tool_arguments = _parse_tool_args(tool_args)
@@ -142,10 +153,9 @@ async def _run_test(
             params=calltool_params,
             req_id=req_id_counter,
             server_cmd=server_cmd,
-            sse_url=f"http://{host}:{port}" if transport == "sse" else None,
+            endpoint_url=endpoint_url,
             env=env_vars if transport == "stdio" else None,
         )
-        req_id_counter += 1
         click.echo(f"--- CallTool Response for '{tool_name}' ---")
         click.echo(json.dumps(response, indent=2))
         click.echo("-" * 30)

@@ -1,0 +1,184 @@
+import express from 'express';
+import { randomUUID } from 'node:crypto';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { OpenApiMcpServer } from './server.js';
+import * as console from 'console';
+
+const HOST = process.env.MCP_HTTP_HOST || '{{ host }}';
+const PORT = Number.parseInt(process.env.MCP_HTTP_PORT || '{{ port }}', 10);
+const ENDPOINT = process.env.MCP_HTTP_ENDPOINT || '{{ mcp_endpoint }}';
+const ALLOWED_ORIGINS = (process.env.MCP_ALLOWED_ORIGINS || 'http://localhost')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const ALLOWED_HOSTS = (process.env.MCP_ALLOWED_HOSTS || '127.0.0.1,localhost')
+  .split(',')
+  .map((host) => host.trim().toLowerCase())
+  .filter(Boolean);
+
+type SessionContext = {
+  serverInstance: OpenApiMcpServer;
+  transport: StreamableHTTPServerTransport;
+};
+
+const app = express();
+const sessions = new Map<string, SessionContext>();
+
+app.disable('x-powered-by');
+app.use(express.json({ limit: '1mb' }));
+
+function isOriginAllowed(origin: string | undefined): boolean {
+  if (!origin) {
+    return true;
+  }
+  return ALLOWED_ORIGINS.includes(origin);
+}
+
+function isHostAllowed(hostHeader: string | string[] | undefined): boolean {
+  if (!hostHeader) {
+    return false;
+  }
+
+  const first = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
+  if (!first) {
+    return false;
+  }
+  const host = first.split(':')[0]?.trim().toLowerCase() || '';
+  if (!host) {
+    return false;
+  }
+  return ALLOWED_HOSTS.includes(host);
+}
+
+function getHeaderValue(header: string | string[] | undefined): string | undefined {
+  if (!header) {
+    return undefined;
+  }
+  const first = Array.isArray(header) ? header[0] : header;
+  return first?.trim() || undefined;
+}
+
+function sendBadRequest(res: express.Response, message: string): void {
+  res.status(400).json({
+    jsonrpc: '2.0',
+    error: {
+      code: -32000,
+      message,
+    },
+    id: null,
+  });
+}
+
+async function createSessionContext(): Promise<SessionContext> {
+  let context: SessionContext | undefined;
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => randomUUID(),
+    enableJsonResponse: true,
+    onsessioninitialized: (sessionId) => {
+      if (context) {
+        sessions.set(sessionId, context);
+      }
+    },
+  });
+
+  const serverInstance = new OpenApiMcpServer();
+  context = { serverInstance, transport };
+
+  transport.onclose = () => {
+    const sessionId = transport.sessionId;
+    if (sessionId) {
+      sessions.delete(sessionId);
+    }
+  };
+
+  await serverInstance.server.connect(transport);
+  return context;
+}
+
+async function start(): Promise<void> {
+  if (!Number.isInteger(PORT) || PORT <= 0) {
+    throw new Error(`Invalid MCP_HTTP_PORT value '${process.env.MCP_HTTP_PORT || ''}'`);
+  }
+
+  if (!ENDPOINT.startsWith('/')) {
+    throw new Error(`Invalid MCP_HTTP_ENDPOINT '${ENDPOINT}'. Must start with '/'.`);
+  }
+
+  app.all(ENDPOINT, async (req, res) => {
+    const origin = req.headers.origin;
+    if (!isOriginAllowed(origin)) {
+      res.status(403).json({ error: 'Origin not allowed' });
+      return;
+    }
+
+    if (!isHostAllowed(req.headers.host)) {
+      res.status(403).json({ error: 'Host not allowed' });
+      return;
+    }
+
+    const sessionId = getHeaderValue(req.headers['mcp-session-id']);
+
+    try {
+      if (req.method === 'POST') {
+        if (sessionId) {
+          const existing = sessions.get(sessionId);
+          if (!existing) {
+            sendBadRequest(res, 'Bad Request: Invalid or missing session ID');
+            return;
+          }
+          await existing.transport.handleRequest(req, res, req.body);
+          return;
+        }
+
+        if (!isInitializeRequest(req.body)) {
+          sendBadRequest(res, 'Bad Request: No valid session ID provided');
+          return;
+        }
+
+        const sessionContext = await createSessionContext();
+        await sessionContext.transport.handleRequest(req, res, req.body);
+        return;
+      }
+
+      if (req.method === 'GET' || req.method === 'DELETE') {
+        if (!sessionId) {
+          sendBadRequest(res, 'Bad Request: Invalid or missing session ID');
+          return;
+        }
+
+        const existing = sessions.get(sessionId);
+        if (!existing) {
+          sendBadRequest(res, 'Bad Request: Invalid or missing session ID');
+          return;
+        }
+
+        await existing.transport.handleRequest(req, res, req.body);
+        return;
+      }
+
+      res.status(405).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32601,
+          message: `Method ${req.method} not allowed`,
+        },
+        id: null,
+      });
+    } catch (error) {
+      console.error('Streamable HTTP request handling failed:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal MCP transport error' });
+      }
+    }
+  });
+
+  app.listen(PORT, HOST, () => {
+    console.error(`Streamable HTTP MCP server listening on http://${HOST}:${PORT}${ENDPOINT}`);
+  });
+}
+
+start().catch((error) => {
+  console.error('Failed to start streamable-http transport:', error);
+  process.exit(1);
+});

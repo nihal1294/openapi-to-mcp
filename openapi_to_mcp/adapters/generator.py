@@ -108,9 +108,11 @@ class Generator:
         """
         transport_output_file = self.output_path / "src" / "transport.ts"
 
-        if self.context.get("transport") == "sse":
-            transport_template_name = "src/transport_sse.ts.j2"
-            logger.info("Rendering SSE transport template to src/transport.ts")
+        if self.context.get("transport") == "streamable-http":
+            transport_template_name = "src/transport_streamable_http.ts.j2"
+            logger.info(
+                "Rendering streamable-http transport template to src/transport.ts"
+            )
         else:
             transport_template_name = "src/transport_stdio.ts.j2"
             logger.info("Rendering STDIO transport template to src/transport.ts")
