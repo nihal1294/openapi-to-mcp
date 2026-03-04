@@ -8,6 +8,9 @@ help:
 sync:
     ./scripts/workflow.sh sync
 
+test:
+    uv run pytest --cov=openapi_to_mcp --cov-report=term-missing
+
 generate:
     ./scripts/workflow.sh generate
 

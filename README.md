@@ -100,6 +100,7 @@ If you use [`just`](https://github.com/casey/just), equivalent short commands ar
 
 ```bash
 just sync
+just test
 just generate
 just build
 just run
