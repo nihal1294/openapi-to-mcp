@@ -64,6 +64,12 @@ def test_generate_streamable_http_end_to_end(runner: CliRunner, tmp_path: Path) 
     assert "StreamableHTTPServerTransport" in transport_source
     assert "SSEServerTransport" not in transport_source
     assert "encodeURIComponent" in server_source
+    assert "extractHostFromHeaderValue" in transport_source
+    assert "first.split(':')[0]" not in transport_source
+    assert "process.once('SIGINT'" in server_source
+    assert "process.once('SIGTERM'" in server_source
+    assert "process.on('SIGINT'" not in server_source
+    assert "process.on('SIGTERM'" not in server_source
 
     report = json.loads((output_dir / "generation_report.json").read_text())
     assert report["strict_mode"] is True

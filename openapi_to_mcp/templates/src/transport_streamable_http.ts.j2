@@ -14,7 +14,7 @@ const ALLOWED_ORIGINS = (process.env.MCP_ALLOWED_ORIGINS || 'http://localhost')
   .filter(Boolean);
 const ALLOWED_HOSTS = (process.env.MCP_ALLOWED_HOSTS || '127.0.0.1,localhost')
   .split(',')
-  .map((host) => host.trim().toLowerCase())
+  .map((host) => normalizeAllowedHost(host))
   .filter(Boolean);
 
 type SessionContext = {
@@ -44,11 +44,46 @@ function isHostAllowed(hostHeader: string | string[] | undefined): boolean {
   if (!first) {
     return false;
   }
-  const host = first.split(':')[0]?.trim().toLowerCase() || '';
+
+  const host = extractHostFromHeaderValue(first);
   if (!host) {
     return false;
   }
   return ALLOWED_HOSTS.includes(host);
+}
+
+function normalizeAllowedHost(host: string): string {
+  const trimmed = host.trim().toLowerCase();
+  if (!trimmed) {
+    return '';
+  }
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function extractHostFromHeaderValue(headerValue: string): string {
+  const trimmed = headerValue.trim().toLowerCase();
+  if (!trimmed) {
+    return '';
+  }
+
+  if (trimmed.startsWith('[')) {
+    const closingBracketIndex = trimmed.indexOf(']');
+    if (closingBracketIndex <= 1) {
+      return '';
+    }
+    return trimmed.slice(1, closingBracketIndex);
+  }
+
+  const firstColon = trimmed.indexOf(':');
+  const lastColon = trimmed.lastIndexOf(':');
+  if (firstColon !== -1 && firstColon === lastColon) {
+    return trimmed.slice(0, firstColon);
+  }
+
+  return trimmed;
 }
 
 function getHeaderValue(header: string | string[] | undefined): string | undefined {
@@ -89,6 +124,11 @@ async function createSessionContext(): Promise<SessionContext> {
     const sessionId = transport.sessionId;
     if (sessionId) {
       sessions.delete(sessionId);
+    }
+    if (context?.serverInstance) {
+      void context.serverInstance.close().catch((error: unknown) => {
+        console.error('Failed to close session MCP server instance:', error);
+      });
     }
   };
 

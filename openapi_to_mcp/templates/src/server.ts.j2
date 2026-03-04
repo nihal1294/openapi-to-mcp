@@ -506,6 +506,9 @@ function resolveAuthForTool(tool: ToolRuntimeDefinition): ResolvedAuth {
 }
 
 export class OpenApiMcpServer {
+  private static readonly activeInstances = new Set<OpenApiMcpServer>();
+  private static shutdownHooksRegistered = false;
+
   public server: Server;
   private readonly axiosInstance = axios.create({
     baseURL: TARGET_API_BASE_URL,
@@ -531,8 +534,9 @@ export class OpenApiMcpServer {
       { capabilities: { resources: {}, tools: {} } }
     );
 
+    OpenApiMcpServer.activeInstances.add(this);
     this.setupRequestHandlers();
-    this.setupGracefulShutdown();
+    OpenApiMcpServer.setupGracefulShutdown();
     this.server.onerror = (error) => console.error('[MCP Server Error]', error);
   }
 
@@ -550,14 +554,44 @@ export class OpenApiMcpServer {
     return created;
   }
 
-  private setupGracefulShutdown(): void {
-    process.on('SIGINT', async () => {
+  public async close(): Promise<void> {
+    try {
       await this.server.close();
+    } finally {
+      OpenApiMcpServer.activeInstances.delete(this);
+    }
+  }
+
+  private static async shutdownAll(signal: string): Promise<void> {
+    const instances = [...OpenApiMcpServer.activeInstances];
+    if (instances.length === 0) {
       process.exit(0);
+      return;
+    }
+
+    const results = await Promise.allSettled(instances.map((instance) => instance.close()));
+    const failures = results.filter((result) => result.status === 'rejected');
+    if (failures.length > 0) {
+      console.error(`Encountered ${failures.length} error(s) while handling ${signal} shutdown.`);
+      process.exit(1);
+      return;
+    }
+
+    process.exit(0);
+  }
+
+  private static setupGracefulShutdown(): void {
+    if (OpenApiMcpServer.shutdownHooksRegistered) {
+      return;
+    }
+    OpenApiMcpServer.shutdownHooksRegistered = true;
+
+    process.once('SIGINT', () => {
+      void OpenApiMcpServer.shutdownAll('SIGINT');
     });
-    process.on('SIGTERM', async () => {
-      await this.server.close();
-      process.exit(0);
+
+    process.once('SIGTERM', () => {
+      void OpenApiMcpServer.shutdownAll('SIGTERM');
     });
   }
 
