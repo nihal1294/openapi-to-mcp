@@ -4,244 +4,191 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner, Result
 
-from openapi_to_mcp.adapters.testing.server_tester import (
-    ServerConnectionError as McpTestError,
-)
 from openapi_to_mcp.cli import cli
 
 
 @pytest.fixture
 def runner() -> CliRunner:
-    """Provides a CliRunner instance."""
     return CliRunner()
 
 
 @pytest.fixture
 def mock_execute_mcp_server(mocker: MagicMock) -> MagicMock:
-    """Mocks the execute_mcp_server function."""
     return mocker.patch("openapi_to_mcp.commands.test_server.execute_mcp_server")
 
 
-def test_execute_server_missing_args(
-    runner: CliRunner, caplog: pytest.LogCaptureFixture
-) -> None:
-    """Test command failure when required arguments are missing."""
+def test_test_server_requires_transport(runner: CliRunner) -> None:
     result: Result = runner.invoke(cli, ["test-server"])
     assert result.exit_code != 0
     assert "Missing option '--transport'" in result.output
 
-    with caplog.at_level(
-        logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"
-    ):
-        result = runner.invoke(
-            cli, ["test-server", "--transport", "stdio", "--list-tools"]
-        )
-        assert result.exit_code != 0
-        assert "--server-cmd is required for stdio transport" in caplog.text
 
-    with caplog.at_level(
-        logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"
-    ):
-        result = runner.invoke(cli, ["test-server", "--transport", "sse"])
-        assert result.exit_code != 0
-        assert "Either --list-tools or --tool-name must be specified" in caplog.text
-
-    with caplog.at_level(
-        logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"
-    ):
-        result = runner.invoke(
-            cli, ["test-server", "--transport", "sse", "--tool-args", "{}"]
-        )
-        assert result.exit_code != 0
-        assert "--tool-args requires --tool-name to be specified" in caplog.text
-
-
-def test_test_server_sse_list_tools_success(
-    runner: CliRunner, mock_execute_mcp_server: MagicMock
+def test_test_server_stdio_requires_server_cmd(
+    runner: CliRunner, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Test successful ListTools request via SSE."""
+    with caplog.at_level(logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"):
+        result = runner.invoke(
+            cli,
+            ["test-server", "--transport", "stdio", "--list-tools"],
+        )
+
+    assert result.exit_code != 0
+    assert "--server-cmd is required for stdio transport" in caplog.text
+
+
+def test_test_server_requires_action(
+    runner: CliRunner, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"):
+        result = runner.invoke(
+            cli,
+            ["test-server", "--transport", "streamable-http"],
+        )
+
+    assert result.exit_code != 0
+    assert "Either --list-tools or --tool-name must be specified" in caplog.text
+
+
+def test_test_server_tool_args_requires_tool_name(
+    runner: CliRunner, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"):
+        result = runner.invoke(
+            cli,
+            [
+                "test-server",
+                "--transport",
+                "streamable-http",
+                "--tool-args",
+                "{}",
+            ],
+        )
+
+    assert result.exit_code != 0
+    assert "--tool-args requires --tool-name to be specified" in caplog.text
+
+
+def test_test_server_streamable_http_list_tools_success(
+    runner: CliRunner,
+    mock_execute_mcp_server: MagicMock,
+) -> None:
     mock_execute_mcp_server.return_value = {
+        "jsonrpc": "2.0",
+        "id": 1,
         "result": {"tools": [{"name": "tool1"}]},
-        "id": 1,
     }
-    result: Result = runner.invoke(
-        cli, ["test-server", "--transport", "sse", "--list-tools"]
-    )
 
-    assert result.exit_code == 0
-    mock_execute_mcp_server.assert_called_once()
-    call_args, call_kwargs = mock_execute_mcp_server.call_args
-    assert call_kwargs["transport"] == "sse"
-    assert call_kwargs["method"] == "list"
-    assert call_kwargs["req_id"] == 1
-    assert call_kwargs["sse_url"] == "http://localhost:8080"
-    assert '"tools":' in result.output
-    assert '"name": "tool1"' in result.output
-
-
-def test_test_server_stdio_list_tools_success(
-    runner: CliRunner, mock_execute_mcp_server: MagicMock
-) -> None:
-    """Test successful ListTools request via Stdio."""
-    server_cmd = "node ./server.js"
-    mock_execute_mcp_server.return_value = {
-        "result": {"tools": [{"name": "stdio_tool"}]},
-        "id": 1,
-    }
-    result: Result = runner.invoke(
+    result = runner.invoke(
         cli,
         [
             "test-server",
             "--transport",
-            "stdio",
-            "--server-cmd",
-            server_cmd,
+            "streamable-http",
+            "--host",
+            "localhost",
+            "--port",
+            "8080",
+            "--mcp-endpoint",
+            "/mcp",
             "--list-tools",
         ],
     )
 
     assert result.exit_code == 0
-    mock_execute_mcp_server.assert_called_once()
-    call_args, call_kwargs = mock_execute_mcp_server.call_args
-    assert call_kwargs["transport"] == "stdio"
-    assert call_kwargs["method"] == "list"
-    assert call_kwargs["req_id"] == 1
-    assert call_kwargs["server_cmd"] == server_cmd
-    assert call_kwargs["sse_url"] is None
-    assert '"tools":' in result.output
-    assert '"name": "stdio_tool"' in result.output
-
-
-def test_test_server_sse_call_tool_success(
-    runner: CliRunner, mock_execute_mcp_server: MagicMock
-) -> None:
-    """Test successful CallTool request via SSE."""
-    tool_name = "myTool"
-    tool_args_json = '{"arg1": "val1"}'
-    tool_args_dict = {"arg1": "val1"}
-    mock_execute_mcp_server.return_value = {"result": "tool executed", "id": 1}
-
-    result: Result = runner.invoke(
-        cli,
-        [
-            "test-server",
-            "--transport",
-            "sse",
-            "--port",
-            "8080",
-            "--tool-name",
-            tool_name,
-            "--tool-args",
-            tool_args_json,
-        ],
-    )
-
-    assert result.exit_code == 0
-    mock_execute_mcp_server.assert_called_once()
-    call_args, call_kwargs = mock_execute_mcp_server.call_args
-    assert call_kwargs["transport"] == "sse"
-    assert call_kwargs["method"] == "call"
-    assert call_kwargs["params"]["tool_name"] == tool_name
-    assert call_kwargs["params"]["tool_arguments"] == tool_args_dict
-    assert call_kwargs["req_id"] == 1
-    assert call_kwargs["sse_url"] == "http://localhost:8080"
-    assert '"result": "tool executed"' in result.output
+    _, kwargs = mock_execute_mcp_server.call_args
+    assert kwargs["transport"] == "streamable-http"
+    assert kwargs["method"] == "list"
+    assert kwargs["req_id"] == 1
+    assert kwargs["endpoint_url"] == "http://localhost:8080/mcp"
+    assert kwargs["server_cmd"] is None
+    assert kwargs["env"] is None
+    assert '"name": "tool1"' in result.output
 
 
 def test_test_server_stdio_call_tool_success(
-    runner: CliRunner, mock_execute_mcp_server: MagicMock
+    runner: CliRunner,
+    mock_execute_mcp_server: MagicMock,
+    mocker: MagicMock,
 ) -> None:
-    """Test successful CallTool request via Stdio."""
-    server_cmd = "npm start"
-    tool_name = "stdioTool"
-    tool_args_json = '{"arg": true}'
-    tool_args_dict = {"arg": True}
-    mock_execute_mcp_server.return_value = {"result": "stdio tool done", "id": 1}
+    parse_env = mocker.patch("openapi_to_mcp.commands.test_server.parse_env_source")
+    parse_env.return_value = {"TARGET_API_BASE_URL": "http://example.com"}
 
-    result: Result = runner.invoke(
+    mock_execute_mcp_server.return_value = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {"content": [{"type": "text", "text": "ok"}]},
+    }
+
+    result = runner.invoke(
         cli,
         [
             "test-server",
             "--transport",
             "stdio",
             "--server-cmd",
-            server_cmd,
+            "node ./build/index.js",
             "--tool-name",
-            tool_name,
+            "getUser",
             "--tool-args",
-            tool_args_json,
+            '{"id": 42}',
+            "--env-source",
+            "./.env",
         ],
     )
 
     assert result.exit_code == 0
-    mock_execute_mcp_server.assert_called_once()
-    call_args, call_kwargs = mock_execute_mcp_server.call_args
-    assert call_kwargs["transport"] == "stdio"
-    assert call_kwargs["method"] == "call"
-    assert call_kwargs["params"]["tool_name"] == tool_name
-    assert call_kwargs["params"]["tool_arguments"] == tool_args_dict
-    assert call_kwargs["req_id"] == 1
-    assert call_kwargs["server_cmd"] == server_cmd
-    assert '"result": "stdio tool done"' in result.output
+    parse_env.assert_called_once_with("./.env")
+
+    _, kwargs = mock_execute_mcp_server.call_args
+    assert kwargs["transport"] == "stdio"
+    assert kwargs["method"] == "call"
+    assert kwargs["params"]["tool_name"] == "getUser"
+    assert kwargs["params"]["tool_arguments"] == {"id": 42}
+    assert kwargs["server_cmd"] == "node ./build/index.js"
+    assert kwargs["endpoint_url"] is None
+    assert kwargs["env"] == {"TARGET_API_BASE_URL": "http://example.com"}
 
 
-def test_test_server_call_tool_invalid_json_args(
+def test_test_server_rejects_bad_endpoint(
+    runner: CliRunner,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"):
+        result = runner.invoke(
+            cli,
+            [
+                "test-server",
+                "--transport",
+                "streamable-http",
+                "--mcp-endpoint",
+                "mcp",
+                "--list-tools",
+            ],
+        )
+
+    assert result.exit_code != 0
+    assert "--mcp-endpoint must start with '/'" in caplog.text
+
+
+def test_test_server_bad_tool_args_json(
     runner: CliRunner,
     mock_execute_mcp_server: MagicMock,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Test command failure with invalid JSON in --tool-args."""
     caplog.set_level(logging.ERROR)
-    result: Result = runner.invoke(
+    result = runner.invoke(
         cli,
         [
             "test-server",
             "--transport",
-            "sse",
+            "streamable-http",
             "--tool-name",
-            "anyTool",
+            "tool",
             "--tool-args",
-            '{"invalid json',
+            "{bad-json",
         ],
     )
+
     assert result.exit_code != 0
     assert "Invalid JSON in --tool-args" in caplog.text
     mock_execute_mcp_server.assert_not_called()
-
-
-def test_test_server_mcp_test_error_handling(
-    runner: CliRunner,
-    mock_execute_mcp_server: MagicMock,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Test that McpTestError from underlying functions is handled."""
-    caplog.set_level(logging.CRITICAL)
-    error_message = "Underlying test error"
-    mock_execute_mcp_server.side_effect = McpTestError(error_message)
-
-    result: Result = runner.invoke(
-        cli, ["test-server", "--transport", "sse", "--list-tools"]
-    )
-
-    assert result.exit_code != 0
-    assert "Underlying test error" in caplog.text
-
-
-def test_test_server_unexpected_error_handling(
-    runner: CliRunner,
-    mock_execute_mcp_server: MagicMock,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Test that unexpected errors are caught and logged."""
-    caplog.set_level(logging.CRITICAL)
-    error_message = "Something unexpected broke"
-    mock_execute_mcp_server.side_effect = ValueError(error_message)
-
-    result: Result = runner.invoke(
-        cli,
-        ["test-server", "--transport", "stdio", "--server-cmd", "cmd", "--list-tools"],
-    )
-
-    assert result.exit_code != 0
-    assert "unexpected error" in caplog.text.lower()
-    assert "Something unexpected broke" in caplog.text

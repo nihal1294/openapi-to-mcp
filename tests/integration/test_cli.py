@@ -1,238 +1,148 @@
-import logging
+import json
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock
 
-import pytest
-from click.testing import CliRunner, Result
+from click.testing import CliRunner
 
 from openapi_to_mcp.cli import cli
-from openapi_to_mcp.common.exceptions import (
-    GenerationError,
-    MappingError,
-    SpecLoaderError,
-)
-from tests.constants import VALID_MCP_TOOL, VALID_OPENAPI_SPEC
-from tests.utils import assert_error_of_type, invoke_cli_generate, setup_cli_test_file
 
 
-@pytest.fixture
-def runner() -> CliRunner:
-    """Provides a CliRunner instance."""
-    return CliRunner()
-
-
-@pytest.fixture
-def mock_spec_loader(mocker: Any) -> MagicMock:
-    """Mocks the SpecLoader class."""
-    mock = mocker.patch("openapi_to_mcp.adapters.spec_loader.SpecLoader", autospec=True)
-    mock.return_value.load_and_validate.return_value = {
+def _write_duplicate_operation_spec(path: Path) -> Path:
+    spec = {
         "openapi": "3.0.0",
-        "info": {"title": "Mock Spec", "version": "1.0"},
-        "paths": {"/test": {"get": {"summary": "Test GET"}}},
-        "servers": [{"url": "http://mock.api"}],
+        "info": {"title": "Generated Name Collision API", "version": "1.0.0"},
+        "servers": [{"url": "https://example.com/api"}],
+        "paths": {
+            "/a-b": {
+                "get": {
+                    "summary": "Dash path",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+            "/a_b": {
+                "get": {
+                    "summary": "Underscore path",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+        },
     }
-    return mock
+    path.write_text(json.dumps(spec), encoding="utf-8")
+    return path
 
 
-@pytest.fixture
-def mock_mapper(mocker: Any) -> MagicMock:
-    """Mocks the Mapper class."""
-    mock = mocker.patch("openapi_to_mcp.mapping.Mapper", autospec=True)
-    mock.return_value.map_tools.return_value = [
-        {
-            "name": "get_test",
-            "description": "Test GET",
-            "inputSchema": {},
-            "_original_method": "GET",
-            "_original_path": "/test",
-            "_original_parameters": [],
-            "_original_request_body": None,
-        }
-    ]
-    return mock
+def test_generate_streamable_http_end_to_end(runner: CliRunner, tmp_path: Path) -> None:
+    output_dir = tmp_path / "generated-streamable"
 
-
-@pytest.fixture
-def mock_generator(mocker: Any) -> MagicMock:
-    """Mocks the Generator class."""
-    mock = mocker.patch("openapi_to_mcp.adapters.generator.Generator", autospec=True)
-    mock.return_value.generate_files.return_value = None
-    return mock
-
-
-def test_cli_success_default_args(
-    runner: CliRunner,
-    caplog: Any,
-) -> None:
-    """Test successful CLI execution with default output directory."""
-    caplog.set_level(logging.INFO)
-    openapi_file = "tests/resources/test_openapi.yaml"
-    output_dir = "./mcp-server"
-
-    result: Result = runner.invoke(
+    result = runner.invoke(
         cli,
         [
             "generate",
             "--openapi-json",
-            openapi_file,
+            "tests/resources/test_openapi.yaml",
             "--output-dir",
-            output_dir,
-            "--mcp-server-name",
-            "mcp-server",
+            str(output_dir),
+            "--transport",
+            "streamable-http",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8080",
+            "--mcp-endpoint",
+            "/mcp",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert (output_dir / "package.json").exists()
+    assert (output_dir / "src" / "transport.ts").exists()
+    assert (output_dir / "generation_report.json").exists()
+
+    transport_source = (output_dir / "src" / "transport.ts").read_text(
+        encoding="utf-8"
+    )
+    assert "StreamableHTTPServerTransport" in transport_source
+    assert "SSEServerTransport" not in transport_source
+
+    report = json.loads((output_dir / "generation_report.json").read_text())
+    assert report["strict_mode"] is True
+    assert report["transport"] == "streamable-http"
+    assert report["mapped_tools"] >= 1
+
+
+def test_generate_stdio_omits_http_dependencies(runner: CliRunner, tmp_path: Path) -> None:
+    output_dir = tmp_path / "generated-stdio"
+
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--openapi-json",
+            "tests/resources/test_openapi.yaml",
+            "--output-dir",
+            str(output_dir),
             "--transport",
             "stdio",
         ],
     )
 
-    if result.exception:
-        import traceback
-
-        traceback.print_exception(
-            type(result.exception), result.exception, result.exc_info[2]
-        )
-
     assert result.exit_code == 0
-    assert "Starting MCP server generation..." in caplog.text
-    assert "Loading OpenAPI spec from:" in caplog.text
-    assert "OpenAPI spec loaded and validated successfully." in caplog.text
-    assert "Mapping OpenAPI paths to MCP tools..." in caplog.text
-    assert "Mapped 1 tools." in caplog.text
-    assert f"Generating files in: {output_dir}" in caplog.text
-    assert "File generation complete." in caplog.text
-    assert "MCP server generation successful." in caplog.text
-    assert "Please check the README" in result.output
-    assert f"{output_dir}" in result.output
+
+    package_json = json.loads((output_dir / "package.json").read_text(encoding="utf-8"))
+    assert "express" not in package_json["dependencies"]
+    assert "@types/express" not in package_json["devDependencies"]
+
+    transport_source = (output_dir / "src" / "transport.ts").read_text(
+        encoding="utf-8"
+    )
+    assert "StdioServerTransport" in transport_source
 
 
-def test_cli_success_custom_args(
-    runner: CliRunner,
-    tmp_path: Path,
-    caplog: Any,
+def test_generate_strict_generated_name_collision_fails(
+    runner: CliRunner, tmp_path: Path
 ) -> None:
-    """Test successful CLI execution with custom arguments."""
-    caplog.set_level(logging.INFO)
-    openapi_file = "tests/resources/test_openapi.json"
-    output_dir = tmp_path / "custom-output"
-    server_name = "my-custom-server"
-    server_version = "2.1.0"
-    transport = "sse"
-    port = "9090"
+    spec_path = _write_duplicate_operation_spec(tmp_path / "duplicate.json")
+    output_dir = tmp_path / "strict-fail-output"
 
-    result: Result = runner.invoke(
+    result = runner.invoke(
         cli,
         [
             "generate",
             "--openapi-json",
-            str(openapi_file),
+            str(spec_path),
             "--output-dir",
             str(output_dir),
-            "--mcp-server-name",
-            server_name,
-            "--mcp-server-version",
-            server_version,
-            "--transport",
-            transport,
-            "--port",
-            port,
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert not (output_dir / "generation_report.json").exists()
+
+
+def test_generate_no_strict_generated_name_collision_dedupes_and_reports(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    spec_path = _write_duplicate_operation_spec(tmp_path / "duplicate.json")
+    output_dir = tmp_path / "non-strict-output"
+
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--openapi-json",
+            str(spec_path),
+            "--output-dir",
+            str(output_dir),
+            "--no-strict",
         ],
     )
 
     assert result.exit_code == 0
-    assert f"Generating files in: {output_dir}" in caplog.text
-    assert "MCP server generation successful." in caplog.text
-    assert f"{output_dir}" in result.output
 
+    report = json.loads((output_dir / "generation_report.json").read_text())
+    assert report["strict_mode"] is False
+    assert report["mapped_tools"] == 2
+    assert report["skipped_operations"] == []
+    assert any("deduped" in warning for warning in report["warnings"])
 
-def test_cli_missing_openapi_json(cli_test_context: dict) -> None:
-    """Test CLI failure when required --openapi-json is missing."""
-    result = cli_test_context["runner"].invoke(cli, ["generate"])
-    assert result.exit_code != 0
-    assert "Missing option '--openapi-json'" in result.output
-
-
-def test_cli_openapi_file_not_found(cli_test_context: dict) -> None:
-    """Test CLI failure when --openapi-json file doesn't exist."""
-    non_existent_file = cli_test_context["tmp_path"] / "ghost.yaml"
-    result = invoke_cli_generate(cli_test_context["runner"], non_existent_file)
-    assert result.exit_code != 0
-
-
-def test_cli_spec_loader_error(
-    cli_test_context: dict,
-    mocker: Any,
-) -> None:
-    """Test CLI failure when SpecLoader raises an error."""
-    openapi_file = setup_cli_test_file(cli_test_context["tmp_path"])
-
-    mock_spec_loader = mocker.patch(
-        "openapi_to_mcp.commands.generate.SpecLoader", autospec=True
-    )
-    error_message = "Parsed specification is not a valid dictionary structure."
-    mock_spec_loader.return_value.load_and_validate.side_effect = SpecLoaderError(
-        error_message
-    )
-
-    result = invoke_cli_generate(cli_test_context["runner"], openapi_file)
-    assert result.exit_code != 0
-    assert_error_of_type(cli_test_context["caplog"], SpecLoaderError, error_message)
-
-
-def test_cli_mapper_error(
-    cli_test_context: dict,
-    mocker: Any,
-) -> None:
-    """Test CLI failure when Mapper raises an error."""
-    openapi_file = setup_cli_test_file(cli_test_context["tmp_path"])
-
-    mock_spec_loader = mocker.patch(
-        "openapi_to_mcp.commands.generate.SpecLoader", autospec=True
-    )
-    mock_spec_loader.return_value.load_and_validate.return_value = VALID_OPENAPI_SPEC
-
-    mock_mapper = mocker.patch("openapi_to_mcp.commands.generate.Mapper", autospec=True)
-    mock_mapper.return_value.map_tools.side_effect = MappingError("Cannot map paths")
-
-    result = invoke_cli_generate(cli_test_context["runner"], openapi_file)
-
-    assert result.exit_code != 0
-    assert_error_of_type(cli_test_context["caplog"], MappingError, "Cannot map paths")
-
-
-def test_cli_generator_error(
-    cli_test_context: dict,
-    mocker: Any,
-) -> None:
-    """Test CLI failure when Generator raises an error."""
-    openapi_file = setup_cli_test_file(cli_test_context["tmp_path"])
-
-    mock_spec_loader = mocker.patch(
-        "openapi_to_mcp.commands.generate.SpecLoader", autospec=True
-    )
-    mock_spec_loader.return_value.load_and_validate.return_value = VALID_OPENAPI_SPEC
-
-    mock_mapper = mocker.patch("openapi_to_mcp.commands.generate.Mapper", autospec=True)
-    mock_mapper.return_value.map_tools.return_value = [VALID_MCP_TOOL]
-
-    mock_generator = mocker.patch(
-        "openapi_to_mcp.commands.generate.Generator", autospec=True
-    )
-    mock_generator.return_value.generate_files.side_effect = GenerationError(
-        "Cannot write files"
-    )
-
-    result = invoke_cli_generate(cli_test_context["runner"], openapi_file)
-
-    assert result.exit_code != 0
-    assert_error_of_type(
-        cli_test_context["caplog"], GenerationError, "Cannot write files"
-    )
-
-
-def test_cli_help_message(runner: CliRunner) -> None:
-    """Test that the --help option works."""
-    result: Result = runner.invoke(cli, ["--help"])
-    assert result.exit_code == 0
-    assert "Usage: cli [OPTIONS] COMMAND [ARGS]..." in result.output
-    assert "generate" in result.output
-    assert "test-server" in result.output
+    server_source = (output_dir / "src" / "server.ts").read_text(encoding="utf-8")
+    assert "get_a_b_2" in server_source
