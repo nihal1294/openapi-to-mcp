@@ -1,37 +1,37 @@
-[tool.poetry]
+[project]
 name = "openapi-to-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Generates an MCP server from an OpenAPI specification."
-authors = ["Nihal Rao <nihaliddya@gmail.com>"]
 readme = "README.md"
-packages = [{include = "openapi_to_mcp"}]
+requires-python = ">=3.14"
+authors = [{ name = "Nihal Rao", email = "nihaliddya@gmail.com" }]
+dependencies = [
+    "click==8.3.1",
+    "requests==2.32.5",
+    "pyyaml==6.0.3",
+    "jinja2==3.1.6",
+    "openapi-spec-validator==0.8.4",
+    "python-json-logger==4.0.0",
+    "mcp==1.26.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-click = "^8.1.7"
-requests = "^2.32.4"
-pyyaml = "^6.0.1"
-jinja2 = "^3.1.5"
-openapi-spec-validator = "^0.7.1"
-python-json-logger = "^3.2.0"
-mcp = "^1.5.0"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3.0"
-pytest-asyncio = "^0.25.0"
-pytest-cov = "^6.0.0"
-pytest-mock = "^3.13.0"
-pytest-instafail = "^0.5.0"
-ruff = "^0.10.0"
-poethepoet = "^0.32.0"
-
-[tool.poetry.scripts]
+[project.scripts]
 openapi-to-mcp = "openapi_to_mcp.cli:cli"
+
+[dependency-groups]
+dev = [
+    "pytest==9.0.2",
+    "pytest-asyncio==1.3.0",
+    "pytest-cov==7.0.0",
+    "pytest-mock==3.15.1",
+    "pytest-instafail==0.5.0",
+    "ruff==0.15.4",
+]
 
 [tool.ruff]
 # Common settings
 line-length = 88
-target-version = "py312"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = [
@@ -75,7 +75,6 @@ ignore = [
     "PLR2004",  # Magic value used in comparison
     "PT017"     # Found assertion in except block
 ]
-"openapi_to_mcp/tester.py" = ["S603"] # Ignore subprocess call warning (user-provided cmd, shlex used)
 
 [tool.ruff.format]
 quote-style = "double"
@@ -86,15 +85,9 @@ addopts = "-ra -q --cov-report=term-missing --cov-fail-under=60 --cov-report=xml
 testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
 
-[tool.poe.tasks]
-format = "ruff format ."
-lint   = "ruff check . --fix"
-test   = "pytest --cov=openapi_to_mcp"
-check  = ["format", "lint", "test"]
-clean.help = "Remove cache, coverage, and build artifacts"
-clean.cmd = """sh -c 'find . -name __pycache__ -type d -exec rm -rf {} + && rm -rf .pytest_cache .ruff_cache .coverage dist output mcp-server'
-"""
-
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["openapi_to_mcp"]
