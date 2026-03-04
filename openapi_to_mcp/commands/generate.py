@@ -1,6 +1,8 @@
+import json
 import logging
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import click
@@ -45,15 +47,39 @@ generate_options = [
     click.option(
         "--transport",
         "-t",
-        required=True,
-        type=click.Choice(["stdio", "sse"], case_sensitive=False),
+        required=False,
+        default="streamable-http",
+        show_default=True,
+        type=click.Choice(["stdio", "streamable-http"], case_sensitive=False),
         help="Transport mechanism for the generated server.",
     ),
     click.option(
         "--port",
         "-p",
         type=int,
-        help="Port for HTTP/SSE transport (required if transport is not stdio).",
+        default=8080,
+        show_default=True,
+        help="Port for streamable-http transport.",
+    ),
+    click.option(
+        "--host",
+        type=str,
+        default="127.0.0.1",
+        show_default=True,
+        help="Host for streamable-http transport.",
+    ),
+    click.option(
+        "--mcp-endpoint",
+        type=str,
+        default="/mcp",
+        show_default=True,
+        help="HTTP endpoint path for MCP streamable-http transport.",
+    ),
+    click.option(
+        "--strict/--no-strict",
+        default=True,
+        show_default=True,
+        help="Strict mode fails generation on unsupported required constructs.",
     ),
 ]
 
@@ -130,8 +156,12 @@ def _prepare_template_context(
     mcp_server_name: str | None,
     mcp_server_version: str | None,
     transport: str,
+    host: str,
     port: int | None,
+    mcp_endpoint: str,
+    strict: bool,
     mcp_tools: list[dict[str, Any]],
+    auth_env_vars: list[str],
 ) -> dict[str, Any]:
     """Prepares the context dictionary for Jinja2 rendering."""
     spec_info = spec.get("info", {})
@@ -143,11 +173,64 @@ def _prepare_template_context(
         "server_name": final_name,
         "server_version": final_version,
         "transport": transport,
+        "host": host,
         "port": port,
+        "mcp_endpoint": mcp_endpoint,
+        "strict": strict,
         "tools": mcp_tools,
+        "auth_env_vars": auth_env_vars,
         "api_base_url_comment": api_base_url,
         "server_description": spec_info.get("description", ""),
     }
+
+
+def _derive_auth_env_vars(mcp_tools: list[dict[str, Any]]) -> list[str]:
+    """Collect auth-related env variable names required by mapped tools."""
+    env_vars: set[str] = set()
+    for tool in mcp_tools:
+        security_schemes = tool.get("_original_security_schemes", {})
+        if not isinstance(security_schemes, dict):
+            continue
+        for scheme_name, scheme_def in security_schemes.items():
+            if not isinstance(scheme_name, str) or not isinstance(scheme_def, dict):
+                continue
+            normalized = "".join(
+                c if c.isalnum() else "_" for c in scheme_name.upper()
+            ).strip("_")
+            normalized = "_".join(part for part in normalized.split("_") if part)
+            if not normalized:
+                continue
+            scheme_type = str(scheme_def.get("type", "")).lower()
+            http_scheme = str(scheme_def.get("scheme", "")).lower()
+            if scheme_type == "apikey":
+                env_vars.add(f"AUTH_{normalized}_API_KEY")
+            elif scheme_type == "http" and http_scheme == "bearer":
+                env_vars.add(f"AUTH_{normalized}_TOKEN")
+            elif scheme_type in {"oauth2", "openidconnect"}:
+                env_vars.add(f"AUTH_{normalized}_TOKEN")
+    return sorted(env_vars)
+
+
+def _build_generation_report(
+    mapper: Mapper, strict: bool, transport: str
+) -> dict[str, Any]:
+    """Build generation diagnostics report."""
+    mapper_report = mapper.get_report()
+    return {
+        "strict_mode": strict,
+        "transport": transport,
+        "mapped_tools": mapper_report.get("mapped_tools", 0),
+        "skipped_operations": mapper_report.get("skipped_operations", []),
+        "warnings": mapper_report.get("warnings", []),
+    }
+
+
+def _write_generation_report(output_dir: str, report: dict[str, Any]) -> None:
+    """Write generation report JSON to output directory."""
+    report_path = Path(output_dir) / "generation_report.json"
+    with report_path.open("w", encoding="utf-8") as report_file:
+        json.dump(report, report_file, indent=2, sort_keys=True)
+        report_file.write("\n")
 
 
 @click.command()
@@ -158,7 +241,10 @@ def generate(
     mcp_server_name: str | None,
     mcp_server_version: str | None,
     transport: str,
+    host: str,
     port: int | None,
+    mcp_endpoint: str,
+    strict: bool,
 ) -> None:
     """Generates a Node.js/TypeScript MCP server from an OpenAPI specification."""
     logger.info(
@@ -170,7 +256,10 @@ def generate(
                 "name": mcp_server_name,
                 "version": mcp_server_version,
                 "transport": transport,
+                "host": host,
                 "port": port,
+                "mcp_endpoint": mcp_endpoint,
+                "strict": strict,
             },
         },
     )
@@ -181,14 +270,16 @@ def generate(
         spec = loader.load_and_validate()
         logger.info("OpenAPI spec loaded and validated successfully.")
 
-        # Validate port requirement for SSE transport
-        if transport == "sse" and port is None:
-            raise click.UsageError(
-                "Option '--port'/-p is required when transport is 'sse'."
-            )
+        if transport == "streamable-http":
+            if port is None:
+                raise click.UsageError(
+                    "Option '--port'/-p is required when transport is 'streamable-http'."
+                )
+            if not mcp_endpoint.startswith("/"):
+                raise click.UsageError("--mcp-endpoint must start with '/'.")
 
         logger.info("Mapping OpenAPI paths to MCP tools...")
-        mapper = Mapper(spec=spec)
+        mapper = Mapper(spec=spec, strict=strict)
         mcp_tools = mapper.map_tools()
         logger.info("Mapped %d tools.", len(mcp_tools))
 
@@ -198,19 +289,30 @@ def generate(
             )
             sys.exit(0)
 
+        auth_env_vars = _derive_auth_env_vars(mcp_tools)
         logger.debug("Preparing template context.")
         template_context = _prepare_template_context(
             spec,
             mcp_server_name,
             mcp_server_version,
             transport,
+            host,
             port,
+            mcp_endpoint,
+            strict,
             mcp_tools,
+            auth_env_vars,
         )
 
         logger.info("Generating files in: %s", output_dir)
         generator = Generator(output_dir=output_dir, context=template_context)
         generator.generate_files()
+        generation_report = _build_generation_report(
+            mapper=mapper,
+            strict=strict,
+            transport=transport,
+        )
+        _write_generation_report(output_dir=output_dir, report=generation_report)
         logger.info("File generation complete.")
 
         logger.info("MCP server generation successful.")
