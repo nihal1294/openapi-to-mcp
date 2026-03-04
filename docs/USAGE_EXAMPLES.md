@@ -96,17 +96,20 @@ paths:
 Run the following command to generate a Node.js/TypeScript MCP server from your OpenAPI spec (replace the file name as needed):
 
 ```bash
-poetry run openapi-to-mcp generate \
+uv run openapi-to-mcp generate \
   --openapi-json pet-api.json \
   --output-dir ./generated-pet-mcp \
   --mcp-server-name pet-mcp-server \
-  --transport stdio
+  --transport streamable-http \
+  --host 127.0.0.1 \
+  --port 8080 \
+  --mcp-endpoint /mcp
 ```
 
 **What this does:**
 - Reads your OpenAPI spec (`pet-api.json` or `pet-api.yaml`)
 - Generates a new MCP server project in `./generated-pet-mcp`
-- Sets up the server to use STDIO transport
+- Sets up the server to use streamable HTTP transport at `127.0.0.1:8080/mcp`
 
 ---
 
@@ -120,19 +123,27 @@ generated-pet-mcp/
 ├── package.json
 ├── tsconfig.json
 ├── .env.example
+├── generation_report.json
 ├── src/
 │   ├── index.ts
 │   ├── server.ts
-│   ├── transport_stdio.ts
+│   ├── transport.ts
 │   └── ...
 ```
 
 ### Sample Generated Code: `src/index.ts`
 
 ```typescript
-import { createServer } from './server';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-createServer();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const envPath = path.resolve(__dirname, '../.env');
+dotenv.config({ path: envPath });
+
+import './transport.js';
 ```
 
 ### Sample Generated Code: `src/server.ts` (snippet)

@@ -27,6 +27,11 @@ This MCP server was automatically generated from an OpenAPI specification by the
 
     *   **`TARGET_API_AUTH_HEADER` (Optional):**
         *   Provide the full authorization header string if required by the target API (e.g., `Authorization: Bearer your_token` or `X-API-Key: your_key`). Leave it commented out or blank if no auth header is needed.
+    *   **MCP Runtime Controls (Optional but Recommended):**
+        *   `MCP_MAX_CONCURRENCY`, `MCP_PER_TOOL_MAX_CONCURRENCY`, `MCP_MAX_QUEUE_SIZE`, `MCP_QUEUE_TIMEOUT_MS`, `MCP_TOOL_TIMEOUT_MS`
+        *   These control parallel tool execution, queueing behavior, and timeouts.
+    *   **Streamable HTTP Settings (if transport is `streamable-http`):**
+        *   `MCP_HTTP_HOST`, `MCP_HTTP_PORT`, `MCP_HTTP_ENDPOINT`, `MCP_ALLOWED_ORIGINS`, `MCP_ALLOWED_HOSTS`
 
 3.  **Install Dependencies:**
     ```bash
@@ -44,7 +49,7 @@ This MCP server was automatically generated from an OpenAPI specification by the
     ```bash
     npm start
     ```
-    The server will connect using the configured transport ({{ transport }}{% if transport == 'sse' %} via HTTP on port {{ port }}{% endif %}).
+    The server will connect using the configured transport ({{ transport }}{% if transport == 'streamable-http' %} via HTTP on {{ host }}:{{ port }} at endpoint {{ mcp_endpoint }}{% endif %}).
 
 ## Development
 

@@ -8,204 +8,721 @@ import {
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import axios, { AxiosError, Method } from 'axios';
+import * as http from 'http';
+import * as https from 'https';
 import * as console from 'console';
 
-// Environment variables are loaded by the main index.ts
 const TARGET_API_BASE_URL = process.env.TARGET_API_BASE_URL || '';
 const TARGET_API_AUTH_HEADER = process.env.TARGET_API_AUTH_HEADER;
-const PLACEHOLDER_BASE_URL = "YOUR_API_BASE_URL_HERE"; // Define placeholder
+const PLACEHOLDER_BASE_URL = 'YOUR_API_BASE_URL_HERE';
 
-const tools: Tool[] = {{ tools | tojson(indent=2) }};
+const MAX_CONCURRENCY = parseIntegerEnv('MCP_MAX_CONCURRENCY', 32);
+const PER_TOOL_MAX_CONCURRENCY = parseIntegerEnv('MCP_PER_TOOL_MAX_CONCURRENCY', 8);
+const MAX_QUEUE_SIZE = parseIntegerEnv('MCP_MAX_QUEUE_SIZE', 256);
+const QUEUE_TIMEOUT_MS = parseIntegerEnv('MCP_QUEUE_TIMEOUT_MS', 5000);
+const TOOL_TIMEOUT_MS = parseIntegerEnv('MCP_TOOL_TIMEOUT_MS', 30000);
 
-function mapApiErrorToMcpError(error: unknown): McpError {
-    if (axios.isAxiosError(error)) {
-        const axiosError = error as AxiosError;
-        const status = axiosError.response?.status;
-        // Attempt to get a meaningful message from response data or default Axios message
-        const apiMessage = (axiosError.response?.data as any)?.message || (axiosError.response?.data as any)?.detail || axiosError.message;
+const toolRuntimeData = {{ tools | tojson(indent=2) }} as ToolRuntimeDefinition[];
+const tools: Tool[] = toolRuntimeData.map((tool) => ({
+  name: tool.name,
+  description: tool.description,
+  inputSchema: tool.inputSchema as Tool['inputSchema'],
+}));
+const toolRuntimeMap = new Map<string, ToolRuntimeDefinition>(
+  toolRuntimeData.map((tool) => [tool.name, tool])
+);
 
-        console.error(`API Error: Status ${status}, Message: ${apiMessage}`, axiosError.response?.data);
+type ParameterLocation = 'path' | 'query' | 'header' | 'cookie';
 
-        switch (status) {
-            case 400: return new McpError(ErrorCode.InvalidParams, `API Bad Request: ${apiMessage}`);
-            case 404: return new McpError(ErrorCode.MethodNotFound, `API Not Found: ${apiMessage}`);
-            case 408: return new McpError(ErrorCode.RequestTimeout, `API Request Timeout: ${apiMessage}`);
-            case 500: case 502: case 503: case 504:
-                return new McpError(ErrorCode.InternalError, `API Server Error (${status}): ${apiMessage}`);
-            default:
-                return new McpError(ErrorCode.InternalError, `API Request Failed (${status}): ${apiMessage}`);
-        }
-    } else if (error instanceof Error) {
-         console.error(`Request Error: ${error.message}`, error);
-         return new McpError(ErrorCode.InternalError, `Request failed: ${error.message}`);
-    } else {
-        console.error('Unknown internal error occurred:', error);
-        return new McpError(ErrorCode.InternalError, 'An unknown internal error occurred');
-    }
+interface ToolParameterMetadata {
+  name: string;
+  in: ParameterLocation;
+  required: boolean;
+  style?: string | null;
+  explode?: boolean | null;
+  allow_reserved?: boolean | null;
 }
 
+interface RequestBodyMetadata {
+  required: boolean;
+  content_type: string | null;
+}
+
+interface SecuritySchemeDefinition {
+  type?: string;
+  in?: string;
+  name?: string;
+  scheme?: string;
+}
+
+interface ToolRuntimeDefinition {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  _original_method: Method;
+  _original_path: string;
+  _original_parameters: ToolParameterMetadata[];
+  _original_request_body: RequestBodyMetadata | null;
+  _original_security?: Array<Record<string, unknown>> | null;
+  _original_security_schemes?: Record<string, SecuritySchemeDefinition>;
+}
+
+interface ResolvedAuth {
+  ok: boolean;
+  headers: Record<string, string>;
+  query: Record<string, unknown>;
+  cookies: Record<string, string>;
+  missing: string[];
+}
+
+class ConcurrencyLimiter {
+  private active = 0;
+  private queue: Array<{
+    resolve: () => void;
+    reject: (error: Error) => void;
+    timeoutHandle?: NodeJS.Timeout;
+  }> = [];
+
+  constructor(
+    private readonly maxActive: number,
+    private readonly maxQueueSize: number,
+    private readonly queueTimeoutMs: number
+  ) {}
+
+  async acquire(): Promise<void> {
+    if (this.maxActive <= 0) {
+      return;
+    }
+
+    if (this.active < this.maxActive) {
+      this.active += 1;
+      return;
+    }
+
+    if (this.queue.length >= this.maxQueueSize) {
+      throw new Error('Execution queue is full');
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const queued = {
+        resolve: () => {
+          this.active += 1;
+          resolve();
+        },
+        reject,
+        timeoutHandle: undefined as NodeJS.Timeout | undefined,
+      };
+
+      if (this.queueTimeoutMs > 0) {
+        queued.timeoutHandle = setTimeout(() => {
+          this.queue = this.queue.filter((entry) => entry !== queued);
+          reject(new Error('Execution queue timeout exceeded'));
+        }, this.queueTimeoutMs);
+      }
+
+      this.queue.push(queued);
+    });
+  }
+
+  release(): void {
+    if (this.maxActive <= 0) {
+      return;
+    }
+
+    if (this.active > 0) {
+      this.active -= 1;
+    }
+
+    const next = this.queue.shift();
+    if (!next) {
+      return;
+    }
+
+    if (next.timeoutHandle) {
+      clearTimeout(next.timeoutHandle);
+    }
+    next.resolve();
+  }
+}
+
+function parseIntegerEnv(envName: string, fallback: number): number {
+  const raw = process.env[envName];
+  if (!raw) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    console.error(`Invalid ${envName} value '${raw}'. Using fallback ${fallback}.`);
+    return fallback;
+  }
+
+  return parsed;
+}
+
+function mapApiErrorToMcpError(error: unknown): McpError {
+  if (axios.isAxiosError(error)) {
+    const axiosError = error as AxiosError;
+    const status = axiosError.response?.status;
+    const apiMessage =
+      (axiosError.response?.data as { message?: string; detail?: string } | undefined)?.message ||
+      (axiosError.response?.data as { message?: string; detail?: string } | undefined)?.detail ||
+      axiosError.message;
+
+    if (axiosError.code === 'ERR_CANCELED') {
+      return new McpError(ErrorCode.RequestTimeout, `API request cancelled or timed out: ${apiMessage}`);
+    }
+
+    switch (status) {
+      case 400:
+        return new McpError(ErrorCode.InvalidParams, `API bad request: ${apiMessage}`);
+      case 401:
+      case 403:
+        return new McpError(ErrorCode.InvalidRequest, `API authorization failed: ${apiMessage}`);
+      case 404:
+        return new McpError(ErrorCode.InvalidRequest, `API resource not found: ${apiMessage}`);
+      case 408:
+        return new McpError(ErrorCode.RequestTimeout, `API request timeout: ${apiMessage}`);
+      case 429:
+        return new McpError(ErrorCode.InternalError, `API rate limit hit: ${apiMessage}`);
+      case 500:
+      case 502:
+      case 503:
+      case 504:
+        return new McpError(ErrorCode.InternalError, `API server error (${status}): ${apiMessage}`);
+      default:
+        return new McpError(ErrorCode.InternalError, `API request failed (${status}): ${apiMessage}`);
+    }
+  }
+
+  if (error instanceof Error) {
+    if (error.name === 'AbortError') {
+      return new McpError(ErrorCode.RequestTimeout, `API request aborted: ${error.message}`);
+    }
+    return new McpError(ErrorCode.InternalError, `Request failed: ${error.message}`);
+  }
+
+  return new McpError(ErrorCode.InternalError, 'An unknown internal error occurred');
+}
+
+function normalizeSchemeName(name: string): string {
+  return name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .replace(/_+/g, '_');
+}
+
+function stringifyValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
+function encodePathToken(value: unknown): string {
+  return encodeURIComponent(stringifyValue(value));
+}
+
+function serializePathObject(objectValue: Record<string, unknown>, explode: boolean): string {
+  if (explode) {
+    return Object.entries(objectValue)
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodePathToken(value)}`)
+      .join(',');
+  }
+
+  return Object.entries(objectValue)
+    .flatMap(([key, value]) => [encodeURIComponent(key), encodePathToken(value)])
+    .join(',');
+}
+
+function serializeObjectSimple(objectValue: Record<string, unknown>, explode: boolean): string {
+  if (explode) {
+    return Object.entries(objectValue)
+      .map(([key, value]) => `${key}=${stringifyValue(value)}`)
+      .join(',');
+  }
+
+  return Object.entries(objectValue)
+    .flatMap(([key, value]) => [key, stringifyValue(value)])
+    .join(',');
+}
+
+function serializePathValue(
+  parameter: ToolParameterMetadata,
+  value: unknown
+): string {
+  const style = parameter.style ?? 'simple';
+  const explode = parameter.explode ?? false;
+  const encodedParamName = encodeURIComponent(parameter.name);
+
+  const toSimple = (): string => {
+    if (Array.isArray(value)) {
+      return value.map((item) => encodePathToken(item)).join(',');
+    }
+    if (value && typeof value === 'object') {
+      return serializePathObject(value as Record<string, unknown>, explode);
+    }
+    return encodePathToken(value);
+  };
+
+  const simpleValue = toSimple();
+
+  if (style === 'label') {
+    if (Array.isArray(value) && explode) {
+      return `.${value.map((item) => encodePathToken(item)).join('.')}`;
+    }
+    if (value && typeof value === 'object' && explode) {
+      return `.${Object.entries(value as Record<string, unknown>)
+        .map(([key, objectValue]) => `${encodeURIComponent(key)}=${encodePathToken(objectValue)}`)
+        .join('.')}`;
+    }
+    return `.${simpleValue}`;
+  }
+
+  if (style === 'matrix') {
+    if (Array.isArray(value) && explode) {
+      return value
+        .map((item) => `;${encodedParamName}=${encodePathToken(item)}`)
+        .join('');
+    }
+    if (value && typeof value === 'object' && explode) {
+      return Object.entries(value as Record<string, unknown>)
+        .map(([key, objectValue]) => `;${encodeURIComponent(key)}=${encodePathToken(objectValue)}`)
+        .join('');
+    }
+    return `;${encodedParamName}=${simpleValue}`;
+  }
+
+  return simpleValue;
+}
+
+function applyQueryParam(
+  queryParams: Record<string, unknown>,
+  parameter: ToolParameterMetadata,
+  value: unknown
+): void {
+  const style = parameter.style ?? 'form';
+  const explode = parameter.explode ?? true;
+
+  if (style === 'deepObject' && value && typeof value === 'object' && !Array.isArray(value)) {
+    for (const [key, objectValue] of Object.entries(value as Record<string, unknown>)) {
+      queryParams[`${parameter.name}[${key}]`] = stringifyValue(objectValue);
+    }
+    return;
+  }
+
+  if (style === 'spaceDelimited' && Array.isArray(value)) {
+    queryParams[parameter.name] = value.map((item) => stringifyValue(item)).join(' ');
+    return;
+  }
+
+  if (style === 'pipeDelimited' && Array.isArray(value)) {
+    queryParams[parameter.name] = value.map((item) => stringifyValue(item)).join('|');
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    if (explode) {
+      queryParams[parameter.name] = value.map((item) => stringifyValue(item));
+    } else {
+      queryParams[parameter.name] = value.map((item) => stringifyValue(item)).join(',');
+    }
+    return;
+  }
+
+  if (value && typeof value === 'object') {
+    const objectValue = value as Record<string, unknown>;
+    if (explode) {
+      for (const [key, objectItem] of Object.entries(objectValue)) {
+        queryParams[key] = stringifyValue(objectItem);
+      }
+    } else {
+      queryParams[parameter.name] = Object.entries(objectValue)
+        .flatMap(([key, objectItem]) => [key, stringifyValue(objectItem)])
+        .join(',');
+    }
+    return;
+  }
+
+  queryParams[parameter.name] = stringifyValue(value);
+}
+
+function serializeHeaderValue(parameter: ToolParameterMetadata, value: unknown): string {
+  const explode = parameter.explode ?? false;
+  if (Array.isArray(value)) {
+    return value.map((item) => stringifyValue(item)).join(',');
+  }
+  if (value && typeof value === 'object') {
+    return serializeObjectSimple(value as Record<string, unknown>, explode);
+  }
+  return stringifyValue(value);
+}
+
+function applyCookieParam(
+  cookieValues: Record<string, string>,
+  parameter: ToolParameterMetadata,
+  value: unknown
+): void {
+  const explode = parameter.explode ?? true;
+
+  if (Array.isArray(value)) {
+    cookieValues[parameter.name] = value.map((item) => stringifyValue(item)).join(',');
+    return;
+  }
+
+  if (value && typeof value === 'object') {
+    const objectValue = value as Record<string, unknown>;
+    if (explode) {
+      for (const [key, objectItem] of Object.entries(objectValue)) {
+        cookieValues[key] = stringifyValue(objectItem);
+      }
+    } else {
+      cookieValues[parameter.name] = Object.entries(objectValue)
+        .flatMap(([key, objectItem]) => [key, stringifyValue(objectItem)])
+        .join(',');
+    }
+    return;
+  }
+
+  cookieValues[parameter.name] = stringifyValue(value);
+}
+
+function resolveAuthForTool(tool: ToolRuntimeDefinition): ResolvedAuth {
+  const securityRequirements = tool._original_security;
+  const securitySchemes = tool._original_security_schemes || {};
+
+  if (!securityRequirements) {
+    return { ok: true, headers: {}, query: {}, cookies: {}, missing: [] };
+  }
+
+  if (!Array.isArray(securityRequirements)) {
+    return { ok: true, headers: {}, query: {}, cookies: {}, missing: [] };
+  }
+
+  if (securityRequirements.length === 0) {
+    return { ok: true, headers: {}, query: {}, cookies: {}, missing: [] };
+  }
+
+  const missingAcrossRequirements: Set<string> = new Set();
+
+  for (const requirement of securityRequirements) {
+    if (!requirement || typeof requirement !== 'object') {
+      continue;
+    }
+
+    const requirementEntries = Object.entries(requirement);
+    if (requirementEntries.length === 0) {
+      return { ok: true, headers: {}, query: {}, cookies: {}, missing: [] };
+    }
+
+    const headers: Record<string, string> = {};
+    const query: Record<string, unknown> = {};
+    const cookies: Record<string, string> = {};
+    let satisfied = true;
+
+    for (const [schemeName] of requirementEntries) {
+      const schemeDef = securitySchemes[schemeName];
+      if (!schemeDef || typeof schemeDef !== 'object') {
+        satisfied = false;
+        missingAcrossRequirements.add(schemeName);
+        break;
+      }
+
+      const normalizedScheme = normalizeSchemeName(schemeName);
+      const schemeType = String(schemeDef.type || '').toLowerCase();
+      const httpScheme = String(schemeDef.scheme || '').toLowerCase();
+
+      if (schemeType === 'apikey') {
+        const apiKey = process.env[`AUTH_${normalizedScheme}_API_KEY`];
+        if (!apiKey) {
+          satisfied = false;
+          missingAcrossRequirements.add(`AUTH_${normalizedScheme}_API_KEY`);
+          break;
+        }
+        const apiKeyName = typeof schemeDef.name === 'string' ? schemeDef.name : schemeName;
+        const apiKeyIn = String(schemeDef.in || 'header').toLowerCase();
+        if (apiKeyIn === 'query') {
+          query[apiKeyName] = apiKey;
+        } else if (apiKeyIn === 'cookie') {
+          cookies[apiKeyName] = apiKey;
+        } else {
+          headers[apiKeyName] = apiKey;
+        }
+        continue;
+      }
+
+      if (schemeType === 'http' && httpScheme === 'bearer') {
+        const token = process.env[`AUTH_${normalizedScheme}_TOKEN`];
+        if (!token) {
+          satisfied = false;
+          missingAcrossRequirements.add(`AUTH_${normalizedScheme}_TOKEN`);
+          break;
+        }
+        headers['Authorization'] = `Bearer ${token}`;
+        continue;
+      }
+
+      if (schemeType === 'oauth2' || schemeType === 'openidconnect') {
+        const token = process.env[`AUTH_${normalizedScheme}_TOKEN`];
+        if (!token) {
+          satisfied = false;
+          missingAcrossRequirements.add(`AUTH_${normalizedScheme}_TOKEN`);
+          break;
+        }
+        headers['Authorization'] = `Bearer ${token}`;
+        continue;
+      }
+
+      satisfied = false;
+      missingAcrossRequirements.add(`${schemeName} (unsupported type: ${schemeType})`);
+      break;
+    }
+
+    if (satisfied) {
+      return {
+        ok: true,
+        headers,
+        query,
+        cookies,
+        missing: [],
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    headers: {},
+    query: {},
+    cookies: {},
+    missing: [...missingAcrossRequirements],
+  };
+}
 
 export class OpenApiMcpServer {
-  public server: Server; // Make server public for transport connection
-  private axiosInstance = axios.create({
-      baseURL: TARGET_API_BASE_URL, // Axios will use this as the base for requests
-      timeout: 30000, // 30 second timeout
+  private static readonly activeInstances = new Set<OpenApiMcpServer>();
+  private static shutdownHooksRegistered = false;
+
+  public server: Server;
+  private readonly axiosInstance = axios.create({
+    baseURL: TARGET_API_BASE_URL,
+    timeout: TOOL_TIMEOUT_MS,
+    httpAgent: new http.Agent({ keepAlive: true }),
+    httpsAgent: new https.Agent({ keepAlive: true }),
   });
+  private readonly globalLimiter = new ConcurrencyLimiter(
+    MAX_CONCURRENCY,
+    MAX_QUEUE_SIZE,
+    QUEUE_TIMEOUT_MS
+  );
+  private readonly perToolLimiters = new Map<string, ConcurrencyLimiter>();
 
   constructor() {
-    // Validate TARGET_API_BASE_URL on startup
     if (!TARGET_API_BASE_URL || TARGET_API_BASE_URL === PLACEHOLDER_BASE_URL) {
-      console.error(`FATAL: TARGET_API_BASE_URL environment variable is not configured or is set to the placeholder value.`);
-      console.error(`Please set it in the .env file to the full base URL of your target API, including any necessary paths (e.g., https://api.example.com/v1).`);
+      console.error('FATAL: TARGET_API_BASE_URL is not configured.');
       process.exit(1);
-    }
-    console.error(`Initializing MCP Server: {{ server_name }} v{{ server_version }}`);
-    console.error(`Using Target API Base URL: ${TARGET_API_BASE_URL}`);
-    if (TARGET_API_AUTH_HEADER) {
-        console.error("Using TARGET_API_AUTH_HEADER for authentication.");
-    } else {
-        console.error("No TARGET_API_AUTH_HEADER found. Assuming public API or auth handled differently.");
     }
 
     this.server = new Server(
       { name: '{{ server_name }}', version: '{{ server_version }}' },
       { capabilities: { resources: {}, tools: {} } }
     );
+
+    OpenApiMcpServer.activeInstances.add(this);
     this.setupRequestHandlers();
-    this.setupGracefulShutdown();
+    OpenApiMcpServer.setupGracefulShutdown();
     this.server.onerror = (error) => console.error('[MCP Server Error]', error);
   }
 
-  private setupGracefulShutdown(): void {
-    process.on('SIGINT', async () => {
-      console.error("Received SIGINT, shutting down server...");
+  private getPerToolLimiter(toolName: string): ConcurrencyLimiter {
+    const existing = this.perToolLimiters.get(toolName);
+    if (existing) {
+      return existing;
+    }
+    const created = new ConcurrencyLimiter(
+      PER_TOOL_MAX_CONCURRENCY,
+      MAX_QUEUE_SIZE,
+      QUEUE_TIMEOUT_MS
+    );
+    this.perToolLimiters.set(toolName, created);
+    return created;
+  }
+
+  public async close(): Promise<void> {
+    try {
       await this.server.close();
-      console.error("Server closed.");
+    } finally {
+      OpenApiMcpServer.activeInstances.delete(this);
+    }
+  }
+
+  private static async shutdownAll(signal: string): Promise<void> {
+    const instances = [...OpenApiMcpServer.activeInstances];
+    if (instances.length === 0) {
       process.exit(0);
+      return;
+    }
+
+    const results = await Promise.allSettled(instances.map((instance) => instance.close()));
+    const failures = results.filter((result) => result.status === 'rejected');
+    if (failures.length > 0) {
+      console.error(`Encountered ${failures.length} error(s) while handling ${signal} shutdown.`);
+      process.exit(1);
+      return;
+    }
+
+    process.exit(0);
+  }
+
+  private static setupGracefulShutdown(): void {
+    if (OpenApiMcpServer.shutdownHooksRegistered) {
+      return;
+    }
+    OpenApiMcpServer.shutdownHooksRegistered = true;
+
+    process.once('SIGINT', () => {
+      void OpenApiMcpServer.shutdownAll('SIGINT');
     });
-    process.on('SIGTERM', async () => {
-      console.error("Received SIGTERM, shutting down server...");
-      await this.server.close();
-      console.error("Server closed.");
-      process.exit(0);
+
+    process.once('SIGTERM', () => {
+      void OpenApiMcpServer.shutdownAll('SIGTERM');
     });
   }
 
   private setupRequestHandlers(): void {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      console.error("Handling ListTools request");
-      return { tools };
-    });
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
       const toolName = request.params.name;
-      const args = request.params.arguments || {};
-      console.error(`Received CallTool request for: ${toolName}`, args);
+      const args = (request.params.arguments || {}) as Record<string, unknown>;
 
-      const tool = tools.find(t => t.name === toolName);
+      const tool = toolRuntimeMap.get(toolName);
       if (!tool) {
-        console.error(`Tool not found: ${toolName}`);
         throw new McpError(ErrorCode.MethodNotFound, `Tool '${toolName}' not found.`);
       }
 
-      // Retrieve original OpenAPI details attached during generation
-      const originalMethod = (tool as any)._original_method as Method; // Cast to Axios Method type
-      const originalPath = (tool as any)._original_path as string;
-      const originalParameters = (tool as any)._original_parameters as any[] || [];
-      const originalRequestBodyInfo = (tool as any)._original_request_body as { required: boolean, content_type: string | null } | null;
-
-      if (!originalMethod || !originalPath) {
-          console.error(`Missing original operation details for tool: ${toolName}`);
-          throw new McpError(ErrorCode.InternalError, `Internal configuration error for tool '${toolName}'.`);
-      }
+      const perToolLimiter = this.getPerToolLimiter(toolName);
+      let acquiredGlobal = false;
+      let acquiredPerTool = false;
 
       try {
-        let targetPath = originalPath;
-        const queryParams: Record<string, any> = {};
-        const headers: Record<string, string> = { 'Accept': 'application/json' };
-        let requestData: any = undefined;
+        await this.globalLimiter.acquire();
+        acquiredGlobal = true;
 
-        // Add static auth header if configured
-        if (TARGET_API_AUTH_HEADER) {
-            const separatorIndex = TARGET_API_AUTH_HEADER.indexOf(':');
-            if (separatorIndex > 0) {
-                const headerName = TARGET_API_AUTH_HEADER.substring(0, separatorIndex).trim();
-                const headerValue = TARGET_API_AUTH_HEADER.substring(separatorIndex + 1).trim();
-                headers[headerName] = headerValue;
-            } else {
-                console.error(`Could not parse TARGET_API_AUTH_HEADER: ${TARGET_API_AUTH_HEADER}. Expected format 'Header-Name: Value'`);
+        await perToolLimiter.acquire();
+        acquiredPerTool = true;
+
+        let targetPath = tool._original_path;
+        const queryParams: Record<string, unknown> = {};
+        const headers: Record<string, string> = { Accept: 'application/json' };
+        const cookieValues: Record<string, string> = {};
+        let requestData: unknown;
+
+        for (const parameter of tool._original_parameters || []) {
+          const paramName = parameter.name;
+          const paramValue = args[paramName];
+
+          if (paramValue === undefined || paramValue === null) {
+            if (parameter.required) {
+              throw new McpError(ErrorCode.InvalidParams, `Missing required parameter: ${paramName}`);
             }
+            continue;
+          }
+
+          if (parameter.in === 'path') {
+            const serialized = serializePathValue(parameter, paramValue);
+            targetPath = targetPath.split(`{${paramName}}`).join(serialized);
+          } else if (parameter.in === 'query') {
+            applyQueryParam(queryParams, parameter, paramValue);
+          } else if (parameter.in === 'header') {
+            headers[paramName] = serializeHeaderValue(parameter, paramValue);
+          } else if (parameter.in === 'cookie') {
+            applyCookieParam(cookieValues, parameter, paramValue);
+          }
         }
 
-        // Process parameters based on their 'in' location
-        for (const param of originalParameters) {
-            const paramName = param.name;
-            const paramIn = param.in; // path, query, header
-            const paramValue = args[paramName];
-
-            if (paramValue !== undefined && paramValue !== null) {
-                if (paramIn === 'path') {
-                    targetPath = targetPath.replace(`{${paramName}}`, encodeURIComponent(String(paramValue)));
-                } else if (paramIn === 'query') {
-                    queryParams[paramName] = paramValue;
-                } else if (paramIn === 'header') {
-                    headers[paramName] = String(paramValue);
-                }
-            } else if (param.required) {
-                 console.error(`Missing required parameter '${paramName}' for tool ${toolName}`);
-                 throw new McpError(ErrorCode.InvalidParams, `Missing required parameter: ${paramName}`);
-            }
+        const resolvedAuth = resolveAuthForTool(tool);
+        if (!resolvedAuth.ok) {
+          throw new McpError(
+            ErrorCode.InvalidRequest,
+            `Missing credentials for required security scheme(s): ${resolvedAuth.missing.join(', ')}`
+          );
         }
 
-        // Process requestBody
-        if (originalRequestBodyInfo && args.requestBody !== undefined && args.requestBody !== null) {
-            requestData = args.requestBody;
-            headers['Content-Type'] = originalRequestBodyInfo.content_type || 'application/json';
-        } else if (originalRequestBodyInfo?.required) {
-             console.error(`Missing required requestBody for tool ${toolName}`);
-             throw new McpError(ErrorCode.InvalidParams, `Missing required requestBody`);
-        } else if (requestData !== undefined) {
-             headers['Content-Type'] = 'application/json';
+        Object.assign(headers, resolvedAuth.headers);
+        Object.assign(queryParams, resolvedAuth.query);
+        Object.assign(cookieValues, resolvedAuth.cookies);
+
+        if (TARGET_API_AUTH_HEADER && !headers.Authorization) {
+          const separatorIndex = TARGET_API_AUTH_HEADER.indexOf(':');
+          if (separatorIndex > 0) {
+            const headerName = TARGET_API_AUTH_HEADER.substring(0, separatorIndex).trim();
+            const headerValue = TARGET_API_AUTH_HEADER.substring(separatorIndex + 1).trim();
+            headers[headerName] = headerValue;
+          }
         }
 
-        // Make API Call - Axios combines baseURL and url
-        const requestUrl = targetPath; // Use the path directly
-        console.error(`Making API call: ${originalMethod} ${this.axiosInstance.defaults.baseURL}${requestUrl}`);
-        const response = await this.axiosInstance.request({
-            method: originalMethod,
-            url: requestUrl, // Use the relative path; Axios combines it with baseURL
+        const requestBodyInfo = tool._original_request_body;
+        if (requestBodyInfo && args.requestBody !== undefined && args.requestBody !== null) {
+          requestData = args.requestBody;
+          headers['Content-Type'] = requestBodyInfo.content_type || 'application/json';
+        } else if (requestBodyInfo?.required) {
+          throw new McpError(ErrorCode.InvalidParams, 'Missing required requestBody');
+        }
+
+        if (Object.keys(cookieValues).length > 0) {
+          headers.Cookie = Object.entries(cookieValues)
+            .map(([key, value]) => `${key}=${value}`)
+            .join('; ');
+        }
+
+        const abortController = new AbortController();
+        const timeoutHandle = setTimeout(() => {
+          abortController.abort(new Error('Tool execution timeout exceeded'));
+        }, TOOL_TIMEOUT_MS);
+
+        try {
+          const response = await this.axiosInstance.request({
+            method: tool._original_method,
+            url: targetPath,
             params: queryParams,
-            headers: headers,
+            headers,
             data: requestData,
-            validateStatus: (status) => status >= 200 && status < 300, // Only 2xx are considered success
-        });
+            signal: abortController.signal,
+            validateStatus: (status) => status >= 200 && status < 300,
+          });
 
-        console.error(`API call successful for ${toolName}, Status: ${response.status}`);
+          const responseContentType = response.headers['content-type'];
+          const responseText =
+            responseContentType &&
+            responseContentType.includes('application/json') &&
+            typeof response.data === 'object'
+              ? JSON.stringify(response.data, null, 2)
+              : String(response.data);
 
-        // Format Response for MCP
-        let responseText: string;
-        const responseContentType = response.headers['content-type'];
-        if (responseContentType && responseContentType.includes('application/json') && typeof response.data === 'object') {
-             try {
-                 responseText = JSON.stringify(response.data, null, 2); // Pretty-print JSON
-             } catch (e) {
-                 console.error("Failed to stringify JSON response, returning as string.", e);
-                 responseText = String(response.data);
-             }
-        } else {
-             responseText = String(response.data); // Return non-JSON as plain text
+          return { content: [{ type: 'text', text: responseText }] };
+        } finally {
+          clearTimeout(timeoutHandle);
         }
-
-        return { content: [{ type: 'text', text: responseText }] };
-
       } catch (error) {
-        console.error(`Error during API call for tool ${toolName}:`, error);
-        const mcpError = mapApiErrorToMcpError(error);
+        const mcpError = error instanceof McpError ? error : mapApiErrorToMcpError(error);
         return {
           content: [{ type: 'text', text: mcpError.message }],
           isError: true,
-          error: mcpError, // Include structured error
         };
+      } finally {
+        if (acquiredPerTool) {
+          perToolLimiter.release();
+        }
+        if (acquiredGlobal) {
+          this.globalLimiter.release();
+        }
       }
     });
   }

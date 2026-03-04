@@ -115,7 +115,7 @@ def invoke_cli_generate(
         runner: Click test runner
         openapi_file: Path to OpenAPI file
         output_dir: Output directory path
-        transport: Transport type (stdio or sse)
+        transport: Transport type (stdio or streamable-http)
         server_name: Optional MCP server name
 
     Returns:

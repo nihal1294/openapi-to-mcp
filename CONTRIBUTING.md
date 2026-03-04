@@ -39,48 +39,50 @@ Before you begin contributing, please:
 
 ### Prerequisites
 
-- Python 3.12+
-- Poetry (for dependency management)
+- Python 3.14+
+- uv (for dependency and environment management)
 - Node.js 20+ (for testing generated code)
 - Git
 
 ### Setting Up
 
 1. Navigate to the project directory:
+
    ```bash
    cd openapi-to-mcp
    ```
 
 2. Install dependencies with development tools:
+
    ```bash
-   poetry install
+   uv sync --dev
    ```
 
 ## 📁 Project Structure
 
 Here's an overview of the key directories and files in the project:
 
-```
+```bash
 openapi-to-mcp/
 ├── docs/               # Documentation files
 ├── openapi_to_mcp/     # Main source code
 ├── templates/          # Jinja templates for code generation
 ├── tests/              # Test files
-├── pyproject.toml      # Poetry configuration and dependencies
+├── pyproject.toml      # Project metadata and dependencies
 ├── README.md           # Project documentation
 └── LICENSE             # Apache License 2.0
 ```
 
 ## 🔄 Development Workflow
 
-We use Poetry and poethepoet to manage development tasks. Inside the Poetry virtual environment:
+We use `uv` to manage dependencies and run project commands.
 
 ### Code Formatting
 
 Format your code with Ruff:
 
 ```bash
-poetry run poe format
+uv run ruff format .
 ```
 
 ### Linting
@@ -88,7 +90,7 @@ poetry run poe format
 Check your code for style issues and automatically fix them:
 
 ```bash
-poetry run poe lint
+uv run ruff check . --fix
 ```
 
 ### Running Tests
@@ -96,15 +98,25 @@ poetry run poe lint
 Run unit and integration tests with coverage:
 
 ```bash
-poetry run poe test
+uv run pytest --cov=openapi_to_mcp --cov-report=term-missing
 ```
 
 ### Running All Checks
 
-Run formatting, linting, and testing in one command:
+Run formatting, linting, and testing:
 
 ```bash
-poetry run poe check
+uv run ruff format .
+uv run ruff check . --fix
+uv run pytest --cov=openapi_to_mcp --cov-report=term-missing
+```
+
+### Lockfile Refresh
+
+If dependency constraints are updated in `pyproject.toml`, regenerate the lockfile:
+
+```bash
+uv lock
 ```
 
 ### Cleaning Temporary Files
@@ -112,16 +124,19 @@ poetry run poe check
 Remove temporary files and build artifacts:
 
 ```bash
-poetry run poe clean
+find . -name __pycache__ -type d -exec rm -rf {} + && rm -rf .pytest_cache .ruff_cache .coverage dist output mcp-server
 ```
 
 ## 🔄 Pull Request Process
 
 1. **Create a branch** with a descriptive name:
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
+
    or
+
    ```bash
    git checkout -b fix/issue-you-are-fixing
    ```
@@ -129,13 +144,15 @@ poetry run poe clean
 2. **Make your changes** and commit them with clear, concise messages that explain the changes you've made.
 
 3. **Test your changes:** Ensure to test your changes thoroughly so that you don't break existing functionality. Test your changes with real samples and also update the tests, and ensure all the tests pass:
+
    ```bash
-   poetry run poe test
+   uv run pytest --cov=openapi_to_mcp
    ```
 
 4. **Update documentation** if your changes affect the functionality, or require changes to the README.
 
 5. **Push your changes** to your fork:
+
    ```bash
    git push origin feature/your-feature-name
    ```

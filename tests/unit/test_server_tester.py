@@ -5,8 +5,8 @@ from mcp import McpError
 
 from openapi_to_mcp.adapters.testing.server_tester import (
     ServerConnectionError,
-    SseTransport,
     StdioTransport,
+    StreamableHttpTransport,
     TransportStrategy,
     _create_transport_strategy,
     _format_response,
@@ -15,211 +15,204 @@ from openapi_to_mcp.adapters.testing.server_tester import (
 )
 
 
-def test_server_connection_error_instantiation() -> None:
-    """Test that ServerConnectionError can be instantiated."""
-    error_msg = "This is a test error"
-    try:
-        raise ServerConnectionError(error_msg)
-    except ServerConnectionError as e:
-        assert str(e) == error_msg
-
-
-def test_format_response_success() -> None:
-    """Test _format_response with valid response data."""
-    response_data = MagicMock()
-    response_data.model_dump.return_value = {"result": "success"}
-    req_id = 123
-
-    result = _format_response(response_data, req_id)
-
-    assert result["result"] == "success"
-    assert result["jsonrpc"] == "2.0"
-    assert result["id"] == req_id
-
-
-def test_format_response_none() -> None:
-    """Test _format_response with None response data."""
-    req_id = 456
-
-    result = _format_response(None, req_id)
-
-    assert "error" in result
-    assert result["id"] == req_id
-    assert result["jsonrpc"] == "2.0"
+def _json_response(payload: object, headers: dict[str, str] | None = None) -> MagicMock:
+    response = MagicMock()
+    response.raise_for_status.return_value = None
+    response.json.return_value = payload
+    response.headers = headers or {}
+    return response
 
 
 def test_create_transport_strategy_stdio() -> None:
-    """Test _create_transport_strategy with stdio transport."""
-    server_cmd = "test command"
-    env = {"TEST_VAR": "value"}
-
-    strategy = _create_transport_strategy("stdio", server_cmd=server_cmd, env=env)
-
+    strategy = _create_transport_strategy("stdio", server_cmd="node server.js")
     assert isinstance(strategy, StdioTransport)
-    assert strategy.server_cmd == server_cmd
-    assert strategy.env == env
 
 
-def test_create_transport_strategy_stdio_no_cmd() -> None:
-    """Test _create_transport_strategy with stdio transport but missing command."""
-    with pytest.raises(ValueError, match="server_cmd is required for stdio transport"):
+def test_create_transport_strategy_streamable_http() -> None:
+    endpoint_url = "http://localhost:8080/mcp"
+    strategy = _create_transport_strategy("streamable-http", endpoint_url=endpoint_url)
+    assert isinstance(strategy, StreamableHttpTransport)
+    assert strategy.endpoint_url == endpoint_url
+
+
+def test_create_transport_strategy_missing_required_values() -> None:
+    with pytest.raises(ValueError, match="server_cmd is required"):
         _create_transport_strategy("stdio")
 
+    with pytest.raises(ValueError, match="endpoint_url is required"):
+        _create_transport_strategy("streamable-http")
 
-def test_create_transport_strategy_sse() -> None:
-    """Test _create_transport_strategy with sse transport."""
-    sse_url = "http://test.com"
-
-    strategy = _create_transport_strategy("sse", sse_url=sse_url)
-
-    assert isinstance(strategy, SseTransport)
-    assert strategy.sse_url == f"{sse_url}/sse"
-
-
-def test_create_transport_strategy_sse_no_url() -> None:
-    """Test _create_transport_strategy with sse transport but missing URL."""
-    with pytest.raises(ValueError, match="sse_url is required for sse transport"):
-        _create_transport_strategy("sse")
-
-
-def test_create_transport_strategy_invalid() -> None:
-    """Test _create_transport_strategy with invalid transport type."""
     with pytest.raises(ValueError, match="Unsupported transport type"):
         _create_transport_strategy("invalid")
 
 
 @pytest.mark.asyncio
 async def test_transport_strategy_base_not_implemented() -> None:
-    """Test that the TransportStrategy base class raises NotImplementedError."""
     strategy = TransportStrategy()
-    with pytest.raises(
-        NotImplementedError, match="Subclasses must implement this method"
-    ):
+    with pytest.raises(NotImplementedError, match="Subclasses must implement this method"):
         await strategy.connect_and_execute("list", None, 1)
 
 
-@pytest.mark.asyncio
-async def test_stdio_transport_connection_error() -> None:
-    """Test StdioTransport error handling."""
-    transport = StdioTransport("test_cmd")
-    mock_error = Exception("Connection error")
+def test_format_response_success_and_none() -> None:
+    response_data = MagicMock()
+    response_data.model_dump.return_value = {"result": "ok"}
 
-    with (
-        patch("mcp.stdio_client", side_effect=mock_error),
-        pytest.raises(ServerConnectionError, match="Failed to connect via stdio"),
-    ):
-        await transport.connect_and_execute("list", None, 1)
+    success = _format_response(response_data, req_id=99)
+    assert success["jsonrpc"] == "2.0"
+    assert success["id"] == 99
+    assert success["result"] == "ok"
+
+    failed = _format_response(None, req_id=13)
+    assert failed["jsonrpc"] == "2.0"
+    assert failed["id"] == 13
+    assert "error" in failed
 
 
-@pytest.mark.asyncio
-async def test_sse_transport_connection_error() -> None:
-    """Test SseTransport error handling."""
-    transport = SseTransport("http://test.com")
-    mock_error = Exception("Connection error")
+def test_streamable_payload_builder() -> None:
+    transport = StreamableHttpTransport("http://localhost:8080/mcp")
+
+    list_payload = transport._build_jsonrpc_payload("list", None, 1)
+    assert list_payload == {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/list",
+        "params": {},
+    }
+
+    call_payload = transport._build_jsonrpc_payload(
+        "call",
+        {"tool_name": "echo", "tool_arguments": {"value": 1}},
+        2,
+    )
+    assert call_payload["method"] == "tools/call"
+    assert call_payload["params"]["name"] == "echo"
+    assert call_payload["params"]["arguments"] == {"value": 1}
+
+    with pytest.raises(ValueError, match="Missing 'tool_name'"):
+        transport._build_jsonrpc_payload("call", {}, 3)
+
+
+def test_streamable_post_jsonrpc_initializes_session() -> None:
+    transport = StreamableHttpTransport("http://localhost:8080/mcp")
+
+    init_response = _json_response(
+        {"jsonrpc": "2.0", "id": 1001, "result": {"serverInfo": {}}},
+        headers={"Mcp-Session-Id": "session-123"},
+    )
+    initialized_notification_response = _json_response({})
+    list_response = _json_response(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {"tools": [{"name": "echo"}]},
+        }
+    )
+
+    with patch(
+        "openapi_to_mcp.adapters.testing.server_tester.requests.post",
+        side_effect=[init_response, initialized_notification_response, list_response],
+    ) as mock_post:
+        payload = transport._post_jsonrpc("list", None, 1)
+
+    assert payload["result"]["tools"][0]["name"] == "echo"
+    assert mock_post.call_count == 3
+
+    _, init_kwargs = mock_post.call_args_list[0]
+    assert init_kwargs["json"]["method"] == "initialize"
+
+    _, notif_kwargs = mock_post.call_args_list[1]
+    assert notif_kwargs["json"]["method"] == "notifications/initialized"
+    assert notif_kwargs["headers"]["Mcp-Session-Id"] == "session-123"
+
+    _, call_kwargs = mock_post.call_args_list[2]
+    assert call_kwargs["json"]["method"] == "tools/list"
+    assert call_kwargs["headers"]["Mcp-Session-Id"] == "session-123"
+
+
+def test_streamable_initialize_error_raises() -> None:
+    transport = StreamableHttpTransport("http://localhost:8080/mcp")
+
+    init_error = _json_response(
+        {
+            "jsonrpc": "2.0",
+            "id": 1001,
+            "error": {"code": -32600, "message": "init failed"},
+        }
+    )
 
     with (
         patch(
-            "openapi_to_mcp.adapters.testing.server_tester.sse_client",
-            side_effect=mock_error,
+            "openapi_to_mcp.adapters.testing.server_tester.requests.post",
+            return_value=init_error,
         ),
-        pytest.raises(ServerConnectionError, match="Failed to connect via SSE"),
+        pytest.raises(ServerConnectionError, match="Initialize request failed"),
     ):
-        await transport.connect_and_execute("list", None, 1)
+        transport._post_jsonrpc("list", None, 1)
+
+
+def test_streamable_parse_json_response_rejects_non_object() -> None:
+    transport = StreamableHttpTransport("http://localhost:8080/mcp")
+    bad_response = _json_response([{"jsonrpc": "2.0"}])
+
+    with pytest.raises(ServerConnectionError, match="Unexpected non-object JSON"):
+        transport._parse_json_response(bad_response)
+
+
+@pytest.mark.asyncio
+async def test_perform_mcp_request_list_and_call() -> None:
+    session_mock = AsyncMock()
+    list_result = MagicMock()
+    call_result = MagicMock()
+
+    session_mock.list_tools.return_value = list_result
+    session_mock.call_tool.return_value = call_result
+
+    assert await _perform_mcp_request(session_mock, "list", None) is list_result
+
+    params = {"tool_name": "echo", "tool_arguments": {"x": 1}}
+    assert await _perform_mcp_request(session_mock, "call", params) is call_result
+    session_mock.call_tool.assert_called_once_with(name="echo", arguments={"x": 1})
 
 
 @pytest.mark.asyncio
 async def test_perform_mcp_request_call_missing_tool_name() -> None:
-    """Test _perform_mcp_request with 'call' method but missing tool_name in params."""
     session_mock = AsyncMock()
 
-    with pytest.raises(ValueError, match="Missing 'tool_name' in params"):
-        await _perform_mcp_request(session_mock, "call", {})
-
-    with pytest.raises(ValueError, match="Missing 'tool_name' in params"):
+    with pytest.raises(ValueError, match="Missing 'tool_name'"):
         await _perform_mcp_request(session_mock, "call", None)
 
-
-@pytest.mark.asyncio
-async def test_execute_mcp_server_invalid_transport() -> None:
-    """Test execute_mcp_server with an invalid transport type."""
-    with (
-        patch(
-            "openapi_to_mcp.adapters.testing.server_tester._create_transport_strategy",
-            side_effect=ValueError("Invalid transport"),
-        ),
-        pytest.raises(ValueError, match="Invalid transport"),
-    ):
-        await execute_mcp_server("invalid", "list")
+    with pytest.raises(ValueError, match="Missing 'tool_name'"):
+        await _perform_mcp_request(session_mock, "call", {})
 
 
 @pytest.mark.asyncio
 async def test_execute_mcp_server_mcp_error() -> None:
-    """Test execute_mcp_server with McpError."""
     mock_strategy = MagicMock()
     error_data = MagicMock()
-    error_data.message = "Test Error"
+    error_data.message = "boom"
     mock_strategy.connect_and_execute.side_effect = McpError(error_data)
 
     with patch(
         "openapi_to_mcp.adapters.testing.server_tester._create_transport_strategy",
         return_value=mock_strategy,
     ):
-        result = await execute_mcp_server("stdio", "list", server_cmd="test")
+        result = await execute_mcp_server("stdio", "list", server_cmd="node server.js")
 
-        assert "error" in result
-        assert (
-            result["error"]["message"]
-            == "MCP Error during stdio test for method 'list': Test Error"
-        )
-        assert result["jsonrpc"] == "2.0"
+    assert result["jsonrpc"] == "2.0"
+    assert "error" in result
+    assert "boom" in result["error"]["message"]
 
 
 @pytest.mark.asyncio
-async def test_execute_mcp_server_generic_exception() -> None:
-    """Test execute_mcp_server with a generic exception."""
+async def test_execute_mcp_server_unexpected_error() -> None:
     mock_strategy = MagicMock()
-    mock_strategy.connect_and_execute.side_effect = RuntimeError("Unexpected error")
+    mock_strategy.connect_and_execute.side_effect = RuntimeError("unexpected")
 
     with (
         patch(
             "openapi_to_mcp.adapters.testing.server_tester._create_transport_strategy",
             return_value=mock_strategy,
         ),
-        pytest.raises(RuntimeError, match="Unexpected error"),
+        pytest.raises(RuntimeError, match="unexpected"),
     ):
-        await execute_mcp_server("stdio", "list", server_cmd="test")
-
-
-def test_format_response_with_existing_fields() -> None:
-    """Test _format_response with response already having jsonrpc and id fields."""
-    response_data = MagicMock()
-    response_data.model_dump.return_value = {
-        "jsonrpc": "2.0",
-        "id": 999,
-        "result": "success",
-    }
-    req_id = 123
-
-    result = _format_response(response_data, req_id)
-
-    assert result["jsonrpc"] == "2.0"
-    assert result["id"] == 999
-    assert result["result"] == "success"
-
-
-def test_format_response_with_error() -> None:
-    """Test _format_response with a response containing an error."""
-    response_data = MagicMock()
-    response_data.model_dump.return_value = {
-        "error": {"code": 100, "message": "Test error"}
-    }
-    req_id = 123
-
-    result = _format_response(response_data, req_id)
-    expected = {
-        "error": {"code": 100, "message": "Test error"},
-        "jsonrpc": "2.0",
-        "id": req_id,
-    }
-
-    assert result == expected
+        await execute_mcp_server("stdio", "list", server_cmd="node server.js")

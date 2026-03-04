@@ -1,3 +1,5 @@
+.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -89,11 +91,10 @@ ipython_config.py
 # According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
 # Pipfile.lock
 
-# poetry
-# Poetry virtualenv
+# uv / Python virtual environments
 .venv
-# Update the following line if you change the location of the cache directory in pyproject.toml
-# .cache
+.uv-cache/
+.poetry-venvs/
 
 # PEP 582; used by PDM, PEP 582 proposal
 __pypackages__/
