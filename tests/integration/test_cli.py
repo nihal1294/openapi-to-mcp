@@ -60,8 +60,10 @@ def test_generate_streamable_http_end_to_end(runner: CliRunner, tmp_path: Path) 
     transport_source = (output_dir / "src" / "transport.ts").read_text(
         encoding="utf-8"
     )
+    server_source = (output_dir / "src" / "server.ts").read_text(encoding="utf-8")
     assert "StreamableHTTPServerTransport" in transport_source
     assert "SSEServerTransport" not in transport_source
+    assert "encodeURIComponent" in server_source
 
     report = json.loads((output_dir / "generation_report.json").read_text())
     assert report["strict_mode"] is True

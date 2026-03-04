@@ -38,6 +38,7 @@ class Mapper:
         self._diagnostics: list[str] = []
         self._skipped_operations: list[dict[str, str]] = []
         self._tool_name_counts: dict[str, int] = {}
+        self._used_tool_names: set[str] = set()
 
     def map_tools(self) -> list[dict[str, Any]]:
         """
@@ -53,6 +54,7 @@ class Mapper:
         self._diagnostics = []
         self._skipped_operations = []
         self._tool_name_counts = {}
+        self._used_tool_names = set()
 
         paths = self.spec.get("paths", {})
         if not isinstance(paths, dict):
@@ -244,17 +246,27 @@ class Mapper:
 
     def _ensure_unique_tool_name(self, candidate_name: str) -> str:
         """Ensure mapped tool names are unique."""
-        count = self._tool_name_counts.get(candidate_name, 0) + 1
-        self._tool_name_counts[candidate_name] = count
-
-        if count == 1:
+        if candidate_name not in self._used_tool_names:
+            self._used_tool_names.add(candidate_name)
+            self._tool_name_counts[candidate_name] = max(
+                self._tool_name_counts.get(candidate_name, 0), 1
+            )
             return candidate_name
 
         if self.strict:
             err_msg = f"Duplicate tool name detected in strict mode: {candidate_name}"
             raise MappingError(err_msg)
 
-        deduped_name = f"{candidate_name}_{count}"
+        count = self._tool_name_counts.get(candidate_name, 1)
+        deduped_name = ""
+        while True:
+            count += 1
+            deduped_name = f"{candidate_name}_{count}"
+            if deduped_name not in self._used_tool_names:
+                break
+
+        self._tool_name_counts[candidate_name] = count
+        self._used_tool_names.add(deduped_name)
         self._diagnostics.append(
             f"Duplicate tool name '{candidate_name}' deduped to '{deduped_name}'."
         )

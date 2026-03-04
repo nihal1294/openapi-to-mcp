@@ -226,6 +226,22 @@ function stringifyValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function encodePathToken(value: unknown): string {
+  return encodeURIComponent(stringifyValue(value));
+}
+
+function serializePathObject(objectValue: Record<string, unknown>, explode: boolean): string {
+  if (explode) {
+    return Object.entries(objectValue)
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodePathToken(value)}`)
+      .join(',');
+  }
+
+  return Object.entries(objectValue)
+    .flatMap(([key, value]) => [encodeURIComponent(key), encodePathToken(value)])
+    .join(',');
+}
+
 function serializeObjectSimple(objectValue: Record<string, unknown>, explode: boolean): string {
   if (explode) {
     return Object.entries(objectValue)
@@ -244,26 +260,27 @@ function serializePathValue(
 ): string {
   const style = parameter.style ?? 'simple';
   const explode = parameter.explode ?? false;
+  const encodedParamName = encodeURIComponent(parameter.name);
 
   const toSimple = (): string => {
     if (Array.isArray(value)) {
-      return value.map((item) => stringifyValue(item)).join(',');
+      return value.map((item) => encodePathToken(item)).join(',');
     }
     if (value && typeof value === 'object') {
-      return serializeObjectSimple(value as Record<string, unknown>, explode);
+      return serializePathObject(value as Record<string, unknown>, explode);
     }
-    return stringifyValue(value);
+    return encodePathToken(value);
   };
 
   const simpleValue = toSimple();
 
   if (style === 'label') {
     if (Array.isArray(value) && explode) {
-      return `.${value.map((item) => stringifyValue(item)).join('.')}`;
+      return `.${value.map((item) => encodePathToken(item)).join('.')}`;
     }
     if (value && typeof value === 'object' && explode) {
       return `.${Object.entries(value as Record<string, unknown>)
-        .map(([key, objectValue]) => `${key}=${stringifyValue(objectValue)}`)
+        .map(([key, objectValue]) => `${encodeURIComponent(key)}=${encodePathToken(objectValue)}`)
         .join('.')}`;
     }
     return `.${simpleValue}`;
@@ -272,15 +289,15 @@ function serializePathValue(
   if (style === 'matrix') {
     if (Array.isArray(value) && explode) {
       return value
-        .map((item) => `;${parameter.name}=${stringifyValue(item)}`)
+        .map((item) => `;${encodedParamName}=${encodePathToken(item)}`)
         .join('');
     }
     if (value && typeof value === 'object' && explode) {
       return Object.entries(value as Record<string, unknown>)
-        .map(([key, objectValue]) => `;${key}=${stringifyValue(objectValue)}`)
+        .map(([key, objectValue]) => `;${encodeURIComponent(key)}=${encodePathToken(objectValue)}`)
         .join('');
     }
-    return `;${parameter.name}=${simpleValue}`;
+    return `;${encodedParamName}=${simpleValue}`;
   }
 
   return simpleValue;

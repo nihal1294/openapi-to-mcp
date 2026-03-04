@@ -166,6 +166,40 @@ def test_mapper_duplicate_operation_id_non_strict_dedupes_with_warning() -> None
     assert any("deduped" in warning for warning in report["warnings"])
 
 
+def test_mapper_non_strict_dedupe_avoids_existing_suffix_collisions() -> None:
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Dup Suffix", "version": "1.0.0"},
+        "paths": {
+            "/a": {
+                "get": {
+                    "operationId": "sameName",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+            "/b": {
+                "get": {
+                    "operationId": "sameName_2",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+            "/c": {
+                "get": {
+                    "operationId": "sameName",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+        },
+    }
+
+    mapper = Mapper(spec=spec, strict=False)
+    tools = mapper.map_tools()
+
+    assert [tool["name"] for tool in tools] == ["sameName", "sameName_2", "sameName_3"]
+    report = mapper.get_report()
+    assert any("sameName_3" in warning for warning in report["warnings"])
+
+
 def test_mapper_non_strict_skips_invalid_operation_and_reports() -> None:
     spec = {
         "openapi": "3.0.0",
