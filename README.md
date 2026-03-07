@@ -100,6 +100,9 @@ If you use [`just`](https://github.com/casey/just), equivalent short commands ar
 
 ```bash
 just sync
+just hooks-install
+just hooks-run
+just hooks-run-push
 just format
 just lint
 just test
@@ -464,6 +467,23 @@ Please refer to our [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines o
 
 Ensure you have installed dependencies using `uv sync --dev`.
 
+* **Git hooks:** Install the local `pre-commit` and `pre-push` hooks:
+
+    ```bash
+    uv run pre-commit install --hook-type pre-commit --hook-type pre-push
+    ```
+
+    Or:
+
+    ```bash
+    just hooks-install
+    ```
+
+    Behavior:
+    `pre-commit` runs fast local checks (`ruff format`, `ruff check --fix`).
+    `pre-push` runs the Python test suite.
+    Generated-server E2E remains CI-only.
+
 * **Formatting:** Apply code formatting using Ruff:
 
     ```bash
@@ -489,6 +509,13 @@ Ensure you have installed dependencies using `uv sync --dev`.
     uv run ruff format .
     uv run ruff check --fix .
     uv run pytest --cov=openapi_to_mcp
+    ```
+
+* **Run hooks manually:** Validate the configured hook stages without committing or pushing:
+
+    ```bash
+    just hooks-run
+    just hooks-run-push
     ```
 
 * **When dependency constraints change:** refresh the lockfile:

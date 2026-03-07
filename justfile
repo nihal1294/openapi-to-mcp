@@ -8,6 +8,15 @@ help:
 sync:
     ./scripts/workflow.sh sync
 
+hooks-install:
+    PRE_COMMIT_HOME=.pre-commit-cache uv run pre-commit install --hook-type pre-commit --hook-type pre-push
+
+hooks-run:
+    PRE_COMMIT_HOME=.pre-commit-cache uv run pre-commit run --all-files
+
+hooks-run-push:
+    PRE_COMMIT_HOME=.pre-commit-cache uv run pre-commit run --all-files --hook-stage pre-push
+
 format:
     uv run ruff format .
 
