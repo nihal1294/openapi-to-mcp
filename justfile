@@ -26,6 +26,12 @@ lint:
 test:
     uv run pytest --cov=openapi_to_mcp --cov-report=term-missing
 
+docs-build:
+    NO_MKDOCS_2_WARNING=1 uv run mkdocs build --strict
+
+docs-serve:
+    NO_MKDOCS_2_WARNING=1 uv run mkdocs serve
+
 e2e-generated:
     ./scripts/e2e_generated_server.sh
 

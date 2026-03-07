@@ -96,6 +96,7 @@ ipython_config.py
 .uv-cache/
 .pre-commit-cache/
 .poetry-venvs/
+.local-docs/
 
 # PEP 582; used by PDM, PEP 582 proposal
 __pypackages__/
