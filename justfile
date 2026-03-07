@@ -8,6 +8,12 @@ help:
 sync:
     ./scripts/workflow.sh sync
 
+format:
+    uv run ruff format .
+
+lint:
+    uv run ruff check --fix .
+
 test:
     uv run pytest --cov=openapi_to_mcp --cov-report=term-missing
 

@@ -100,6 +100,8 @@ If you use [`just`](https://github.com/casey/just), equivalent short commands ar
 
 ```bash
 just sync
+just format
+just lint
 just test
 just e2e-generated
 just generate
@@ -471,7 +473,7 @@ Ensure you have installed dependencies using `uv sync --dev`.
 * **Linting:** Check for code style issues and apply automatic fixes using Ruff:
 
     ```bash
-    uv run ruff check . --fix
+    uv run ruff check --fix .
     ```
 
 * **Testing:** Run unit and integration tests using Pytest with coverage reporting:
@@ -485,7 +487,7 @@ Ensure you have installed dependencies using `uv sync --dev`.
 
     ```bash
     uv run ruff format .
-    uv run ruff check . --fix
+    uv run ruff check --fix .
     uv run pytest --cov=openapi_to_mcp
     ```
 
