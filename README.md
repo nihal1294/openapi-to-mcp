@@ -131,6 +131,9 @@ Or, if you use `just`:
 just e2e-generated
 ```
 
+The generated-server E2E runner chooses free local ports automatically by default.
+If you want to force specific ports, set `MOCK_API_PORT` and/or `HTTP_PORT`.
+
 If you want to remove generated validation artifacts under `/tmp`, run:
 
 ```bash
