@@ -179,12 +179,14 @@ do_test_call() {
 
 do_clean() {
   rm -rf \
-    "${REPO_ROOT}/.pytest_cache" \
-    "${REPO_ROOT}/.pre-commit-cache" \
-    "${REPO_ROOT}/.ruff_cache" \
     "${REPO_ROOT}/.mypy_cache" \
+    "${REPO_ROOT}/.pre-commit-cache" \
+    "${REPO_ROOT}/.pytest_cache" \
+    "${REPO_ROOT}/.ruff_cache" \
+    "${REPO_ROOT}/.uv-cache" \
     "${REPO_ROOT}/dist" \
     "${REPO_ROOT}/build" \
+    "${REPO_ROOT}/site" \
     "${REPO_ROOT}/htmlcov"
   rm -f "${REPO_ROOT}/.coverage" "${REPO_ROOT}/coverage.xml"
   find "${REPO_ROOT}" -type d -name "__pycache__" -prune -exec rm -rf {} +
