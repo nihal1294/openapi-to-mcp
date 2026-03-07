@@ -71,10 +71,20 @@ def _extract_base_url(spec: dict[str, Any]) -> str:
         logger.warning(
             "First server object in spec lacks a valid 'url' string. Using placeholder for .env."
         )
-    else:
-        logger.warning(
-            "No 'servers' array found or it's empty in the spec. Using placeholder for .env."
-        )
+    host = spec.get("host")
+    if isinstance(host, str) and host:
+        base_path = spec.get("basePath", "")
+        schemes = spec.get("schemes", [])
+        scheme = schemes[0] if isinstance(schemes, list) and schemes else "https"
+        if not isinstance(base_path, str):
+            base_path = ""
+        if isinstance(scheme, str) and scheme:
+            url = f"{scheme}://{host}{base_path}"
+            logger.info("Using base URL from Swagger 2 host/basePath: %s", url)
+            return url
+    logger.warning(
+        "No 'servers' array found and no Swagger 2 host/basePath detected. Using placeholder for .env."
+    )
     return default_url
 
 

@@ -180,6 +180,9 @@ def test_generate_no_strict_generated_name_collision_dedupes_and_reports(
     assert report["mapped_tools"] == 2
     assert report["skipped_operations"] == []
     assert any("deduped" in warning for warning in report["warnings"])
+    assert "TARGET_API_BASE_URL=https://example.com/api" in (
+        output_dir / ".env.example"
+    ).read_text(encoding="utf-8")
 
     server_source = (output_dir / "src" / "server.ts").read_text(encoding="utf-8")
     assert "get_a_b_2" in server_source

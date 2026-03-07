@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 import pytest
@@ -9,6 +10,10 @@ from openapi_to_mcp.cli import cli
 
 if TYPE_CHECKING:
     from unittest.mock import MagicMock
+
+
+def _normalize_output(text: str) -> str:
+    return " ".join(re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text).split())
 
 
 @pytest.fixture
@@ -24,7 +29,7 @@ def mock_execute_mcp_server(mocker: MagicMock) -> MagicMock:
 def test_test_server_requires_transport(runner: CliRunner) -> None:
     result: Result = runner.invoke(cli, ["test-server"])
     assert result.exit_code != 0
-    assert "Missing option '--transport'" in result.output
+    assert "Missing option '--transport'" in _normalize_output(result.output)
 
 
 def test_test_server_stdio_requires_server_cmd(
@@ -36,7 +41,9 @@ def test_test_server_stdio_requires_server_cmd(
     )
 
     assert result.exit_code != 0
-    assert "--server-cmd is required for stdio transport" in result.output
+    assert "--server-cmd is required for stdio transport" in _normalize_output(
+        result.output
+    )
 
 
 def test_test_server_requires_action(
@@ -48,7 +55,9 @@ def test_test_server_requires_action(
     )
 
     assert result.exit_code != 0
-    assert "Either --list-tools or --tool-name must be specified" in result.output
+    assert "Either --list-tools or --tool-name must be specified" in _normalize_output(
+        result.output
+    )
 
 
 def test_test_server_tool_args_requires_tool_name(
@@ -66,7 +75,9 @@ def test_test_server_tool_args_requires_tool_name(
     )
 
     assert result.exit_code != 0
-    assert "--tool-args requires --tool-name to be specified" in result.output
+    assert "--tool-args requires --tool-name to be specified" in _normalize_output(
+        result.output
+    )
 
 
 def test_test_server_streamable_http_list_tools_success(
@@ -139,7 +150,6 @@ def test_test_server_stdio_call_tool_success(
 
     assert result.exit_code == 0
     parse_env.assert_called_once_with("./.env")
-
     _, kwargs = mock_execute_mcp_server.call_args
     assert kwargs["transport"] == "stdio"
     assert kwargs["method"] == "call"
@@ -166,7 +176,7 @@ def test_test_server_rejects_bad_endpoint(
     )
 
     assert result.exit_code != 0
-    assert "--mcp-endpoint must start with '/'" in result.output
+    assert "--mcp-endpoint must start with '/'" in _normalize_output(result.output)
 
 
 def test_test_server_bad_tool_args_json(

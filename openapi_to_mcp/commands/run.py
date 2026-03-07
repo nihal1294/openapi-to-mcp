@@ -49,6 +49,18 @@ def _write_env_vars(env_path: Path, variables: dict[str, str]) -> None:
     env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _meaningful_value(value: str | None) -> str | None:
+    return value if value and value != PLACEHOLDER_BASE_URL else None
+
+
+def _filter_runtime_env(file_env: dict[str, str]) -> dict[str, str]:
+    return {
+        key: value
+        for key, value in file_env.items()
+        if _meaningful_value(value) is not None
+    }
+
+
 def _prepare_runtime_env(
     output_dir: Path, target_api_base_url: str | None, env_source: str | None
 ) -> dict[str, str]:
@@ -60,17 +72,20 @@ def _prepare_runtime_env(
         _write_env_vars(env_path, overrides)
 
     file_env = (parse_env_source(str(env_path)) or {}) if env_path.exists() else {}
-    resolved_base_url = file_env.get("TARGET_API_BASE_URL") or os.environ.get(
-        "TARGET_API_BASE_URL"
+    runtime_file_env = _filter_runtime_env(file_env)
+    resolved_base_url = (
+        _meaningful_value(overrides.get("TARGET_API_BASE_URL"))
+        or (runtime_file_env.get("TARGET_API_BASE_URL"))
+        or _meaningful_value(os.environ.get("TARGET_API_BASE_URL"))
     )
-    if not resolved_base_url or resolved_base_url == PLACEHOLDER_BASE_URL:
+    if not resolved_base_url:
         raise click.UsageError(
             "TARGET_API_BASE_URL is unresolved. Provide --target-api-base-url, "
             "--env-source, or a spec with servers[0].url."
         )
 
     runtime_env = os.environ.copy()
-    runtime_env.update(file_env)
+    runtime_env.update(runtime_file_env)
     runtime_env.update(overrides)
     runtime_env["TARGET_API_BASE_URL"] = resolved_base_url
     return runtime_env

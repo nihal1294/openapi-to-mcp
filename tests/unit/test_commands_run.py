@@ -135,3 +135,47 @@ def test_run_accepts_target_api_base_url_without_env_source(
     assert subprocess_run.call_count == 3
     env_contents = (output_dir / ".env").read_text(encoding="utf-8")
     assert "TARGET_API_BASE_URL=https://override.example.com" in env_contents
+
+
+def test_run_preserves_exported_auth_env_vars(
+    runner: CliRunner, tmp_path: Path, mocker: MagicMock
+) -> None:
+    output_dir = tmp_path / "generated"
+    subprocess_run = mocker.patch("openapi_to_mcp.commands.run.subprocess.run")
+    mocker.patch(
+        "openapi_to_mcp.commands.run.shutil.which", return_value="/usr/bin/tool"
+    )
+    mocker.patch.dict(
+        "openapi_to_mcp.commands.run.os.environ",
+        {"AUTH_TEST_API_KEY": "from-shell"},
+        clear=False,
+    )
+
+    def fake_generate_project(**_: object) -> None:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / ".env.example").write_text(
+            "TARGET_API_BASE_URL=https://example.com\nAUTH_TEST_API_KEY=\n",
+            encoding="utf-8",
+        )
+
+    mocker.patch(
+        "openapi_to_mcp.commands.run.generate_project",
+        side_effect=fake_generate_project,
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "run",
+            "--openapi-json",
+            str(tmp_path / "openapi.yaml"),
+            "--output-dir",
+            str(output_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert (
+        subprocess_run.call_args_list[0].kwargs["env"]["AUTH_TEST_API_KEY"]
+        == "from-shell"
+    )
