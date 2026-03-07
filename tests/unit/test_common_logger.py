@@ -1,80 +1,83 @@
 from __future__ import annotations
 
+import json
 import logging
-from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
-from pythonjsonlogger.json import JsonFormatter
+from structlog.stdlib import ProcessorFormatter
 
 from openapi_to_mcp.common.logger import configure_logger
 
-if TYPE_CHECKING:
-    from collections.abc import Generator
+
+def _unique_logger_name() -> str:
+    return f"openapi_to_mcp.tests.{uuid4().hex}"
 
 
-@pytest.fixture
-def mock_logger() -> Generator[MagicMock]:
-    """
-    Fixture to mock the logger for the 'openapi_to_mcp' package.
-
-    Returns:
-        MagicMock: Mocked logger instance.
-    """
-    with patch("logging.getLogger") as mock_get_logger:
-        mock_logger_instance = MagicMock()
-        mock_get_logger.return_value = mock_logger_instance
-        yield mock_logger_instance
+def _reset_logger(logger_name: str) -> logging.Logger:
+    logger = logging.getLogger(logger_name)
+    logger.handlers.clear()
+    logger.propagate = True
+    logger.setLevel(logging.NOTSET)
+    return logger
 
 
-def test_configure_logger_default(mock_logger: MagicMock) -> None:
-    """Test logger configuration with default settings (INFO level, text format)."""
-    mock_logger.handlers = []
+def test_configure_logger_default() -> None:
+    logger_name = _unique_logger_name()
+    logger = _reset_logger(logger_name)
 
-    configure_logger()
+    configure_logger(logger_name=logger_name)
 
-    mock_logger.setLevel.assert_called_once_with(logging.INFO)
-
-    assert mock_logger.addHandler.call_count >= 1
-    handler = mock_logger.addHandler.call_args[0][0]
-    assert isinstance(handler, logging.StreamHandler)
-    assert isinstance(handler.formatter, logging.Formatter)
-
-
-def test_configure_logger_custom_level(mock_logger: MagicMock) -> None:
-    """Test logger configuration with a custom logging level."""
-    mock_logger.handlers = []
-
-    configure_logger(level=logging.DEBUG)
-
-    mock_logger.setLevel.assert_called_once_with(logging.DEBUG)
-
-    assert mock_logger.addHandler.call_count >= 1
-    handler = mock_logger.addHandler.call_args[0][0]
-    assert isinstance(handler, logging.StreamHandler)
-
-    assert isinstance(handler.formatter, logging.Formatter)
+    assert logger.level == logging.INFO
+    assert logger.propagate is False
+    assert len(logger.handlers) == 1
+    assert isinstance(logger.handlers[0], logging.StreamHandler)
+    assert isinstance(logger.handlers[0].formatter, ProcessorFormatter)
 
 
-def test_configure_logger_json_format(mock_logger: MagicMock) -> None:
-    """Test logger configuration with JSON format."""
-    mock_logger.handlers = []
+def test_configure_logger_custom_level() -> None:
+    logger_name = _unique_logger_name()
+    logger = _reset_logger(logger_name)
 
-    configure_logger(log_format="json")
+    configure_logger(logger_name=logger_name, level=logging.DEBUG)
 
-    mock_logger.setLevel.assert_called_once_with(logging.INFO)
-
-    assert mock_logger.addHandler.call_count >= 1
-    handler = mock_logger.addHandler.call_args[0][0]
-    assert isinstance(handler, logging.StreamHandler)
-    assert isinstance(handler.formatter, JsonFormatter)
+    assert logger.level == logging.DEBUG
 
 
-def test_configure_logger_with_existing_handler(mock_logger: MagicMock) -> None:
-    """Test that configure_logger doesn't add a duplicate handler."""
-    mock_handler = MagicMock(spec=logging.StreamHandler)
-    mock_logger.handlers = [mock_handler]
+def test_configure_logger_json_format_renders_json() -> None:
+    logger_name = _unique_logger_name()
+    logger = _reset_logger(logger_name)
 
-    configure_logger()
+    configure_logger(logger_name=logger_name, log_format="json")
 
-    assert mock_handler in mock_logger.handlers
+    record = logging.LogRecord(
+        name=logger_name,
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="hello",
+        args=(),
+        exc_info=None,
+    )
+    formatted = logger.handlers[0].formatter.format(record)
+
+    payload = json.loads(formatted)
+    assert payload["event"] == "hello"
+    assert payload["level"] == "info"
+
+
+def test_configure_logger_replaces_existing_handlers() -> None:
+    logger_name = _unique_logger_name()
+    logger = _reset_logger(logger_name)
+    logger.addHandler(logging.NullHandler())
+
+    configure_logger(logger_name=logger_name)
+    configure_logger(logger_name=logger_name)
+
+    assert len(logger.handlers) == 1
+    assert isinstance(logger.handlers[0], logging.StreamHandler)
+
+
+def test_configure_logger_rejects_invalid_format() -> None:
+    with pytest.raises(ValueError, match="Invalid log_format"):
+        configure_logger(log_format="xml")  # type: ignore[arg-type]

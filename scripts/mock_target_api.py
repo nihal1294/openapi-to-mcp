@@ -6,8 +6,16 @@ from __future__ import annotations
 import argparse
 import json
 from http import HTTPStatus
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import ParseResult, parse_qs, urlparse
+
+AUTH_CREDENTIALS = {
+    "/auth/header": ("header", "X-API-Key", "header-secret"),
+    "/auth/query": ("query", "api_key", "query-secret"),
+    "/auth/cookie": ("cookie", "session_token", "cookie-secret"),
+    "/auth/bearer": ("bearer", "Authorization", "bearer-secret"),
+}
 
 
 class MockTargetApiHandler(BaseHTTPRequestHandler):
@@ -23,12 +31,7 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/test":
-            query = {
-                key: values[0] if len(values) == 1 else values
-                for key, values in parse_qs(
-                    parsed.query, keep_blank_values=True
-                ).items()
-            }
+            query = self._query_params(parsed.query)
             self._send_json(
                 HTTPStatus.OK,
                 {
@@ -38,6 +41,10 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
                     "status": query.get("status", "available"),
                 },
             )
+            return
+
+        if parsed.path in AUTH_CREDENTIALS:
+            self._handle_auth_request(parsed)
             return
 
         self._send_json(
@@ -56,6 +63,53 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _query_params(self, query_string: str) -> dict[str, object]:
+        return {
+            key: values[0] if len(values) == 1 else values
+            for key, values in parse_qs(query_string, keep_blank_values=True).items()
+        }
+
+    def _cookie_params(self) -> dict[str, str]:
+        parsed = SimpleCookie(self.headers.get("Cookie", ""))
+        return {key: morsel.value for key, morsel in parsed.items()}
+
+    def _received_credential(
+        self, auth_kind: str, auth_name: str, parsed_query: dict[str, object]
+    ) -> str | None:
+        if auth_kind == "query":
+            value = parsed_query.get(auth_name)
+            return value if isinstance(value, str) else None
+        if auth_kind == "cookie":
+            return self._cookie_params().get(auth_name)
+        return self.headers.get(auth_name)
+
+    def _handle_auth_request(self, parsed: ParseResult) -> None:
+        path = parsed.path
+        query_string = parsed.query
+        auth_kind, auth_name, expected = AUTH_CREDENTIALS[path]
+        parsed_query = self._query_params(query_string)
+        received = self._received_credential(auth_kind, auth_name, parsed_query)
+        valid = received == expected
+        if auth_kind == "bearer":
+            valid = received == f"Bearer {expected}"
+
+        if not valid:
+            self._send_json(
+                HTTPStatus.UNAUTHORIZED,
+                {
+                    "ok": False,
+                    "auth": auth_kind,
+                    "error": "Missing or invalid credential",
+                    "received": received,
+                },
+            )
+            return
+
+        self._send_json(
+            HTTPStatus.OK,
+            {"ok": True, "auth": auth_kind, "credential": expected},
+        )
 
 
 def main() -> None:

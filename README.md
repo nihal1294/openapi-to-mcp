@@ -4,9 +4,11 @@
 
 <h1 align="center">OpenAPI → MCP Server</h1>
 
-This Python CLI tool generates a basic Node.js/TypeScript [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server based on an [OpenAPI](https://www.openapis.org/) v3 specification file (JSON or YAML), provided either as a local file path or a URL. Each operation defined in the OpenAPI specification is mapped to a corresponding MCP tool within the generated server.
+Generate, run, and test Node.js/TypeScript [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) servers directly from [OpenAPI](https://www.openapis.org/) specifications.
 
-The generated server acts as a proxy, receiving MCP tool calls and translating them into HTTP requests to call the actual API defined in the OpenAPI specification.
+This Python CLI accepts OpenAPI v3 specs from local files or URLs, maps each operation to an MCP tool, generates a runnable TypeScript server, and can also validate or start that server for local development.
+
+The generated server acts as an API proxy: it receives MCP tool calls and translates them into HTTP requests against the target API defined by the OpenAPI specification.
 
 ## ✨ Features
 
@@ -19,15 +21,18 @@ The generated server acts as a proxy, receiving MCP tool calls and translating t
   * Configurable transport (`stdio`, `streamable-http`).
   * Streamable HTTP endpoint configuration (`host`, `port`, `mcp-endpoint`).
   * Strict mode by default with `generation_report.json` output.
-  * Reads target API base URL and optional authentication header from a `.env` file.
-  * Supports OpenAPI parameter styles (including `cookie`) and security scheme env mapping.
+  * Reads target API base URL and generated auth credentials from a `.env` file.
+  * Supports OpenAPI parameter styles (including `cookie`) and security scheme env mapping for `apiKey`, bearer, OAuth2, and OpenID Connect schemes.
   * Includes runtime execution controls (global/per-tool concurrency, queueing, timeout).
   * Includes basic error mapping from HTTP status codes to MCP error codes.
   * Includes `package.json`, `tsconfig.json` (with strict settings), and **an** example `.env` file.
   * Provides clear setup and run instructions in a generated `README.md`.
 * Integrated linting and formatting (`ruff`).
 * Unit and integration tests (`pytest`).
-* JSON logging.
+* Generated-server E2E coverage for `stdio` and `streamable-http`, including auth flows against a local mock API.
+* Rich CLI help and command output via `rich-click` and `rich`.
+* Structured console and JSON logging via `structlog`.
+* Local Git hook support.
 
 ## Quickstart
 
@@ -48,6 +53,20 @@ uv run openapi-to-mcp generate
 ```
 
 1. Follow the instructions in the generated `README.md` in `./mcp-server` to build and run the server.
+
+1. Validate the generated-server path locally:
+
+```bash
+just e2e-generated
+```
+
+1. Or run a generated server directly from a spec in one command:
+
+```bash
+uv run openapi-to-mcp run \
+  --openapi-json <path_or_url> \
+  --target-api-base-url <api_base_url>
+```
 
 See [docs/USAGE_EXAMPLES.md](docs/USAGE_EXAMPLES.md) for detailed examples.
 
@@ -107,6 +126,7 @@ just format
 just lint
 just test
 just e2e-generated
+just e2e-cli
 just generate
 just build
 just run
@@ -129,6 +149,29 @@ Or, if you use `just`:
 
 ```bash
 just e2e-generated
+```
+
+The generated-server E2E runner chooses free local ports automatically by default.
+If you want to force specific ports, set `MOCK_API_PORT` and/or `HTTP_PORT`.
+
+The E2E suite covers:
+
+* basic tool listing and tool calls for both transports
+* generated auth wiring for `apiKey` in `header`, `query`, and `cookie`
+* generated bearer token wiring
+* missing-credential failure for bearer auth
+
+For a CLI-level E2E matrix that exercises `generate`, `run`, and `test-server`
+across the main supported combinations, run:
+
+```bash
+scripts/e2e_cli_matrix.sh
+```
+
+Or:
+
+```bash
+just e2e-cli
 ```
 
 If you want to remove generated validation artifacts under `/tmp`, run:
@@ -183,7 +226,7 @@ just clean-tmp
 
 ## 📋 Usage
 
-The tool provides two main commands: `generate` and `test-server`.
+The tool provides three main commands: `generate`, `run`, and `test-server`.
 
 Run commands from within the project directory (or with the virtual environment activated):
 
@@ -263,7 +306,10 @@ After running the `generate` command, follow these steps in the generated server
 
 2. Create/edit the `.env` file (the generator creates an `.env.example` file you can copy) and provide the required values:
     * `TARGET_API_BASE_URL`: The base URL of the target API the generated server will interact with. The generated server validates this value on startup and will not run with placeholder URLs.
-    * `TARGET_API_AUTH_HEADER`: (Optional) A full authorization header string if required by the target API (e.g., `Authorization: Bearer your_token` or `X-API-Key: your_key`).
+    * Scheme-specific auth env vars generated from the OpenAPI spec, for example:
+      * `AUTH_<SCHEME_NAME>_API_KEY` for `apiKey` schemes
+      * `AUTH_<SCHEME_NAME>_TOKEN` for bearer, OAuth2, or OpenID Connect schemes
+    * `TARGET_API_AUTH_HEADER`: (Optional) A full authorization header string for APIs that need a raw fallback header instead of generated scheme-specific env vars.
 3. Install dependencies:
 
     ```bash
@@ -283,6 +329,40 @@ After running the `generate` command, follow these steps in the generated server
     ```
 
 The generated server's own `README.md` file also contains these setup instructions. You can then test the running server using the [test-server](#test-server-command) command or the [MCP Inspector](#testing-with-mcp-inspector).
+
+### `run` Command
+
+This command performs the full local flow in one step:
+
+1. generate a server from the OpenAPI spec
+2. install Node dependencies
+3. build the generated TypeScript project
+4. start the generated MCP server
+
+By default it uses a temporary output directory and cleans it up when the server exits. If you want to keep or reuse the generated project, pass `--output-dir`.
+
+**Common options:**
+
+* `--openapi-json`, `-o` (**Required**): Path or URL to the OpenAPI specification file.
+* `--target-api-base-url`: Override `TARGET_API_BASE_URL` for the generated runtime. Required when the spec does not define `servers[0].url`.
+* `--env-source`: Additional runtime env vars as a JSON string or path to a JSON/.env file.
+* `--output-dir`, `-d`: Optional directory to reuse instead of a temporary workspace.
+* `--transport`, `--host`, `--port`, `--mcp-endpoint`, `--strict`: Same meaning as in `generate`.
+
+**Examples:**
+
+```bash
+uv run openapi-to-mcp run \
+  --openapi-json https://petstore.swagger.io/v2/swagger.json \
+  --target-api-base-url https://petstore.swagger.io/v2
+```
+
+```bash
+uv run openapi-to-mcp run \
+  --openapi-json ./openapi.yaml \
+  --output-dir ./generated-runtime \
+  --env-source ./runtime.env
+```
 
 ### `test-server` Command
 
@@ -467,6 +547,16 @@ Please refer to our [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines o
 
 Ensure you have installed dependencies using `uv sync --dev`.
 
+Recommended local verification order:
+
+```bash
+just format
+just lint
+just test
+just e2e-generated
+just e2e-cli
+```
+
 * **Git hooks:** Install the local `pre-commit` and `pre-push` hooks:
 
     ```bash
@@ -482,7 +572,7 @@ Ensure you have installed dependencies using `uv sync --dev`.
     Behavior:
     `pre-commit` runs fast local checks (`ruff format`, `ruff check --fix`).
     `pre-push` runs the Python test suite.
-    Generated-server E2E remains CI-only.
+    Generated-server E2E is available locally via `just e2e-generated` and runs in CI.
 
 * **Formatting:** Apply code formatting using Ruff:
 

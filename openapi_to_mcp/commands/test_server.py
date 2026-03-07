@@ -4,9 +4,10 @@ import logging
 import sys
 from typing import Any
 
-import click
+import rich_click as click
 
 from openapi_to_mcp.adapters.testing import execute_mcp_server
+from openapi_to_mcp.common.terminal import print_error, print_json_panel, print_section
 from openapi_to_mcp.common.utils import parse_env_source
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,8 @@ def run_test_server(  # noqa: PLR0913
                 env_source=env_source,
             )
         )
+    except click.ClickException:
+        raise
     except Exception as e:
         logger.critical(
             "An unexpected error occurred during testing: %s", e, exc_info=True
@@ -85,7 +88,7 @@ def _parse_tool_args(tool_args: str | None) -> dict[str, Any]:
             raise TypeError("Tool arguments must be a JSON object.")  # noqa: TRY301
     except (json.JSONDecodeError, TypeError) as e:
         logger.exception("Invalid JSON in --tool-args")
-        click.echo(f"Error: Invalid JSON provided for --tool-args: {e}", err=True)
+        print_error(f"Invalid JSON provided for --tool-args: {e}")
         raise click.BadParameter(
             f"Tool arguments must be a valid JSON object: {e}"
         ) from e
@@ -130,7 +133,7 @@ async def _run_test(  # noqa: PLR0913
     )
 
     if list_tools:
-        click.echo("--- Sending ListTools Request ---")
+        print_section("Sending tools/list request")
         response = await execute_mcp_server(
             transport=transport,
             method="list",
@@ -140,12 +143,10 @@ async def _run_test(  # noqa: PLR0913
             env=env_vars if transport == "stdio" else None,
         )
         req_id_counter += 1
-        click.echo("--- ListTools Response ---")
-        click.echo(json.dumps(response, indent=2))
-        click.echo("-" * 30)
+        print_json_panel("tools/list response", response)
 
     if tool_name:
-        click.echo(f"--- Sending CallTool Request for '{tool_name}' ---")
+        print_section(f"Sending tools/call request for '{tool_name}'")
         tool_arguments = _parse_tool_args(tool_args)
         calltool_params = {"tool_name": tool_name, "tool_arguments": tool_arguments}
 
@@ -158,6 +159,4 @@ async def _run_test(  # noqa: PLR0913
             endpoint_url=endpoint_url,
             env=env_vars if transport == "stdio" else None,
         )
-        click.echo(f"--- CallTool Response for '{tool_name}' ---")
-        click.echo(json.dumps(response, indent=2))
-        click.echo("-" * 30)
+        print_json_panel(f"tools/call response: {tool_name}", response)

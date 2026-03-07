@@ -4,99 +4,23 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-import click
+import rich_click as click
 
 from openapi_to_mcp.adapters.generator import Generator
 from openapi_to_mcp.adapters.spec_loader import SpecLoader
+from openapi_to_mcp.commands.options import add_options, generate_options
 from openapi_to_mcp.common.exceptions import (
     GenerationError,
     MappingError,
+    NoToolsMappedError,
     SpecLoaderError,
 )
+from openapi_to_mcp.common.terminal import print_success_panel
 from openapi_to_mcp.mapping import Mapper
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
 logger = logging.getLogger(__name__)
-
-
-# Options common to the generate command
-generate_options = [
-    click.option(
-        "--openapi-json",
-        "-o",
-        required=True,
-        help="Path or URL to OpenAPI specification JSON or YAML file.",
-    ),
-    click.option(
-        "--output-dir",
-        "-d",
-        required=True,
-        type=click.Path(file_okay=False, writable=True),
-        help="Output directory for generated files.",
-    ),
-    click.option(
-        "--mcp-server-name",
-        "-n",
-        help="Name for the generated MCP server (uses OpenAPI Spec title if not provided).",
-    ),
-    click.option(
-        "--mcp-server-version",
-        "-v",
-        help="Version for the generated MCP server (uses OpenAPI Spec version if not provided).",
-    ),
-    click.option(
-        "--transport",
-        "-t",
-        required=False,
-        default="streamable-http",
-        show_default=True,
-        type=click.Choice(["stdio", "streamable-http"], case_sensitive=False),
-        help="Transport mechanism for the generated server.",
-    ),
-    click.option(
-        "--port",
-        "-p",
-        type=int,
-        default=8080,
-        show_default=True,
-        help="Port for streamable-http transport.",
-    ),
-    click.option(
-        "--host",
-        type=str,
-        default="127.0.0.1",
-        show_default=True,
-        help="Host for streamable-http transport.",
-    ),
-    click.option(
-        "--mcp-endpoint",
-        type=str,
-        default="/mcp",
-        show_default=True,
-        help="HTTP endpoint path for MCP streamable-http transport.",
-    ),
-    click.option(
-        "--strict/--no-strict",
-        default=True,
-        show_default=True,
-        help="Strict mode fails generation on unsupported required constructs.",
-    ),
-]
-
-
-def add_options(options: list[click.Option]) -> Callable:
-    """Decorator to add a list of click options."""
-
-    def _add_options(func: Callable) -> Callable:
-        for option in reversed(options):
-            func = option(func)
-        return func
-
-    return _add_options
 
 
 def _determine_server_name(provided_name: str | None, spec_info: dict[str, Any]) -> str:
@@ -148,10 +72,20 @@ def _extract_base_url(spec: dict[str, Any]) -> str:
         logger.warning(
             "First server object in spec lacks a valid 'url' string. Using placeholder for .env."
         )
-    else:
-        logger.warning(
-            "No 'servers' array found or it's empty in the spec. Using placeholder for .env."
-        )
+    host = spec.get("host")
+    if isinstance(host, str) and host:
+        base_path = spec.get("basePath", "")
+        schemes = spec.get("schemes", [])
+        scheme = schemes[0] if isinstance(schemes, list) and schemes else "https"
+        if not isinstance(base_path, str):
+            base_path = ""
+        if isinstance(scheme, str) and scheme:
+            url = f"{scheme}://{host}{base_path}"
+            logger.info("Using base URL from Swagger 2 host/basePath: %s", url)
+            return url
+    logger.warning(
+        "No 'servers' array found and no Swagger 2 host/basePath detected. Using placeholder for .env."
+    )
     return default_url
 
 
@@ -239,9 +173,15 @@ def _write_generation_report(output_dir: str, report: dict[str, Any]) -> None:
         report_file.write("\n")
 
 
-@click.command()
-@add_options(generate_options)
-def generate(  # noqa: PLR0913
+def _raise_if_no_tools_mapped(mcp_tools: list[dict[str, Any]]) -> None:
+    """Abort generation when the spec does not map to any MCP tools."""
+    if mcp_tools:
+        return
+    logger.warning("No tools were mapped from the OpenAPI spec. Aborting generation.")
+    raise NoToolsMappedError("No tools were mapped from the OpenAPI spec.")
+
+
+def generate_project(  # noqa: PLR0913
     openapi_json: str,
     output_dir: str,
     mcp_server_name: str | None,
@@ -253,7 +193,6 @@ def generate(  # noqa: PLR0913
     *,
     strict: bool,
 ) -> None:
-    """Generates a Node.js/TypeScript MCP server from an OpenAPI specification."""
     logger.info(
         "Starting MCP server generation...",
         extra={
@@ -271,35 +210,71 @@ def generate(  # noqa: PLR0913
         },
     )
 
-    try:
-        logger.info("Loading OpenAPI spec from: %s", openapi_json)
-        loader = SpecLoader(source=openapi_json)
-        spec = loader.load_and_validate()
-        logger.info("OpenAPI spec loaded and validated successfully.")
+    logger.info("Loading OpenAPI spec from: %s", openapi_json)
+    loader = SpecLoader(source=openapi_json)
+    spec = loader.load_and_validate()
+    logger.info("OpenAPI spec loaded and validated successfully.")
 
-        if transport == "streamable-http":
-            if port is None:
-                raise click.UsageError(  # noqa: TRY301
-                    "Option '--port'/-p is required when transport is 'streamable-http'."
-                )
-            if not mcp_endpoint.startswith("/"):
-                raise click.UsageError("--mcp-endpoint must start with '/'.")  # noqa: TRY301
-
-        logger.info("Mapping OpenAPI paths to MCP tools...")
-        mapper = Mapper(spec=spec, strict=strict)
-        mcp_tools = mapper.map_tools()
-        logger.info("Mapped %d tools.", len(mcp_tools))
-
-        if not mcp_tools:
-            logger.warning(
-                "No tools were mapped from the OpenAPI spec. Aborting generation.",
+    if transport == "streamable-http":
+        if port is None:
+            raise click.UsageError(
+                "Option '--port'/-p is required when transport is 'streamable-http'."
             )
-            sys.exit(0)
+        if not mcp_endpoint.startswith("/"):
+            raise click.UsageError("--mcp-endpoint must start with '/'.")
 
-        auth_env_vars = _derive_auth_env_vars(mcp_tools)
-        logger.debug("Preparing template context.")
-        template_context = _prepare_template_context(
-            spec=spec,
+    logger.info("Mapping OpenAPI paths to MCP tools...")
+    mapper = Mapper(spec=spec, strict=strict)
+    mcp_tools = mapper.map_tools()
+    logger.info("Mapped %d tools.", len(mcp_tools))
+    _raise_if_no_tools_mapped(mcp_tools)
+
+    auth_env_vars = _derive_auth_env_vars(mcp_tools)
+    logger.debug("Preparing template context.")
+    template_context = _prepare_template_context(
+        spec=spec,
+        mcp_server_name=mcp_server_name,
+        mcp_server_version=mcp_server_version,
+        transport=transport,
+        host=host,
+        port=port,
+        mcp_endpoint=mcp_endpoint,
+        strict=strict,
+        mcp_tools=mcp_tools,
+        auth_env_vars=auth_env_vars,
+    )
+
+    logger.info("Generating files in: %s", output_dir)
+    generator = Generator(output_dir=output_dir, context=template_context)
+    generator.generate_files()
+    generation_report = _build_generation_report(
+        mapper=mapper,
+        strict=strict,
+        transport=transport,
+    )
+    _write_generation_report(output_dir=output_dir, report=generation_report)
+    logger.info("File generation complete.")
+
+
+@click.command()
+@add_options(generate_options)
+def generate(  # noqa: PLR0913
+    openapi_json: str,
+    output_dir: str,
+    mcp_server_name: str | None,
+    mcp_server_version: str | None,
+    transport: str,
+    host: str,
+    port: int | None,
+    mcp_endpoint: str,
+    *,
+    strict: bool,
+) -> None:
+    """Generates a Node.js/TypeScript MCP server from an OpenAPI specification."""
+    try:
+        generate_project(
+            openapi_json=openapi_json,
+            output_dir=output_dir,
             mcp_server_name=mcp_server_name,
             mcp_server_version=mcp_server_version,
             transport=transport,
@@ -307,31 +282,18 @@ def generate(  # noqa: PLR0913
             port=port,
             mcp_endpoint=mcp_endpoint,
             strict=strict,
-            mcp_tools=mcp_tools,
-            auth_env_vars=auth_env_vars,
         )
-
-        logger.info("Generating files in: %s", output_dir)
-        generator = Generator(output_dir=output_dir, context=template_context)
-        generator.generate_files()
-        generation_report = _build_generation_report(
-            mapper=mapper,
-            strict=strict,
-            transport=transport,
-        )
-        _write_generation_report(output_dir=output_dir, report=generation_report)
-        logger.info("File generation complete.")
-
         logger.info("MCP server generation successful.")
-        # Use click.echo for user-facing messages that aren't logs
-        click.echo("\n" + "=" * 30)
-        click.echo("MCP Server Generation Successful!")
-        click.echo(f"Files generated in: {output_dir}")
-        click.echo(
-            "Please check the README file in the output directory for instructions."
+        print_success_panel(
+            "MCP Server Generation Successful",
+            [
+                f"Files generated in: {output_dir}",
+                "Check the generated README for build and runtime instructions.",
+            ],
         )
-        click.echo("=" * 30 + "\n")
-
+    except NoToolsMappedError as exc:
+        click.echo(str(exc))
+        return
     except SpecLoaderError, MappingError, GenerationError:
         logger.exception("Generation failed")
         sys.exit(1)

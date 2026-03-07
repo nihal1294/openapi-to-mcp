@@ -1,0 +1,74 @@
+openapi: 3.0.0
+info:
+  title: Auth Test
+  version: "1.0"
+paths:
+  /auth/header:
+    get:
+      summary: Header API key auth
+      operationId: getHeaderAuth
+      security:
+        - HeaderApiKey: []
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+  /auth/query:
+    get:
+      summary: Query API key auth
+      operationId: getQueryAuth
+      security:
+        - QueryApiKey: []
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+  /auth/cookie:
+    get:
+      summary: Cookie API key auth
+      operationId: getCookieAuth
+      security:
+        - CookieApiKey: []
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+  /auth/bearer:
+    get:
+      summary: Bearer auth
+      operationId: getBearerAuth
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+components:
+  securitySchemes:
+    HeaderApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    QueryApiKey:
+      type: apiKey
+      in: query
+      name: api_key
+    CookieApiKey:
+      type: apiKey
+      in: cookie
+      name: session_token
+    BearerAuth:
+      type: http
+      scheme: bearer

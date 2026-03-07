@@ -5,18 +5,26 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 TMP_ROOT="${TMP_ROOT:-${RUNNER_TEMP:-/tmp}/openapi-to-mcp-e2e}"
-OPENAPI_SPEC="${OPENAPI_SPEC:-${REPO_ROOT}/tests/resources/test_openapi.yaml}"
+BASIC_OPENAPI_SPEC="${OPENAPI_SPEC:-${REPO_ROOT}/tests/resources/test_openapi.yaml}"
+AUTH_OPENAPI_SPEC="${AUTH_OPENAPI_SPEC:-${REPO_ROOT}/tests/resources/auth_openapi.yaml}"
 MOCK_API_HOST="${MOCK_API_HOST:-127.0.0.1}"
-MOCK_API_PORT="${MOCK_API_PORT:-18080}"
+MOCK_API_PORT="${MOCK_API_PORT:-}"
 HTTP_HOST="${HTTP_HOST:-127.0.0.1}"
-HTTP_PORT="${HTTP_PORT:-18081}"
+HTTP_PORT="${HTTP_PORT:-}"
 MCP_ENDPOINT="${MCP_ENDPOINT:-/mcp}"
-TOOL_NAME="${TOOL_NAME:-testConversionTool}"
 KEEP_TMP="${KEEP_TMP:-0}"
-TARGET_API_BASE_URL="http://${MOCK_API_HOST}:${MOCK_API_PORT}"
+TARGET_API_BASE_URL=""
+CURRENT_HTTP_PORT=""
 STDIO_OUTPUT_DIR="${TMP_ROOT}/generated-stdio"
 HTTP_OUTPUT_DIR="${TMP_ROOT}/generated-http"
+AUTH_STDIO_OUTPUT_DIR="${TMP_ROOT}/generated-auth-stdio"
+AUTH_HTTP_OUTPUT_DIR="${TMP_ROOT}/generated-auth-http"
+AUTH_HEADER_API_KEY="${AUTH_HEADER_API_KEY:-header-secret}"
+AUTH_QUERY_API_KEY="${AUTH_QUERY_API_KEY:-query-secret}"
+AUTH_COOKIE_API_KEY="${AUTH_COOKIE_API_KEY:-cookie-secret}"
+AUTH_BEARER_TOKEN="${AUTH_BEARER_TOKEN:-bearer-secret}"
 
+HTTP_SERVER_PID=""
 PIDS=()
 
 ensure_command() {
@@ -38,6 +46,11 @@ run_uv() {
 cleanup() {
   local exit_code="$?"
   trap - EXIT
+
+  if [[ -n "$HTTP_SERVER_PID" ]] && kill -0 "$HTTP_SERVER_PID" >/dev/null 2>&1; then
+    kill "$HTTP_SERVER_PID" >/dev/null 2>&1 || true
+    wait "$HTTP_SERVER_PID" >/dev/null 2>&1 || true
+  fi
 
   for pid in "${PIDS[@]:-}"; do
     if kill -0 "$pid" >/dev/null 2>&1; then
@@ -93,6 +106,43 @@ build_allowed_hosts() {
     "$candidate_host" | awk 'NF && !seen[$0]++ { print }' | paste -sd',' -
 }
 
+ensure_process_alive() {
+  local pid="$1"
+  local name="$2"
+  local log_file="${3:-}"
+  if kill -0 "$pid" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "${name} exited unexpectedly." >&2
+  if [[ -n "$log_file" && -f "$log_file" ]]; then
+    echo "--- ${name} log ---" >&2
+    cat "$log_file" >&2
+    echo "--- end ${name} log ---" >&2
+  fi
+  return 1
+}
+
+choose_free_port() {
+  local host="$1"
+  python3 - "$host" <<'PY'
+import socket
+import sys
+
+host = sys.argv[1]
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind((host, 0))
+    print(sock.getsockname()[1])
+PY
+}
+
+initialize_ports() {
+  if [[ -z "$MOCK_API_PORT" ]]; then
+    MOCK_API_PORT="$(choose_free_port "$MOCK_API_HOST")"
+  fi
+  TARGET_API_BASE_URL="http://${MOCK_API_HOST}:${MOCK_API_PORT}"
+}
+
 wait_for_http_status() {
   local url="$1"
   shift
@@ -113,6 +163,17 @@ wait_for_http_status() {
   return 1
 }
 
+wait_for_mock_api_ready() {
+  local pid="$1"
+  local log_file="$2"
+
+  ensure_process_alive "$pid" "mock target API" "$log_file"
+  wait_for_http_status "http://${MOCK_API_HOST}:${MOCK_API_PORT}/health" 200
+  ensure_process_alive "$pid" "mock target API" "$log_file"
+  wait_for_http_status "http://${MOCK_API_HOST}:${MOCK_API_PORT}/auth/header" 401
+  ensure_process_alive "$pid" "mock target API" "$log_file"
+}
+
 prepare_env_file() {
   local output_dir="$1"
 
@@ -124,24 +185,43 @@ prepare_env_file() {
   replace_or_append_env_var "${output_dir}/.env" "MCP_ALLOWED_HOSTS" "$(build_allowed_hosts "$HTTP_HOST")"
 }
 
+prepare_auth_env_file() {
+  local output_dir="$1"
+  replace_or_append_env_var "${output_dir}/.env" "AUTH_HEADERAPIKEY_API_KEY" "$AUTH_HEADER_API_KEY"
+  replace_or_append_env_var "${output_dir}/.env" "AUTH_QUERYAPIKEY_API_KEY" "$AUTH_QUERY_API_KEY"
+  replace_or_append_env_var "${output_dir}/.env" "AUTH_COOKIEAPIKEY_API_KEY" "$AUTH_COOKIE_API_KEY"
+  replace_or_append_env_var "${output_dir}/.env" "AUTH_BEARERAUTH_TOKEN" "$AUTH_BEARER_TOKEN"
+}
+
+create_missing_bearer_env_file() {
+  local output_dir="$1"
+  local missing_env="${output_dir}/.env.missing-bearer"
+  cp "${output_dir}/.env" "$missing_env"
+  replace_or_append_env_var "$missing_env" "AUTH_BEARERAUTH_TOKEN" ""
+  printf '%s\n' "$missing_env"
+}
+
 generate_server() {
   local output_dir="$1"
   local transport="$2"
+  local openapi_spec="$3"
+  local server_name="$4"
 
   rm -rf "$output_dir"
 
   local args=(
     generate
-    --openapi-json "$OPENAPI_SPEC"
+    --openapi-json "$openapi_spec"
     --output-dir "$output_dir"
-    --mcp-server-name "generated-${transport}-e2e"
+    --mcp-server-name "$server_name"
     --transport "$transport"
   )
 
   if [[ "$transport" == "streamable-http" ]]; then
+    local generate_http_port="${HTTP_PORT:-8080}"
     args+=(
       --host "$HTTP_HOST"
-      --port "$HTTP_PORT"
+      --port "$generate_http_port"
       --mcp-endpoint "$MCP_ENDPOINT"
     )
   fi
@@ -163,135 +243,51 @@ build_generated_server() {
   )
 }
 
-run_stdio_assertions() {
-  local output_dir="$1"
-  local env_file="${output_dir}/.env"
-  local server_cmd="node ${output_dir}/build/index.js"
-
-  (
-    cd "$REPO_ROOT"
-    run_uv run python - "$server_cmd" "$env_file" "$TOOL_NAME" <<'PY'
-import asyncio
-import json
-import sys
-
-from openapi_to_mcp.adapters.testing.server_tester import execute_mcp_server
-from openapi_to_mcp.common.utils import parse_env_source
-
-
-def extract_result_payload(response: dict[str, object]) -> dict[str, object]:
-    result = response.get("result")
-    if isinstance(result, dict):
-        return result
-    return response
-
-
-async def main() -> None:
-    server_cmd = sys.argv[1]
-    env_file = sys.argv[2]
-    tool_name = sys.argv[3]
-    env = parse_env_source(env_file)
-
-    list_response = await execute_mcp_server(
-        transport="stdio",
-        method="list",
-        req_id=1,
-        server_cmd=server_cmd,
-        env=env,
-    )
-    list_payload = extract_result_payload(list_response)
-    tool_names = [tool["name"] for tool in list_payload["tools"]]
-    if tool_name not in tool_names:
-        raise AssertionError(f"Missing tool in stdio list response: {tool_names}")
-
-    call_response = await execute_mcp_server(
-        transport="stdio",
-        method="call",
-        req_id=2,
-        server_cmd=server_cmd,
-        env=env,
-        params={
-            "tool_name": tool_name,
-            "tool_arguments": {"status": "available"},
-        },
-    )
-    call_payload = extract_result_payload(call_response)
-    text = call_payload["content"][0]["text"]
-    if '"status": "available"' not in text:
-        raise AssertionError(json.dumps(call_response, indent=2))
-
-
-asyncio.run(main())
-PY
-  )
-}
-
 start_streamable_http_server() {
   local output_dir="$1"
-  local log_file="${TMP_ROOT}/generated-http.log"
+  local log_file="${TMP_ROOT}/$(basename "$output_dir").log"
+  local runtime_http_port="${HTTP_PORT:-}"
+
+  if [[ -n "$HTTP_SERVER_PID" ]] && kill -0 "$HTTP_SERVER_PID" >/dev/null 2>&1; then
+    kill "$HTTP_SERVER_PID" >/dev/null 2>&1 || true
+    wait "$HTTP_SERVER_PID" >/dev/null 2>&1 || true
+  fi
+
+  if [[ -z "$runtime_http_port" ]]; then
+    runtime_http_port="$(choose_free_port "$HTTP_HOST")"
+  fi
+
+  replace_or_append_env_var "${output_dir}/.env" "MCP_HTTP_PORT" "$runtime_http_port"
+  CURRENT_HTTP_PORT="$runtime_http_port"
 
   (
     cd "$output_dir"
-    npm start >"$log_file" 2>&1
+    node build/index.js >"$log_file" 2>&1
   ) &
-  PIDS+=("$!")
+  HTTP_SERVER_PID="$!"
+  PIDS+=("$HTTP_SERVER_PID")
 
-  wait_for_http_status "http://${HTTP_HOST}:${HTTP_PORT}${MCP_ENDPOINT}" 400
+  ensure_process_alive "$HTTP_SERVER_PID" "generated HTTP server" "$log_file"
+  wait_for_http_status "http://${HTTP_HOST}:${CURRENT_HTTP_PORT}${MCP_ENDPOINT}" 400
+  ensure_process_alive "$HTTP_SERVER_PID" "generated HTTP server" "$log_file"
 }
 
-run_streamable_http_assertions() {
+run_suite_assertions() {
+  local suite="$1"
+  local transport="$2"
+  local output_dir="$3"
+  local env_source="${4:-}"
+  local args=(--suite "$suite" --transport "$transport")
+
+  if [[ "$transport" == "stdio" ]]; then
+    args+=(--server-cmd "node ${output_dir}/build/index.js" --env-source "$env_source")
+  else
+    args+=(--endpoint-url "http://${HTTP_HOST}:${CURRENT_HTTP_PORT}${MCP_ENDPOINT}")
+  fi
+
   (
     cd "$REPO_ROOT"
-    run_uv run python - \
-      "http://${HTTP_HOST}:${HTTP_PORT}${MCP_ENDPOINT}" \
-      "$TOOL_NAME" <<'PY'
-import asyncio
-import json
-import sys
-
-from openapi_to_mcp.adapters.testing.server_tester import execute_mcp_server
-
-
-def extract_result_payload(response: dict[str, object]) -> dict[str, object]:
-    result = response.get("result")
-    if isinstance(result, dict):
-        return result
-    return response
-
-
-async def main() -> None:
-    endpoint_url = sys.argv[1]
-    tool_name = sys.argv[2]
-
-    list_response = await execute_mcp_server(
-        transport="streamable-http",
-        method="list",
-        req_id=1,
-        endpoint_url=endpoint_url,
-    )
-    list_payload = extract_result_payload(list_response)
-    tool_names = [tool["name"] for tool in list_payload["tools"]]
-    if tool_name not in tool_names:
-        raise AssertionError(f"Missing tool in streamable-http list response: {tool_names}")
-
-    call_response = await execute_mcp_server(
-        transport="streamable-http",
-        method="call",
-        req_id=2,
-        endpoint_url=endpoint_url,
-        params={
-            "tool_name": tool_name,
-            "tool_arguments": {"status": "available"},
-        },
-    )
-    call_payload = extract_result_payload(call_response)
-    text = call_payload["content"][0]["text"]
-    if '"status": "available"' not in text:
-        raise AssertionError(json.dumps(call_response, indent=2))
-
-
-asyncio.run(main())
-PY
+    run_uv run python scripts/assert_generated_server.py "${args[@]}"
   )
 }
 
@@ -302,31 +298,56 @@ main() {
   ensure_command uv
   ensure_command npm
   ensure_command node
+  ensure_command python3
   ensure_command curl
 
+  initialize_ports
   mkdir -p "$TMP_ROOT"
 
   echo "Starting mock target API on ${TARGET_API_BASE_URL}"
+  local mock_log_file="${TMP_ROOT}/mock-target-api.log"
   (
     cd "$REPO_ROOT"
     run_uv run python scripts/mock_target_api.py \
       --host "$MOCK_API_HOST" \
       --port "$MOCK_API_PORT"
-  ) >"${TMP_ROOT}/mock-target-api.log" 2>&1 &
-  PIDS+=("$!")
+  ) >"$mock_log_file" 2>&1 &
+  local mock_pid="$!"
+  PIDS+=("$mock_pid")
 
-  wait_for_http_status "http://${MOCK_API_HOST}:${MOCK_API_PORT}/health" 200
+  wait_for_mock_api_ready "$mock_pid" "$mock_log_file"
 
   echo "Generating and validating stdio server"
-  generate_server "$STDIO_OUTPUT_DIR" "stdio"
+  generate_server \
+    "$STDIO_OUTPUT_DIR" "stdio" "$BASIC_OPENAPI_SPEC" "generated-stdio-e2e"
   build_generated_server "$STDIO_OUTPUT_DIR"
-  run_stdio_assertions "$STDIO_OUTPUT_DIR"
+  run_suite_assertions "basic" "stdio" "$STDIO_OUTPUT_DIR" "${STDIO_OUTPUT_DIR}/.env"
 
   echo "Generating and validating streamable-http server"
-  generate_server "$HTTP_OUTPUT_DIR" "streamable-http"
+  generate_server \
+    "$HTTP_OUTPUT_DIR" "streamable-http" "$BASIC_OPENAPI_SPEC" "generated-http-e2e"
   build_generated_server "$HTTP_OUTPUT_DIR"
   start_streamable_http_server "$HTTP_OUTPUT_DIR"
-  run_streamable_http_assertions
+  run_suite_assertions "basic" "streamable-http" "$HTTP_OUTPUT_DIR"
+
+  echo "Generating and validating auth stdio server"
+  generate_server \
+    "$AUTH_STDIO_OUTPUT_DIR" "stdio" "$AUTH_OPENAPI_SPEC" "generated-auth-stdio-e2e"
+  build_generated_server "$AUTH_STDIO_OUTPUT_DIR"
+  prepare_auth_env_file "$AUTH_STDIO_OUTPUT_DIR"
+  run_suite_assertions "auth" "stdio" \
+    "$AUTH_STDIO_OUTPUT_DIR" "${AUTH_STDIO_OUTPUT_DIR}/.env"
+  run_suite_assertions "auth-missing-bearer" "stdio" \
+    "$AUTH_STDIO_OUTPUT_DIR" "$(create_missing_bearer_env_file "$AUTH_STDIO_OUTPUT_DIR")"
+
+  echo "Generating and validating auth streamable-http server"
+  generate_server \
+    "$AUTH_HTTP_OUTPUT_DIR" "streamable-http" "$AUTH_OPENAPI_SPEC" \
+    "generated-auth-http-e2e"
+  build_generated_server "$AUTH_HTTP_OUTPUT_DIR"
+  prepare_auth_env_file "$AUTH_HTTP_OUTPUT_DIR"
+  start_streamable_http_server "$AUTH_HTTP_OUTPUT_DIR"
+  run_suite_assertions "auth" "streamable-http" "$AUTH_HTTP_OUTPUT_DIR"
 
   echo "Generated-server E2E passed"
 }
