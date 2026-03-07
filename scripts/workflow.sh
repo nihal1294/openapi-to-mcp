@@ -45,8 +45,11 @@ Commands:
   clean
     Remove repo cache/temp artifacts.
 
+  clean-tmp
+    Remove generated temp MCP server outputs under /tmp.
+
   clean-all
-    clean + remove generated OUTPUT_DIR and /tmp/mcp-smoke*.
+    clean + clean-tmp.
 
 Environment overrides:
   OPENAPI_JSON, OUTPUT_DIR, MCP_SERVER_NAME, TRANSPORT, HOST, PORT, MCP_ENDPOINT,
@@ -171,7 +174,16 @@ do_clean() {
 
 do_clean_all() {
   do_clean
-  rm -rf "$OUTPUT_DIR" /tmp/mcp-smoke /tmp/mcp-smoke-*
+  do_clean_tmp
+}
+
+do_clean_tmp() {
+  rm -rf \
+    "$OUTPUT_DIR" \
+    /tmp/mcp-smoke \
+    /tmp/mcp-smoke-* \
+    /tmp/openapi-to-mcp-e2e \
+    /tmp/openapi-to-mcp-e2e-*
 }
 
 main() {
@@ -204,6 +216,9 @@ main() {
       ;;
     clean)
       do_clean
+      ;;
+    clean-tmp)
+      do_clean_tmp
       ;;
     clean-all)
       do_clean_all

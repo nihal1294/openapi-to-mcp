@@ -101,6 +101,7 @@ If you use [`just`](https://github.com/casey/just), equivalent short commands ar
 ```bash
 just sync
 just test
+just e2e-generated
 just generate
 just build
 just run
@@ -108,7 +109,33 @@ just list
 just call getPetById '{"petId":1}'
 just smoke
 just clean
+just clean-tmp
 just clean-all
+```
+
+For a full local validation of generated servers over both `stdio` and `streamable-http`
+against a local mock target API, run:
+
+```bash
+scripts/e2e_generated_server.sh
+```
+
+Or, if you use `just`:
+
+```bash
+just e2e-generated
+```
+
+If you want to remove generated validation artifacts under `/tmp`, run:
+
+```bash
+scripts/workflow.sh clean-tmp
+```
+
+Or:
+
+```bash
+just clean-tmp
 ```
 
 ## 🚀 Installation / Setup
