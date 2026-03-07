@@ -192,7 +192,9 @@ class Mapper:
         Operation-level parameters override path-level parameters with same
         (name, in) pair per OpenAPI rules.
         """
-        path_parameters = path_parameters_maybe if isinstance(path_parameters_maybe, list) else []
+        path_parameters = (
+            path_parameters_maybe if isinstance(path_parameters_maybe, list) else []
+        )
         operation_parameters = (
             operation_parameters_maybe
             if isinstance(operation_parameters_maybe, list)
@@ -412,7 +414,9 @@ class Mapper:
         Returns:
             Dictionary representing an MCP tool definition.
         """
-        candidate_name = operation.get("operationId") or generate_tool_name(method, path)
+        candidate_name = operation.get("operationId") or generate_tool_name(
+            method, path
+        )
         tool_name = self._ensure_unique_tool_name(candidate_name)
         description = operation.get("summary") or operation.get(
             "description", f"{method.upper()} operation for {path}"

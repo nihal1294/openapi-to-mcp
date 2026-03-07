@@ -26,7 +26,9 @@ def test_test_server_requires_transport(runner: CliRunner) -> None:
 def test_test_server_stdio_requires_server_cmd(
     runner: CliRunner, caplog: pytest.LogCaptureFixture
 ) -> None:
-    with caplog.at_level(logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"):
+    with caplog.at_level(
+        logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"
+    ):
         result = runner.invoke(
             cli,
             ["test-server", "--transport", "stdio", "--list-tools"],
@@ -39,7 +41,9 @@ def test_test_server_stdio_requires_server_cmd(
 def test_test_server_requires_action(
     runner: CliRunner, caplog: pytest.LogCaptureFixture
 ) -> None:
-    with caplog.at_level(logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"):
+    with caplog.at_level(
+        logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"
+    ):
         result = runner.invoke(
             cli,
             ["test-server", "--transport", "streamable-http"],
@@ -52,7 +56,9 @@ def test_test_server_requires_action(
 def test_test_server_tool_args_requires_tool_name(
     runner: CliRunner, caplog: pytest.LogCaptureFixture
 ) -> None:
-    with caplog.at_level(logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"):
+    with caplog.at_level(
+        logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"
+    ):
         result = runner.invoke(
             cli,
             [
@@ -153,7 +159,9 @@ def test_test_server_rejects_bad_endpoint(
     runner: CliRunner,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    with caplog.at_level(logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"):
+    with caplog.at_level(
+        logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"
+    ):
         result = runner.invoke(
             cli,
             [

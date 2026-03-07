@@ -262,7 +262,11 @@ def test_generator_generate_files_success(mocker: Any) -> None:
 def test_generator_selects_streamable_http_transport_template(mocker: Any) -> None:
     """Generator should render streamable-http transport when requested."""
     output_dir = "fake/output"
-    context = {"server_name": "test-server", "tools": [], "transport": "streamable-http"}
+    context = {
+        "server_name": "test-server",
+        "tools": [],
+        "transport": "streamable-http",
+    }
 
     setup_path_mocks(mocker, output_dir)
     gen = Generator(output_dir=output_dir, context=context)

@@ -58,7 +58,7 @@ def parse_env_source(env_source: str | None) -> dict[str, str] | None:
             logger.info("Parsed env source as JSON string.")
         else:
             raise TypeError("JSON string is not an object.")
-    except (json.JSONDecodeError, TypeError):
+    except json.JSONDecodeError, TypeError:
         logger.info("Could not parse as JSON string, attempting as file path.")
         if not os.path.exists(env_source):
             raise ValueError(f"File not found for env source: {env_source}") from None

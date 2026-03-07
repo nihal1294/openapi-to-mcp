@@ -9,7 +9,7 @@ from openapi_to_mcp.common.logger import configure_logger
 
 
 @pytest.fixture
-def mock_logger() -> Generator[MagicMock, None, None]:
+def mock_logger() -> Generator[MagicMock]:
     """
     Fixture to mock the logger for the 'openapi_to_mcp' package.
 

@@ -49,7 +49,9 @@ def test_create_transport_strategy_missing_required_values() -> None:
 @pytest.mark.asyncio
 async def test_transport_strategy_base_not_implemented() -> None:
     strategy = TransportStrategy()
-    with pytest.raises(NotImplementedError, match="Subclasses must implement this method"):
+    with pytest.raises(
+        NotImplementedError, match="Subclasses must implement this method"
+    ):
         await strategy.connect_and_execute("list", None, 1)
 
 

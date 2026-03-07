@@ -57,9 +57,7 @@ def test_generate_streamable_http_end_to_end(runner: CliRunner, tmp_path: Path) 
     assert (output_dir / "src" / "transport.ts").exists()
     assert (output_dir / "generation_report.json").exists()
 
-    transport_source = (output_dir / "src" / "transport.ts").read_text(
-        encoding="utf-8"
-    )
+    transport_source = (output_dir / "src" / "transport.ts").read_text(encoding="utf-8")
     server_source = (output_dir / "src" / "server.ts").read_text(encoding="utf-8")
     assert "StreamableHTTPServerTransport" in transport_source
     assert "SSEServerTransport" not in transport_source
@@ -77,7 +75,9 @@ def test_generate_streamable_http_end_to_end(runner: CliRunner, tmp_path: Path) 
     assert report["mapped_tools"] >= 1
 
 
-def test_generate_stdio_omits_http_dependencies(runner: CliRunner, tmp_path: Path) -> None:
+def test_generate_stdio_omits_http_dependencies(
+    runner: CliRunner, tmp_path: Path
+) -> None:
     output_dir = tmp_path / "generated-stdio"
 
     result = runner.invoke(
@@ -99,9 +99,7 @@ def test_generate_stdio_omits_http_dependencies(runner: CliRunner, tmp_path: Pat
     assert "express" not in package_json["dependencies"]
     assert "@types/express" not in package_json["devDependencies"]
 
-    transport_source = (output_dir / "src" / "transport.ts").read_text(
-        encoding="utf-8"
-    )
+    transport_source = (output_dir / "src" / "transport.ts").read_text(encoding="utf-8")
     assert "StdioServerTransport" in transport_source
 
 

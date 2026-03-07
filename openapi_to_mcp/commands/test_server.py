@@ -124,7 +124,9 @@ async def _run_test(
     req_id_counter = 1
 
     endpoint_url = (
-        f"http://{host}:{port}{mcp_endpoint}" if transport == "streamable-http" else None
+        f"http://{host}:{port}{mcp_endpoint}"
+        if transport == "streamable-http"
+        else None
     )
 
     if list_tools:

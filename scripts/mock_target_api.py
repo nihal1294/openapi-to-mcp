@@ -25,7 +25,9 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
         if parsed.path == "/test":
             query = {
                 key: values[0] if len(values) == 1 else values
-                for key, values in parse_qs(parsed.query, keep_blank_values=True).items()
+                for key, values in parse_qs(
+                    parsed.query, keep_blank_values=True
+                ).items()
             }
             self._send_json(
                 HTTPStatus.OK,
