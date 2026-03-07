@@ -19,6 +19,7 @@ jobs:
       should_release: ${{ steps.detect.outputs.should_release }}
       tag_name: ${{ steps.detect.outputs.tag_name }}
       version: ${{ steps.detect.outputs.version }}
+      release_reason: ${{ steps.detect.outputs.release_reason }}
 
     steps:
       - name: Check out repository
@@ -40,9 +41,10 @@ jobs:
           before_sha = os.environ.get("BEFORE_SHA", "")
           output_path = Path(os.environ["GITHUB_OUTPUT"])
           current = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+          tag_name = f"v{current}"
 
           previous = ""
-          should_release = False
+          version_changed = False
           zero_sha = "0" * 40
           if before_sha and before_sha != zero_sha:
               try:
@@ -53,12 +55,26 @@ jobs:
                   previous = tomllib.loads(prior)["project"]["version"]
               except subprocess.CalledProcessError:
                   previous = ""
-              should_release = previous != current
+              version_changed = previous != current
+
+          existing_tag_ref = subprocess.check_output(
+              ["git", "ls-remote", "--tags", "origin", f"refs/tags/{tag_name}"],
+              text=True,
+          ).strip()
+          tag_missing = not existing_tag_ref
+          should_release = version_changed or tag_missing
+          if version_changed:
+              release_reason = "version-bump"
+          elif tag_missing:
+              release_reason = "missing-tag"
+          else:
+              release_reason = "none"
 
           with output_path.open("a", encoding="utf-8") as fh:
               fh.write(f"version={current}\n")
-              fh.write(f"tag_name=v{current}\n")
+              fh.write(f"tag_name={tag_name}\n")
               fh.write(f"should_release={'true' if should_release else 'false'}\n")
+              fh.write(f"release_reason={release_reason}\n")
           PY
 
   github-release:

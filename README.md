@@ -626,8 +626,10 @@ GitHub Releases are automated from version bumps merged to `master`.
 
 1. Update [CHANGELOG.md](CHANGELOG.md) and the package version in [pyproject.toml](pyproject.toml).
 2. Merge that release PR to `master`.
-3. The [release workflow](.github/workflows/release.yml) detects the `pyproject.toml` version change on `master`, creates the matching tag (for example `v0.3.0`), builds the project, creates a GitHub Release, and attaches the built `wheel` and `sdist` files from `dist/`.
-4. Commits to `master` that do not change the package version do not create a release.
+3. The [release workflow](.github/workflows/release.yml) creates a release when either:
+   - the package version in `pyproject.toml` changed on `master`, or
+   - the matching version tag does not exist yet for the current `master` version.
+4. The workflow creates the matching tag (for example `v0.3.0`), builds the project, creates a GitHub Release, and attaches the built `wheel` and `sdist` files from `dist/`.
 
 ## 📄 License
 
