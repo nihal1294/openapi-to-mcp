@@ -155,7 +155,7 @@ def _extract_base_url(spec: dict[str, Any]) -> str:
     return default_url
 
 
-def _prepare_template_context(
+def _prepare_template_context(  # noqa: PLR0913
     spec: dict[str, Any],
     mcp_server_name: str | None,
     mcp_server_version: str | None,
@@ -241,7 +241,7 @@ def _write_generation_report(output_dir: str, report: dict[str, Any]) -> None:
 
 @click.command()
 @add_options(generate_options)
-def generate(
+def generate(  # noqa: PLR0913
     openapi_json: str,
     output_dir: str,
     mcp_server_name: str | None,
@@ -279,11 +279,11 @@ def generate(
 
         if transport == "streamable-http":
             if port is None:
-                raise click.UsageError(
+                raise click.UsageError(  # noqa: TRY301
                     "Option '--port'/-p is required when transport is 'streamable-http'."
                 )
             if not mcp_endpoint.startswith("/"):
-                raise click.UsageError("--mcp-endpoint must start with '/'.")
+                raise click.UsageError("--mcp-endpoint must start with '/'.")  # noqa: TRY301
 
         logger.info("Mapping OpenAPI paths to MCP tools...")
         mapper = Mapper(spec=spec, strict=strict)

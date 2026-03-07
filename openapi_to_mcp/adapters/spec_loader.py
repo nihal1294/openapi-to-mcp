@@ -87,7 +87,7 @@ class SpecLoader:
             source_path = Path(self.source)
             logger.debug("Reading spec from file: %s", source_path)
             if not source_path.is_file():
-                raise FileNotFoundError(f"File not found: {source_path}")
+                raise FileNotFoundError(f"File not found: {source_path}")  # noqa: TRY301
             with source_path.open("r", encoding="utf-8") as f:
                 self._content = f.read()
             logger.debug("Successfully read spec from file.")
@@ -119,7 +119,7 @@ class SpecLoader:
                 err_msg = "Parsed specification is not a valid dictionary structure."
                 exception = SpecLoaderError(err_msg)
                 logger.error(err_msg, exc_info=exception)
-                raise exception
+                raise exception  # noqa: TRY301
 
             logger.debug("Validating OpenAPI spec structure.")
             validate_spec(self.spec)

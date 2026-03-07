@@ -18,7 +18,7 @@ class NumberSchemaHandler(SchemaHandler):
         schema_type = schema.get("type")
         return schema_type in ["integer", "number"]
 
-    def handle(
+    def handle(  # noqa: C901, PLR0912
         self, openapi_schema: dict[str, Any], json_schema: dict[str, Any]
     ) -> None:
         """

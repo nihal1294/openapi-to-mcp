@@ -278,7 +278,7 @@ def _create_transport_strategy(
     raise ValueError(f"Unsupported transport type: {transport}")
 
 
-async def execute_mcp_server(
+async def execute_mcp_server(  # noqa: PLR0913
     transport: str,
     method: str,
     params: dict[str, Any] | None = None,

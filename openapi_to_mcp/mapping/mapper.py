@@ -329,7 +329,7 @@ class Mapper:
             )
         return processed_params
 
-    def _process_request_body(
+    def _process_request_body(  # noqa: C901
         self,
         request_body_maybe_ref: dict[str, Any] | None,
         input_schema: dict[str, Any],

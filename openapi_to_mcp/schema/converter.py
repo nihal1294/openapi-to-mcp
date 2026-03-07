@@ -75,7 +75,7 @@ class SchemaConverter:
                     handler.handle(openapi_schema, json_schema)
                     if json_schema.get("_is_cyclic_reference"):
                         is_cyclic_reference = True
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.warning(
                         "Error in schema handler %s: %s",
                         handler.__class__.__name__,

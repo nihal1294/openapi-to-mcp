@@ -51,13 +51,6 @@ ignore = [
     "EM101",    # Exception string literal
     "EM102",    # Exception f-string literal
     "TRY003",   # Long exception message
-    "TRY301",   # Abstract raise to inner function (ignore for now)
-    "BLE001",   # Catching broad exception 'Exception' (sometimes needed)
-    # Ignore complexity warnings for now
-    "C901",     # Too complex
-    "PLR0912",  # Too many branches
-    "PLR0915",  # Too many statements
-    "PLR0913"   # Too many arguments
 ]
 
 [tool.ruff.lint.per-file-ignores]
