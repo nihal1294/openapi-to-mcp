@@ -42,6 +42,15 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 PY
 }
 
+strip_ansi() {
+  python3 -c '
+import re
+import sys
+
+print(re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", sys.stdin.read()), end="")
+'
+}
+
 wait_for_http_status() {
   local url="$1" expected="$2" status=""
   for _ in $(seq 1 60); do
@@ -100,10 +109,11 @@ cleanup() {
 
 assert_output_contains() {
   local expected="$1"; shift
-  local output
+  local cleaned output
   output="$("$@" 2>&1)"
+  cleaned="$(printf '%s' "$output" | strip_ansi)"
   printf '%s\n' "$output"
-  grep -Fq -- "$expected" <<<"$output" || { echo "Expected output to contain: $expected" >&2; exit 1; }
+  grep -Fq -- "$expected" <<<"$cleaned" || { echo "Expected output to contain: $expected" >&2; exit 1; }
 }
 
 assert_output_matches() {
@@ -125,14 +135,15 @@ if re.search(pattern, text, flags=re.MULTILINE | re.DOTALL) is None:
 
 assert_failure_contains() {
   local expected="$1"; shift
-  local output status
+  local cleaned output status
   set +e
   output="$("$@" 2>&1)"
   status="$?"
   set -e
+  cleaned="$(printf '%s' "$output" | strip_ansi)"
   printf '%s\n' "$output"
   [[ "$status" -ne 0 ]] || { echo "Expected command to fail" >&2; exit 1; }
-  grep -Fq -- "$expected" <<<"$output" || { echo "Expected failure output to contain: $expected" >&2; exit 1; }
+  grep -Fq -- "$expected" <<<"$cleaned" || { echo "Expected failure output to contain: $expected" >&2; exit 1; }
 }
 
 generate_server() {
