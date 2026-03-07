@@ -1,64 +1,17 @@
 # Usage Examples
 
-This section provides step-by-step examples to help you use `openapi-to-mcp` effectively. It covers:
-- Example OpenAPI v3 input specs (JSON and YAML)
-- The CLI command to generate a Node.js/TypeScript MCP server
-- The structure and contents of the generated output
-- Before/after code samples to illustrate the transformation
-- Explanations for each step
+Practical examples for the current `openapi-to-mcp` CLI surface:
 
----
+- `generate`: create a TypeScript MCP server project from an OpenAPI spec
+- `run`: generate, build, and run a server directly from a spec
+- `test-server`: send basic MCP requests to a running server
 
-## 1. Example OpenAPI v3 Input Specs
+## 1. Example OpenAPI Input
 
-### Example: Simple Pet API (JSON)
+### YAML
 
-**`pet-api.json`:**
-```json
-{
-  "openapi": "3.0.3",
-  "info": {
-    "title": "Simple Pet API",
-    "version": "1.0.0"
-  },
-  "paths": {
-    "/pet/{petId}": {
-      "get": {
-        "summary": "Get a pet by ID",
-        "operationId": "getPetById",
-        "parameters": [
-          {
-            "name": "petId",
-            "in": "path",
-            "required": true,
-            "schema": { "type": "integer" }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "A pet object.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": { "type": "integer" },
-                    "name": { "type": "string" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
+**`pet-api.yaml`**
 
-### Example: Simple Pet API (YAML)
-
-**`pet-api.yaml`:**
 ```yaml
 openapi: 3.0.3
 info:
@@ -76,28 +29,17 @@ paths:
           schema:
             type: integer
       responses:
-        '200':
+        "200":
           description: A pet object.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id:
-                    type: integer
-                  name:
-                    type: string
 ```
 
----
+## 2. Generate a Server Project
 
-## 2. Generate an MCP Server from the OpenAPI Spec
-
-Run the following command to generate a Node.js/TypeScript MCP server from your OpenAPI spec (replace the file name as needed):
+Generate a reusable MCP server project in a directory:
 
 ```bash
 uv run openapi-to-mcp generate \
-  --openapi-json pet-api.json \
+  --openapi-json ./pet-api.yaml \
   --output-dir ./generated-pet-mcp \
   --mcp-server-name pet-mcp-server \
   --transport streamable-http \
@@ -106,119 +48,127 @@ uv run openapi-to-mcp generate \
   --mcp-endpoint /mcp
 ```
 
-**What this does:**
-- Reads your OpenAPI spec (`pet-api.json` or `pet-api.yaml`)
-- Generates a new MCP server project in `./generated-pet-mcp`
-- Sets up the server to use streamable HTTP transport at `127.0.0.1:8080/mcp`
+This loads the spec, maps operations to MCP tools, and emits a runnable TypeScript MCP server project plus `.env.example` and `generation_report.json`.
 
----
+Expected output structure:
 
-## 3. Structure of the Generated Output
-
-After running the command, your output directory will look like this:
-
-```
+```bash
 generated-pet-mcp/
 ├── README.md
 ├── package.json
 ├── tsconfig.json
 ├── .env.example
 ├── generation_report.json
-├── src/
-│   ├── index.ts
-│   ├── server.ts
-│   ├── transport.ts
-│   └── ...
+└── src/
+    ├── index.ts
+    ├── server.ts
+    └── transport.ts
 ```
 
-### Sample Generated Code: `src/index.ts`
+## 3. Build and Run a Generated Project Manually
 
-```typescript
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
+After generation:
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const envPath = path.resolve(__dirname, '../.env');
-dotenv.config({ path: envPath });
-
-import './transport.js';
+```bash
+cd generated-pet-mcp
+cp .env.example .env
 ```
 
-### Sample Generated Code: `src/server.ts` (snippet)
+Set `TARGET_API_BASE_URL` in `.env`, then:
 
-```typescript
-// ...existing code...
-export const tools = [
-  {
-    name: 'getPetById',
-    description: 'Get a pet by ID',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        petId: { type: 'integer' }
-      },
-      required: ['petId']
-    },
-    // ...handler code...
-  }
-];
-// ...existing code...
+```bash
+npm install
+npm run build
+npm start
 ```
 
----
+For specs with security schemes, also fill generated auth variables such as:
 
-## 4. Before/After: What You Provide vs. What You Get
+- `AUTH_<SCHEME_NAME>_API_KEY`
+- `AUTH_<SCHEME_NAME>_TOKEN`
 
-### Before: Your OpenAPI Spec (YAML)
-```yaml
-paths:
-  /pet/{petId}:
-    get:
-      operationId: getPetById
-      parameters:
-        - name: petId
-          in: path
-          required: true
-          schema:
-            type: integer
+## 4. Run Directly from a Spec
+
+If you do not need to keep the generated project, use `run`:
+
+```bash
+uv run openapi-to-mcp run \
+  --openapi-json https://petstore.swagger.io/v2/swagger.json \
+  --target-api-base-url https://petstore.swagger.io/v2
 ```
 
-### After: Generated MCP Tool (TypeScript)
-```typescript
-{
-  name: 'getPetById',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      petId: { type: 'integer' }
-    },
-    required: ['petId']
-  },
-  // ...handler code...
-}
+This command:
+
+1. Generates a temporary project.
+2. Installs Node dependencies.
+3. Builds the generated TypeScript server.
+4. Starts the MCP server.
+
+Use `--output-dir` if you want to keep the generated project instead of using a temp directory:
+
+```bash
+uv run openapi-to-mcp run \
+  --openapi-json ./pet-api.yaml \
+  --output-dir ./generated-runtime \
+  --target-api-base-url https://example.com/api
 ```
 
----
+## 5. Test a Running Server
 
-## 5. Step-by-Step Explanation
+### Streamable HTTP: list tools
 
-1. **Prepare your OpenAPI v3 spec** (JSON or YAML). See above for examples.
-2. **Run the CLI command** (see above) to generate the MCP server.
-3. **Navigate to the output directory**:
-   ```bash
-   cd generated-pet-mcp
-   ```
-4. **Copy `.env.example` to `.env`** and set `TARGET_API_BASE_URL` to your API's base URL.
-5. **Install dependencies and build the server**:
-   ```bash
-   npm install
-   npm run build
-   npm start
-   ```
-6. **Test your server** using the `test-server` command or the MCP Inspector.
+```bash
+uv run openapi-to-mcp test-server \
+  --transport streamable-http \
+  --host 127.0.0.1 \
+  --port 8080 \
+  --mcp-endpoint /mcp \
+  --list-tools
+```
 
----
+### Streamable HTTP: call a tool
 
-These examples should help you get started quickly with `openapi-to-mcp`!
+```bash
+uv run openapi-to-mcp test-server \
+  --transport streamable-http \
+  --host 127.0.0.1 \
+  --port 8080 \
+  --mcp-endpoint /mcp \
+  --tool-name findPetsByStatus \
+  --tool-args '{"status":"available"}'
+```
+
+### STDIO: list tools
+
+```bash
+uv run openapi-to-mcp test-server \
+  --transport stdio \
+  --server-cmd "node ./generated-pet-mcp/build/index.js" \
+  --env-source ./generated-pet-mcp/.env \
+  --list-tools
+```
+
+### STDIO: call a tool
+
+```bash
+uv run openapi-to-mcp test-server \
+  --transport stdio \
+  --server-cmd "node ./generated-pet-mcp/build/index.js" \
+  --env-source ./generated-pet-mcp/.env \
+  --tool-name getPetById \
+  --tool-args '{"petId":1}'
+```
+
+## 6. Local Validation Shortcuts
+
+Useful local commands:
+
+```bash
+just format
+just lint
+just test
+just e2e-generated
+just e2e-cli
+```
+
+Use `just e2e-generated` for generated-server validation and `just e2e-cli` for a CLI-level matrix over `generate`, `run`, and `test-server`.
