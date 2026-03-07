@@ -78,6 +78,14 @@ replace_or_append_env_var() {
   mv "$tmp_file" "$file"
 }
 
+build_allowed_hosts() {
+  local candidate_host="$1"
+  printf '%s\n' \
+    "127.0.0.1" \
+    "localhost" \
+    "$candidate_host" | awk 'NF && !seen[$0]++ { print }' | paste -sd',' -
+}
+
 wait_for_http_status() {
   local url="$1"
   shift
@@ -106,6 +114,7 @@ prepare_env_file() {
   fi
 
   replace_or_append_env_var "${output_dir}/.env" "TARGET_API_BASE_URL" "$TARGET_API_BASE_URL"
+  replace_or_append_env_var "${output_dir}/.env" "MCP_ALLOWED_HOSTS" "$(build_allowed_hosts "$HTTP_HOST")"
 }
 
 generate_server() {

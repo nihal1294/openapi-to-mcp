@@ -96,6 +96,18 @@ replace_or_append_env_var() {
   mv "$tmp_file" "$file"
 }
 
+is_tmp_path() {
+  local path="$1"
+  case "$path" in
+    /tmp|/tmp/*|/private/tmp|/private/tmp/*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 do_sync() {
   ensure_command uv
   (cd "$REPO_ROOT" && UV_CACHE_DIR="$UV_CACHE_DIR" uv sync --dev)
@@ -178,12 +190,19 @@ do_clean_all() {
 }
 
 do_clean_tmp() {
+  if is_tmp_path "$OUTPUT_DIR"; then
+    rm -rf "$OUTPUT_DIR"
+  fi
+
   rm -rf \
-    "$OUTPUT_DIR" \
     /tmp/mcp-smoke \
     /tmp/mcp-smoke-* \
     /tmp/openapi-to-mcp-e2e \
-    /tmp/openapi-to-mcp-e2e-*
+    /tmp/openapi-to-mcp-e2e-* \
+    /private/tmp/mcp-smoke \
+    /private/tmp/mcp-smoke-* \
+    /private/tmp/openapi-to-mcp-e2e \
+    /private/tmp/openapi-to-mcp-e2e-*
 }
 
 main() {
