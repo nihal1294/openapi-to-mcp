@@ -620,6 +620,15 @@ just e2e-cli
     find . -name __pycache__ -type d -exec rm -rf {} + && rm -rf .pytest_cache .ruff_cache .coverage dist output mcp-server
     ```
 
+## Releases
+
+GitHub Releases are automated from version tags.
+
+1. Update [CHANGELOG.md](CHANGELOG.md) and the package version in [pyproject.toml](pyproject.toml).
+2. Merge the release PR to `master`.
+3. Push a tag like `v0.3.0`.
+4. The [release workflow](.github/workflows/release.yml) will run `uv build`, create a GitHub Release, and attach the built `wheel` and `sdist` files from `dist/`.
+
 ## 📄 License
 
 This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
