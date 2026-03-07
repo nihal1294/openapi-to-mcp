@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 import pytest
@@ -29,54 +28,45 @@ def test_test_server_requires_transport(runner: CliRunner) -> None:
 
 
 def test_test_server_stdio_requires_server_cmd(
-    runner: CliRunner, caplog: pytest.LogCaptureFixture
+    runner: CliRunner,
 ) -> None:
-    with caplog.at_level(
-        logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"
-    ):
-        result = runner.invoke(
-            cli,
-            ["test-server", "--transport", "stdio", "--list-tools"],
-        )
+    result = runner.invoke(
+        cli,
+        ["test-server", "--transport", "stdio", "--list-tools"],
+    )
 
     assert result.exit_code != 0
-    assert "--server-cmd is required for stdio transport" in caplog.text
+    assert "--server-cmd is required for stdio transport" in result.output
 
 
 def test_test_server_requires_action(
-    runner: CliRunner, caplog: pytest.LogCaptureFixture
+    runner: CliRunner,
 ) -> None:
-    with caplog.at_level(
-        logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"
-    ):
-        result = runner.invoke(
-            cli,
-            ["test-server", "--transport", "streamable-http"],
-        )
+    result = runner.invoke(
+        cli,
+        ["test-server", "--transport", "streamable-http"],
+    )
 
     assert result.exit_code != 0
-    assert "Either --list-tools or --tool-name must be specified" in caplog.text
+    assert "Either --list-tools or --tool-name must be specified" in result.output
 
 
 def test_test_server_tool_args_requires_tool_name(
-    runner: CliRunner, caplog: pytest.LogCaptureFixture
+    runner: CliRunner,
 ) -> None:
-    with caplog.at_level(
-        logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"
-    ):
-        result = runner.invoke(
-            cli,
-            [
-                "test-server",
-                "--transport",
-                "streamable-http",
-                "--tool-args",
-                "{}",
-            ],
-        )
+    result = runner.invoke(
+        cli,
+        [
+            "test-server",
+            "--transport",
+            "streamable-http",
+            "--tool-args",
+            "{}",
+        ],
+    )
 
     assert result.exit_code != 0
-    assert "--tool-args requires --tool-name to be specified" in caplog.text
+    assert "--tool-args requires --tool-name to be specified" in result.output
 
 
 def test_test_server_streamable_http_list_tools_success(
@@ -162,33 +152,27 @@ def test_test_server_stdio_call_tool_success(
 
 def test_test_server_rejects_bad_endpoint(
     runner: CliRunner,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    with caplog.at_level(
-        logging.CRITICAL, logger="openapi_to_mcp.commands.test_server"
-    ):
-        result = runner.invoke(
-            cli,
-            [
-                "test-server",
-                "--transport",
-                "streamable-http",
-                "--mcp-endpoint",
-                "mcp",
-                "--list-tools",
-            ],
-        )
+    result = runner.invoke(
+        cli,
+        [
+            "test-server",
+            "--transport",
+            "streamable-http",
+            "--mcp-endpoint",
+            "mcp",
+            "--list-tools",
+        ],
+    )
 
     assert result.exit_code != 0
-    assert "--mcp-endpoint must start with '/'" in caplog.text
+    assert "--mcp-endpoint must start with '/'" in result.output
 
 
 def test_test_server_bad_tool_args_json(
     runner: CliRunner,
     mock_execute_mcp_server: MagicMock,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    caplog.set_level(logging.ERROR)
     result = runner.invoke(
         cli,
         [
@@ -203,5 +187,5 @@ def test_test_server_bad_tool_args_json(
     )
 
     assert result.exit_code != 0
-    assert "Invalid JSON in --tool-args" in caplog.text
+    assert "Tool arguments must be a valid JSON object" in result.output
     mock_execute_mcp_server.assert_not_called()

@@ -1,7 +1,7 @@
 [project]
 name = "openapi-to-mcp"
 version = "0.2.0"
-description = "Generates an MCP server from an OpenAPI specification."
+description = "Generate, run, and test Node.js/TypeScript MCP servers from OpenAPI specifications."
 readme = "README.md"
 requires-python = ">=3.14"
 authors = [{ name = "Nihal Rao", email = "nihaliddya@gmail.com" }]
@@ -11,8 +11,10 @@ dependencies = [
     "pyyaml==6.0.3",
     "jinja2==3.1.6",
     "openapi-spec-validator==0.8.4",
-    "python-json-logger==4.0.0",
     "mcp==1.26.0",
+    "rich==14.3.3",
+    "rich-click==1.9.7",
+    "structlog==25.5.0",
 ]
 
 [project.scripts]
