@@ -14,6 +14,7 @@ from openapi_to_mcp.commands.options import add_options, generate_options
 from openapi_to_mcp.common.exceptions import (
     GenerationError,
     MappingError,
+    NoToolsMappedError,
     SpecLoaderError,
 )
 from openapi_to_mcp.common.terminal import print_success_panel
@@ -172,6 +173,14 @@ def _write_generation_report(output_dir: str, report: dict[str, Any]) -> None:
         report_file.write("\n")
 
 
+def _raise_if_no_tools_mapped(mcp_tools: list[dict[str, Any]]) -> None:
+    """Abort generation when the spec does not map to any MCP tools."""
+    if mcp_tools:
+        return
+    logger.warning("No tools were mapped from the OpenAPI spec. Aborting generation.")
+    raise NoToolsMappedError("No tools were mapped from the OpenAPI spec.")
+
+
 def generate_project(  # noqa: PLR0913
     openapi_json: str,
     output_dir: str,
@@ -218,12 +227,7 @@ def generate_project(  # noqa: PLR0913
     mapper = Mapper(spec=spec, strict=strict)
     mcp_tools = mapper.map_tools()
     logger.info("Mapped %d tools.", len(mcp_tools))
-
-    if not mcp_tools:
-        logger.warning(
-            "No tools were mapped from the OpenAPI spec. Aborting generation.",
-        )
-        sys.exit(0)
+    _raise_if_no_tools_mapped(mcp_tools)
 
     auth_env_vars = _derive_auth_env_vars(mcp_tools)
     logger.debug("Preparing template context.")
@@ -287,6 +291,9 @@ def generate(  # noqa: PLR0913
                 "Check the generated README for build and runtime instructions.",
             ],
         )
+    except NoToolsMappedError as exc:
+        click.echo(str(exc))
+        return
     except SpecLoaderError, MappingError, GenerationError:
         logger.exception("Generation failed")
         sys.exit(1)

@@ -19,3 +19,7 @@ class GenerationError(OpenApiMcpError):
 
 class SpecLoaderError(OpenApiMcpError):
     """Errors related to loading and validating OpenAPI specifications."""
+
+
+class NoToolsMappedError(OpenApiMcpError):
+    """Raised when an OpenAPI spec produces no MCP tools."""

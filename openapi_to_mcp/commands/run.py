@@ -10,6 +10,12 @@ import rich_click as click
 
 from openapi_to_mcp.commands.generate import generate_project
 from openapi_to_mcp.commands.options import add_options, run_options
+from openapi_to_mcp.common.exceptions import (
+    GenerationError,
+    MappingError,
+    NoToolsMappedError,
+    SpecLoaderError,
+)
 from openapi_to_mcp.common.terminal import print_section, print_success_panel
 from openapi_to_mcp.common.utils import parse_env_source
 
@@ -148,8 +154,18 @@ def run_server(  # noqa: PLR0913
             ],
         )
         _run_subprocess(["node", "build/index.js"], cwd=output_path, env=runtime_env)
+    except click.ClickException:
+        raise
     except KeyboardInterrupt:
         raise click.Abort from None
+    except (
+        GenerationError,
+        MappingError,
+        NoToolsMappedError,
+        SpecLoaderError,
+        ValueError,
+    ) as exc:
+        raise click.ClickException(str(exc)) from exc
     finally:
         if temp_dir is not None:
             temp_dir.cleanup()
