@@ -1,0 +1,151 @@
+name: release
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  detect-version-bump:
+    name: detect-version-bump
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.detect.outputs.should_release }}
+      tag_name: ${{ steps.detect.outputs.tag_name }}
+      version: ${{ steps.detect.outputs.version }}
+      release_reason: ${{ steps.detect.outputs.release_reason }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect version bump
+        id: detect
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          import tomllib
+          from pathlib import Path
+
+          before_sha = os.environ.get("BEFORE_SHA", "")
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          current = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+          tag_name = f"v{current}"
+
+          previous = ""
+          version_changed = False
+          zero_sha = "0" * 40
+          if before_sha and before_sha != zero_sha:
+              try:
+                  prior = subprocess.check_output(
+                      ["git", "show", f"{before_sha}:pyproject.toml"],
+                      text=True,
+                  )
+                  previous = tomllib.loads(prior)["project"]["version"]
+              except subprocess.CalledProcessError:
+                  previous = ""
+              version_changed = previous != current
+
+          existing_tag_ref = subprocess.check_output(
+              ["git", "ls-remote", "--tags", "origin", f"refs/tags/{tag_name}"],
+              text=True,
+          ).strip()
+          tag_missing = not existing_tag_ref
+          should_release = version_changed or tag_missing
+          if version_changed:
+              release_reason = "version-bump"
+          elif tag_missing:
+              release_reason = "missing-tag"
+          else:
+              release_reason = "none"
+
+          with output_path.open("a", encoding="utf-8") as fh:
+              fh.write(f"version={current}\n")
+              fh.write(f"tag_name={tag_name}\n")
+              fh.write(f"should_release={'true' if should_release else 'false'}\n")
+              fh.write(f"release_reason={release_reason}\n")
+          PY
+
+  github-release:
+    name: github-release
+    needs: detect-version-bump
+    if: needs.detect-version-bump.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --dev --frozen
+
+      - name: Run Python test suite
+        run: uv run pytest
+
+      - name: Build distribution artifacts
+        run: uv build
+
+      - name: Collect release assets
+        run: |
+          mkdir -p release-assets
+          cp dist/*.whl dist/*.tar.gz release-assets/
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ needs.detect-version-bump.outputs.tag_name }}
+          path: release-assets/*
+          if-no-files-found: error
+
+      - name: Ensure release tag exists on current master commit
+        env:
+          TAG_NAME: ${{ needs.detect-version-bump.outputs.tag_name }}
+        run: |
+          existing_ref="$(git ls-remote --tags origin "refs/tags/${TAG_NAME}" | awk '{print $1}')"
+          if [[ -z "${existing_ref}" ]]; then
+            git tag "${TAG_NAME}" "${GITHUB_SHA}"
+            git push origin "${TAG_NAME}"
+            exit 0
+          fi
+          if [[ "${existing_ref}" != "${GITHUB_SHA}" ]]; then
+            echo "Tag ${TAG_NAME} already exists on a different commit: ${existing_ref}" >&2
+            exit 1
+          fi
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.detect-version-bump.outputs.tag_name }}
+        run: |
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            gh release upload "${TAG_NAME}" release-assets/* --clobber
+            exit 0
+          fi
+          gh release create "${TAG_NAME}" release-assets/* \
+            --generate-notes \
+            --title "${TAG_NAME}" \
+            --target "${GITHUB_SHA}"
