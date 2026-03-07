@@ -108,6 +108,32 @@ def test_generate_stdio_omits_http_dependencies(
     assert "StdioServerTransport" in transport_source
 
 
+def test_generate_auth_fixture_emits_auth_env_vars(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    output_dir = tmp_path / "generated-auth"
+
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--openapi-json",
+            "tests/resources/auth_openapi.yaml",
+            "--output-dir",
+            str(output_dir),
+            "--transport",
+            "stdio",
+        ],
+    )
+
+    assert result.exit_code == 0
+    env_example = (output_dir / ".env.example").read_text(encoding="utf-8")
+    assert "AUTH_HEADERAPIKEY_API_KEY=" in env_example
+    assert "AUTH_QUERYAPIKEY_API_KEY=" in env_example
+    assert "AUTH_COOKIEAPIKEY_API_KEY=" in env_example
+    assert "AUTH_BEARERAUTH_TOKEN=" in env_example
+
+
 def test_generate_strict_generated_name_collision_fails(
     runner: CliRunner, tmp_path: Path
 ) -> None:
