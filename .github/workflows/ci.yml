@@ -95,3 +95,49 @@ jobs:
       - name: Clean generated-server E2E temp files
         if: always()
         run: rm -rf "${{ github.workspace }}/.tmp/e2e-node-${{ matrix.node-version }}"
+
+  e2e-cli-matrix:
+    name: e2e-cli-matrix
+    needs: quality-py314
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Sync dependencies
+        run: uv sync --dev --frozen
+
+      - name: Run CLI E2E matrix
+        run: |
+          TMP_ROOT="${{ github.workspace }}/.tmp/e2e-cli" \
+          KEEP_TMP=1 \
+          bash scripts/e2e_cli_matrix.sh
+
+      - name: Upload CLI E2E artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-cli-matrix
+          path: ${{ github.workspace }}/.tmp/e2e-cli
+          if-no-files-found: ignore
+
+      - name: Clean CLI E2E temp files
+        if: always()
+        run: rm -rf "${{ github.workspace }}/.tmp/e2e-cli"

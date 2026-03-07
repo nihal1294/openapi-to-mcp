@@ -29,6 +29,9 @@ test:
 e2e-generated:
     ./scripts/e2e_generated_server.sh
 
+e2e-cli:
+    ./scripts/e2e_cli_matrix.sh
+
 generate:
     ./scripts/workflow.sh generate
 
