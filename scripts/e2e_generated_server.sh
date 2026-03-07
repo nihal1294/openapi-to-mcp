@@ -4,7 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-UV_CACHE_DIR="${UV_CACHE_DIR:-${REPO_ROOT}/.uv-cache}"
 TMP_ROOT="${TMP_ROOT:-${RUNNER_TEMP:-/tmp}/openapi-to-mcp-e2e}"
 OPENAPI_SPEC="${OPENAPI_SPEC:-${REPO_ROOT}/tests/resources/test_openapi.yaml}"
 MOCK_API_HOST="${MOCK_API_HOST:-127.0.0.1}"
@@ -25,6 +24,14 @@ ensure_command() {
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "Missing required command: $cmd" >&2
     exit 1
+  fi
+}
+
+run_uv() {
+  if [[ -n "${UV_CACHE_DIR:-}" ]]; then
+    env UV_CACHE_DIR="$UV_CACHE_DIR" uv "$@"
+  else
+    uv "$@"
   fi
 }
 
@@ -141,7 +148,7 @@ generate_server() {
 
   (
     cd "$REPO_ROOT"
-    UV_CACHE_DIR="$UV_CACHE_DIR" uv run openapi-to-mcp "${args[@]}"
+    run_uv run openapi-to-mcp "${args[@]}"
   )
 
   prepare_env_file "$output_dir"
@@ -163,7 +170,7 @@ run_stdio_assertions() {
 
   (
     cd "$REPO_ROOT"
-    UV_CACHE_DIR="$UV_CACHE_DIR" uv run python - "$server_cmd" "$env_file" "$TOOL_NAME" <<'PY'
+    run_uv run python - "$server_cmd" "$env_file" "$TOOL_NAME" <<'PY'
 import asyncio
 import json
 import sys
@@ -235,7 +242,7 @@ start_streamable_http_server() {
 run_streamable_http_assertions() {
   (
     cd "$REPO_ROOT"
-    UV_CACHE_DIR="$UV_CACHE_DIR" uv run python - \
+    run_uv run python - \
       "http://${HTTP_HOST}:${HTTP_PORT}${MCP_ENDPOINT}" \
       "$TOOL_NAME" <<'PY'
 import asyncio
@@ -302,7 +309,7 @@ main() {
   echo "Starting mock target API on ${TARGET_API_BASE_URL}"
   (
     cd "$REPO_ROOT"
-    UV_CACHE_DIR="$UV_CACHE_DIR" uv run python scripts/mock_target_api.py \
+    run_uv run python scripts/mock_target_api.py \
       --host "$MOCK_API_HOST" \
       --port "$MOCK_API_PORT"
   ) >"${TMP_ROOT}/mock-target-api.log" 2>&1 &

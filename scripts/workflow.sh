@@ -4,7 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-UV_CACHE_DIR="${UV_CACHE_DIR:-${REPO_ROOT}/.uv-cache}"
 OPENAPI_JSON="${OPENAPI_JSON:-https://petstore.swagger.io/v2/swagger.json}"
 OUTPUT_DIR="${OUTPUT_DIR:-/tmp/mcp-smoke}"
 MCP_SERVER_NAME="${MCP_SERVER_NAME:-petstore-mcp}"
@@ -65,6 +64,14 @@ ensure_command() {
   fi
 }
 
+run_uv() {
+  if [[ -n "${UV_CACHE_DIR:-}" ]]; then
+    env UV_CACHE_DIR="$UV_CACHE_DIR" uv "$@"
+  else
+    uv "$@"
+  fi
+}
+
 replace_or_append_env_var() {
   local file="$1"
   local key="$2"
@@ -110,13 +117,13 @@ is_tmp_path() {
 
 do_sync() {
   ensure_command uv
-  (cd "$REPO_ROOT" && UV_CACHE_DIR="$UV_CACHE_DIR" uv sync --dev)
+  (cd "$REPO_ROOT" && run_uv sync --dev)
 }
 
 do_generate() {
   ensure_command uv
   mkdir -p "$OUTPUT_DIR"
-  (cd "$REPO_ROOT" && UV_CACHE_DIR="$UV_CACHE_DIR" uv run openapi-to-mcp generate \
+  (cd "$REPO_ROOT" && run_uv run openapi-to-mcp generate \
     --openapi-json "$OPENAPI_JSON" \
     --output-dir "$OUTPUT_DIR" \
     --mcp-server-name "$MCP_SERVER_NAME" \
@@ -144,7 +151,7 @@ do_run_generated() {
 
 do_test_list() {
   ensure_command uv
-  (cd "$REPO_ROOT" && UV_CACHE_DIR="$UV_CACHE_DIR" uv run openapi-to-mcp test-server \
+  (cd "$REPO_ROOT" && run_uv run openapi-to-mcp test-server \
     --transport streamable-http \
     --host "$HOST" \
     --port "$PORT" \
@@ -161,7 +168,7 @@ do_test_call() {
     exit 1
   fi
 
-  (cd "$REPO_ROOT" && UV_CACHE_DIR="$UV_CACHE_DIR" uv run openapi-to-mcp test-server \
+  (cd "$REPO_ROOT" && run_uv run openapi-to-mcp test-server \
     --transport streamable-http \
     --host "$HOST" \
     --port "$PORT" \
@@ -175,7 +182,6 @@ do_clean() {
     "${REPO_ROOT}/.pytest_cache" \
     "${REPO_ROOT}/.ruff_cache" \
     "${REPO_ROOT}/.mypy_cache" \
-    "${REPO_ROOT}/.uv-cache" \
     "${REPO_ROOT}/dist" \
     "${REPO_ROOT}/build" \
     "${REPO_ROOT}/htmlcov"
