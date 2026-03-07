@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class Mapper:
     """Maps OpenAPI operations to MCP tool definitions."""
 
-    def __init__(self, spec: dict[str, Any], strict: bool = True) -> None:
+    def __init__(self, spec: dict[str, Any], *, strict: bool = True) -> None:
         """
         Initialize the mapper with the loaded OpenAPI spec.
 
@@ -132,7 +132,7 @@ class Mapper:
         return ref_handler.resolve_ref(ref)
 
     def _normalize_security_requirements(
-        self, security_requirements_maybe: Any
+        self, security_requirements_maybe: object
     ) -> list[dict[str, Any]] | None:
         """Normalize security requirements to a list of requirement objects."""
         if security_requirements_maybe is None:
@@ -183,8 +183,8 @@ class Mapper:
 
     def _merge_parameters(
         self,
-        path_parameters_maybe: Any,
-        operation_parameters_maybe: Any,
+        path_parameters_maybe: object,
+        operation_parameters_maybe: object,
     ) -> list[dict[str, Any]]:
         """
         Merge path-level and operation-level parameters.

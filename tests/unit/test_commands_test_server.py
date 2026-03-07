@@ -1,10 +1,15 @@
+from __future__ import annotations
+
 import logging
-from unittest.mock import MagicMock
+from typing import TYPE_CHECKING
 
 import pytest
 from click.testing import CliRunner, Result
 
 from openapi_to_mcp.cli import cli
+
+if TYPE_CHECKING:
+    from unittest.mock import MagicMock
 
 
 @pytest.fixture

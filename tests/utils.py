@@ -1,11 +1,14 @@
-from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock
+from __future__ import annotations
 
-from click.testing import CliRunner, Result
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+from unittest.mock import MagicMock
 
 from openapi_to_mcp.cli import cli
 from tests.constants import VALID_OPENAPI_YAML
+
+if TYPE_CHECKING:
+    from click.testing import CliRunner, Result
 
 
 def setup_path_mocks(mocker: Any, output_dir: str) -> dict[str, MagicMock]:

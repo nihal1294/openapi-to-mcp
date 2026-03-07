@@ -164,7 +164,7 @@ def test_generator_render_and_write_template_not_found(
 
     mock_output_file = MagicMock(spec=Path)
     with pytest.raises(
-        GenerationError, match="Required template 'missing.j2' not found"
+        GenerationError, match=r"Required template 'missing\.j2' not found"
     ):
         gen._render_and_write("missing.j2", mock_output_file)
     mock_jinja_env.get_template.assert_called_once_with("missing.j2")

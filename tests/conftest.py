@@ -1,7 +1,7 @@
+from __future__ import annotations
+
 import logging
-from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from click.testing import CliRunner
@@ -9,6 +9,10 @@ from click.testing import CliRunner
 from openapi_to_mcp.adapters.generator import Generator
 from tests.constants import VALID_MCP_TOOL, VALID_OPENAPI_SPEC
 from tests.utils import setup_jinja_mocks, setup_path_mocks
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from unittest.mock import MagicMock
 
 
 @pytest.fixture

@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 import functools
 import logging
-from collections.abc import Callable
-from typing import ParamSpec, TypeVar
+from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 from openapi_to_mcp.common.exceptions import OpenApiMcpError
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +16,7 @@ R = TypeVar("R")
 P = ParamSpec("P")
 
 
-def handle_exceptions(
+def handle_exceptions(  # noqa: UP047
     error_message: str = "An error occurred",
     return_value: R = None,  # type: ignore[assignment]
     log_level: int = logging.ERROR,

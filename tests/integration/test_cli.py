@@ -1,9 +1,14 @@
-import json
-from pathlib import Path
+from __future__ import annotations
 
-from click.testing import CliRunner
+import json
+from typing import TYPE_CHECKING
 
 from openapi_to_mcp.cli import cli
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from click.testing import CliRunner
 
 
 def _write_duplicate_operation_spec(path: Path) -> Path:

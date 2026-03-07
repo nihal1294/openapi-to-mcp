@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
     "--env-source",
     help="Environment variables for stdio transport, as JSON string OR path to .json/.env file.",
 )
-def test_server(
+def run_test_server(
     transport: str,
     host: str,
     port: int,

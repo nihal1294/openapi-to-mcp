@@ -1,7 +1,7 @@
 """Commands component for the openapi-to-mcp package."""
 
 from openapi_to_mcp.commands.generate import generate
-from openapi_to_mcp.commands.test_server import test_server
+from openapi_to_mcp.commands.test_server import run_test_server as test_server
 
 __all__ = [
     "generate",

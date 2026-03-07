@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 import json
 import logging
 import sys
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 
@@ -15,6 +16,9 @@ from openapi_to_mcp.common.exceptions import (
     SpecLoaderError,
 )
 from openapi_to_mcp.mapping import Mapper
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +163,7 @@ def _prepare_template_context(
     host: str,
     port: int | None,
     mcp_endpoint: str,
+    *,
     strict: bool,
     mcp_tools: list[dict[str, Any]],
     auth_env_vars: list[str],
@@ -213,7 +218,7 @@ def _derive_auth_env_vars(mcp_tools: list[dict[str, Any]]) -> list[str]:
 
 
 def _build_generation_report(
-    mapper: Mapper, strict: bool, transport: str
+    mapper: Mapper, *, strict: bool, transport: str
 ) -> dict[str, Any]:
     """Build generation diagnostics report."""
     mapper_report = mapper.get_report()
@@ -245,6 +250,7 @@ def generate(
     host: str,
     port: int | None,
     mcp_endpoint: str,
+    *,
     strict: bool,
 ) -> None:
     """Generates a Node.js/TypeScript MCP server from an OpenAPI specification."""
@@ -293,16 +299,16 @@ def generate(
         auth_env_vars = _derive_auth_env_vars(mcp_tools)
         logger.debug("Preparing template context.")
         template_context = _prepare_template_context(
-            spec,
-            mcp_server_name,
-            mcp_server_version,
-            transport,
-            host,
-            port,
-            mcp_endpoint,
-            strict,
-            mcp_tools,
-            auth_env_vars,
+            spec=spec,
+            mcp_server_name=mcp_server_name,
+            mcp_server_version=mcp_server_version,
+            transport=transport,
+            host=host,
+            port=port,
+            mcp_endpoint=mcp_endpoint,
+            strict=strict,
+            mcp_tools=mcp_tools,
+            auth_env_vars=auth_env_vars,
         )
 
         logger.info("Generating files in: %s", output_dir)

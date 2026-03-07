@@ -1,11 +1,16 @@
+from __future__ import annotations
+
 import logging
-from collections.abc import Generator
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
 from pythonjsonlogger.json import JsonFormatter
 
 from openapi_to_mcp.common.logger import configure_logger
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 
 @pytest.fixture
