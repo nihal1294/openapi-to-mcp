@@ -204,7 +204,10 @@ def _derive_auth_env_vars(mcp_tools: list[dict[str, Any]]) -> list[str]:
             http_scheme = str(scheme_def.get("scheme", "")).lower()
             if scheme_type == "apikey":
                 env_vars.add(f"AUTH_{normalized}_API_KEY")
-            elif (scheme_type == "http" and http_scheme == "bearer") or scheme_type in {"oauth2", "openidconnect"}:
+            elif (scheme_type == "http" and http_scheme == "bearer") or scheme_type in {
+                "oauth2",
+                "openidconnect",
+            }:
                 env_vars.add(f"AUTH_{normalized}_TOKEN")
     return sorted(env_vars)
 
