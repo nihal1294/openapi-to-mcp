@@ -4,7 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-UV_CACHE_DIR="${UV_CACHE_DIR:-${REPO_ROOT}/.uv-cache}"
 OPENAPI_JSON="${OPENAPI_JSON:-https://petstore.swagger.io/v2/swagger.json}"
 OUTPUT_DIR="${OUTPUT_DIR:-/tmp/mcp-smoke}"
 MCP_SERVER_NAME="${MCP_SERVER_NAME:-petstore-mcp}"
@@ -45,8 +44,11 @@ Commands:
   clean
     Remove repo cache/temp artifacts.
 
+  clean-tmp
+    Remove generated temp MCP server outputs under /tmp.
+
   clean-all
-    clean + remove generated OUTPUT_DIR and /tmp/mcp-smoke*.
+    clean + clean-tmp.
 
 Environment overrides:
   OPENAPI_JSON, OUTPUT_DIR, MCP_SERVER_NAME, TRANSPORT, HOST, PORT, MCP_ENDPOINT,
@@ -59,6 +61,14 @@ ensure_command() {
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "Missing required command: $cmd" >&2
     exit 1
+  fi
+}
+
+run_uv() {
+  if [[ -n "${UV_CACHE_DIR:-}" ]]; then
+    env UV_CACHE_DIR="$UV_CACHE_DIR" uv "$@"
+  else
+    uv "$@"
   fi
 }
 
@@ -93,15 +103,27 @@ replace_or_append_env_var() {
   mv "$tmp_file" "$file"
 }
 
+is_tmp_path() {
+  local path="$1"
+  case "$path" in
+    /tmp|/tmp/*|/private/tmp|/private/tmp/*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 do_sync() {
   ensure_command uv
-  (cd "$REPO_ROOT" && UV_CACHE_DIR="$UV_CACHE_DIR" uv sync --dev)
+  (cd "$REPO_ROOT" && run_uv sync --dev)
 }
 
 do_generate() {
   ensure_command uv
   mkdir -p "$OUTPUT_DIR"
-  (cd "$REPO_ROOT" && UV_CACHE_DIR="$UV_CACHE_DIR" uv run openapi-to-mcp generate \
+  (cd "$REPO_ROOT" && run_uv run openapi-to-mcp generate \
     --openapi-json "$OPENAPI_JSON" \
     --output-dir "$OUTPUT_DIR" \
     --mcp-server-name "$MCP_SERVER_NAME" \
@@ -129,7 +151,7 @@ do_run_generated() {
 
 do_test_list() {
   ensure_command uv
-  (cd "$REPO_ROOT" && UV_CACHE_DIR="$UV_CACHE_DIR" uv run openapi-to-mcp test-server \
+  (cd "$REPO_ROOT" && run_uv run openapi-to-mcp test-server \
     --transport streamable-http \
     --host "$HOST" \
     --port "$PORT" \
@@ -146,7 +168,7 @@ do_test_call() {
     exit 1
   fi
 
-  (cd "$REPO_ROOT" && UV_CACHE_DIR="$UV_CACHE_DIR" uv run openapi-to-mcp test-server \
+  (cd "$REPO_ROOT" && run_uv run openapi-to-mcp test-server \
     --transport streamable-http \
     --host "$HOST" \
     --port "$PORT" \
@@ -160,7 +182,6 @@ do_clean() {
     "${REPO_ROOT}/.pytest_cache" \
     "${REPO_ROOT}/.ruff_cache" \
     "${REPO_ROOT}/.mypy_cache" \
-    "${REPO_ROOT}/.uv-cache" \
     "${REPO_ROOT}/dist" \
     "${REPO_ROOT}/build" \
     "${REPO_ROOT}/htmlcov"
@@ -171,7 +192,23 @@ do_clean() {
 
 do_clean_all() {
   do_clean
-  rm -rf "$OUTPUT_DIR" /tmp/mcp-smoke /tmp/mcp-smoke-*
+  do_clean_tmp
+}
+
+do_clean_tmp() {
+  if is_tmp_path "$OUTPUT_DIR"; then
+    rm -rf "$OUTPUT_DIR"
+  fi
+
+  rm -rf \
+    /tmp/mcp-smoke \
+    /tmp/mcp-smoke-* \
+    /tmp/openapi-to-mcp-e2e \
+    /tmp/openapi-to-mcp-e2e-* \
+    /private/tmp/mcp-smoke \
+    /private/tmp/mcp-smoke-* \
+    /private/tmp/openapi-to-mcp-e2e \
+    /private/tmp/openapi-to-mcp-e2e-*
 }
 
 main() {
@@ -204,6 +241,9 @@ main() {
       ;;
     clean)
       do_clean
+      ;;
+    clean-tmp)
+      do_clean_tmp
       ;;
     clean-all)
       do_clean_all

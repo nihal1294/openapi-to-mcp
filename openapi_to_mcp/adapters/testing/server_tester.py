@@ -1,11 +1,13 @@
 """Server testing adapter for MCP servers."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import shlex
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import requests
 from mcp import (
@@ -15,9 +17,11 @@ from mcp import (
     StdioServerParameters,
     stdio_client,
 )
-from mcp.types import CallToolResult
 
 from openapi_to_mcp.common import OpenApiMcpError
+
+if TYPE_CHECKING:
+    from mcp.types import CallToolResult
 
 logger = logging.getLogger(__name__)
 DEFAULT_PROTOCOL_VERSION = "2025-11-25"
@@ -274,7 +278,7 @@ def _create_transport_strategy(
     raise ValueError(f"Unsupported transport type: {transport}")
 
 
-async def execute_mcp_server(
+async def execute_mcp_server(  # noqa: PLR0913
     transport: str,
     method: str,
     params: dict[str, Any] | None = None,

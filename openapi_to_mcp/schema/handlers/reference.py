@@ -112,7 +112,7 @@ class ReferenceHandler(SchemaHandler):
                     err_msg = (
                         f"Cannot traverse into non-dict/list element: {decoded_part}"
                     )
-                    raise KeyError(err_msg)
+                    raise KeyError(err_msg)  # noqa: TRY301
         except (KeyError, IndexError, ValueError, TypeError) as e:
             logger.warning(
                 "Reference '%s' could not be resolved: %s",

@@ -20,6 +20,7 @@ openapi-to-mcp = "openapi_to_mcp.cli:cli"
 
 [dependency-groups]
 dev = [
+    "pre-commit==4.5.1",
     "pytest==9.0.2",
     "pytest-asyncio==1.3.0",
     "pytest-cov==7.0.0",
@@ -50,13 +51,6 @@ ignore = [
     "EM101",    # Exception string literal
     "EM102",    # Exception f-string literal
     "TRY003",   # Long exception message
-    "TRY301",   # Abstract raise to inner function (ignore for now)
-    "BLE001",   # Catching broad exception 'Exception' (sometimes needed)
-    # Ignore complexity warnings for now
-    "C901",     # Too complex
-    "PLR0912",  # Too many branches
-    "PLR0915",  # Too many statements
-    "PLR0913"   # Too many arguments
 ]
 
 [tool.ruff.lint.per-file-ignores]

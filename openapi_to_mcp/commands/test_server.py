@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
     "--env-source",
     help="Environment variables for stdio transport, as JSON string OR path to .json/.env file.",
 )
-def test_server(
+def run_test_server(  # noqa: PLR0913
     transport: str,
     host: str,
     port: int,
@@ -82,7 +82,7 @@ def _parse_tool_args(tool_args: str | None) -> dict[str, Any]:
     try:
         tool_arguments = json.loads(tool_args) if tool_args else None
         if not isinstance(tool_arguments, dict):
-            raise TypeError("Tool arguments must be a JSON object.")
+            raise TypeError("Tool arguments must be a JSON object.")  # noqa: TRY301
     except (json.JSONDecodeError, TypeError) as e:
         logger.exception("Invalid JSON in --tool-args")
         click.echo(f"Error: Invalid JSON provided for --tool-args: {e}", err=True)
@@ -93,7 +93,7 @@ def _parse_tool_args(tool_args: str | None) -> dict[str, Any]:
         return tool_arguments
 
 
-async def _run_test(
+async def _run_test(  # noqa: PLR0913
     transport: str,
     host: str,
     port: int,
@@ -124,7 +124,9 @@ async def _run_test(
     req_id_counter = 1
 
     endpoint_url = (
-        f"http://{host}:{port}{mcp_endpoint}" if transport == "streamable-http" else None
+        f"http://{host}:{port}{mcp_endpoint}"
+        if transport == "streamable-http"
+        else None
     )
 
     if list_tools:

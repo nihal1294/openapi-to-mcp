@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class Mapper:
     """Maps OpenAPI operations to MCP tool definitions."""
 
-    def __init__(self, spec: dict[str, Any], strict: bool = True) -> None:
+    def __init__(self, spec: dict[str, Any], *, strict: bool = True) -> None:
         """
         Initialize the mapper with the loaded OpenAPI spec.
 
@@ -132,7 +132,7 @@ class Mapper:
         return ref_handler.resolve_ref(ref)
 
     def _normalize_security_requirements(
-        self, security_requirements_maybe: Any
+        self, security_requirements_maybe: object
     ) -> list[dict[str, Any]] | None:
         """Normalize security requirements to a list of requirement objects."""
         if security_requirements_maybe is None:
@@ -183,8 +183,8 @@ class Mapper:
 
     def _merge_parameters(
         self,
-        path_parameters_maybe: Any,
-        operation_parameters_maybe: Any,
+        path_parameters_maybe: object,
+        operation_parameters_maybe: object,
     ) -> list[dict[str, Any]]:
         """
         Merge path-level and operation-level parameters.
@@ -192,7 +192,9 @@ class Mapper:
         Operation-level parameters override path-level parameters with same
         (name, in) pair per OpenAPI rules.
         """
-        path_parameters = path_parameters_maybe if isinstance(path_parameters_maybe, list) else []
+        path_parameters = (
+            path_parameters_maybe if isinstance(path_parameters_maybe, list) else []
+        )
         operation_parameters = (
             operation_parameters_maybe
             if isinstance(operation_parameters_maybe, list)
@@ -327,7 +329,7 @@ class Mapper:
             )
         return processed_params
 
-    def _process_request_body(
+    def _process_request_body(  # noqa: C901
         self,
         request_body_maybe_ref: dict[str, Any] | None,
         input_schema: dict[str, Any],
@@ -412,7 +414,9 @@ class Mapper:
         Returns:
             Dictionary representing an MCP tool definition.
         """
-        candidate_name = operation.get("operationId") or generate_tool_name(method, path)
+        candidate_name = operation.get("operationId") or generate_tool_name(
+            method, path
+        )
         tool_name = self._ensure_unique_tool_name(candidate_name)
         description = operation.get("summary") or operation.get(
             "description", f"{method.upper()} operation for {path}"

@@ -1,0 +1,97 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [master, main]
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality-py314:
+    name: quality-py314
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --dev --frozen
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Run Python test suite
+        run: uv run pytest
+
+  e2e-generated-server:
+    name: e2e-generated-server (node-${{ matrix.node-version }})
+    needs: quality-py314
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["20", "22"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Sync dependencies
+        run: uv sync --dev --frozen
+
+      - name: Run generated-server E2E
+        run: |
+          TMP_ROOT="${{ github.workspace }}/.tmp/e2e-node-${{ matrix.node-version }}" \
+          KEEP_TMP=1 \
+          bash scripts/e2e_generated_server.sh
+
+      - name: Upload generated-server E2E artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-generated-server-node-${{ matrix.node-version }}
+          path: ${{ github.workspace }}/.tmp/e2e-node-${{ matrix.node-version }}
+          if-no-files-found: ignore
+
+      - name: Clean generated-server E2E temp files
+        if: always()
+        run: rm -rf "${{ github.workspace }}/.tmp/e2e-node-${{ matrix.node-version }}"

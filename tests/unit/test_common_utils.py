@@ -51,7 +51,7 @@ def test_parse_dotenv_file_not_found() -> None:
     """Test behavior when .env file is not found."""
     with (
         patch("builtins.open", side_effect=FileNotFoundError),
-        pytest.raises(ValueError, match=".env file not found at:"),
+        pytest.raises(ValueError, match=r"\.env file not found at:"),
     ):
         _parse_dotenv("non_existent_file.env")
 
@@ -60,7 +60,7 @@ def test_parse_dotenv_other_error() -> None:
     """Test behavior when another error occurs while parsing the .env file."""
     with (
         patch("builtins.open", side_effect=PermissionError("Permission denied")),
-        pytest.raises(ValueError, match="Failed to parse .env file"),
+        pytest.raises(ValueError, match=r"Failed to parse \.env file"),
     ):
         _parse_dotenv("fake_path/.env")
 

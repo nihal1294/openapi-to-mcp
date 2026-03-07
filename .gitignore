@@ -94,6 +94,7 @@ ipython_config.py
 # uv / Python virtual environments
 .venv
 .uv-cache/
+.pre-commit-cache/
 .poetry-venvs/
 
 # PEP 582; used by PDM, PEP 582 proposal

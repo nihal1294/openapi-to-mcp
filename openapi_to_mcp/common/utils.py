@@ -57,8 +57,8 @@ def parse_env_source(env_source: str | None) -> dict[str, str] | None:
             env_vars = potential_json
             logger.info("Parsed env source as JSON string.")
         else:
-            raise TypeError("JSON string is not an object.")
-    except (json.JSONDecodeError, TypeError):
+            raise TypeError("JSON string is not an object.")  # noqa: TRY301
+    except json.JSONDecodeError, TypeError:
         logger.info("Could not parse as JSON string, attempting as file path.")
         if not os.path.exists(env_source):
             raise ValueError(f"File not found for env source: {env_source}") from None
@@ -68,7 +68,7 @@ def parse_env_source(env_source: str | None) -> dict[str, str] | None:
                 with open(env_source, encoding="utf-8") as f:
                     file_json = json.load(f)
                 if not isinstance(file_json, dict):
-                    raise TypeError("JSON file content is not an object.")
+                    raise TypeError("JSON file content is not an object.")  # noqa: TRY301
                 env_vars = file_json
                 logger.info("Loaded environment from JSON file: %s", env_source)
             else:
