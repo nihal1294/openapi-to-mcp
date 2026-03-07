@@ -180,6 +180,7 @@ do_test_call() {
 do_clean() {
   rm -rf \
     "${REPO_ROOT}/.pytest_cache" \
+    "${REPO_ROOT}/.pre-commit-cache" \
     "${REPO_ROOT}/.ruff_cache" \
     "${REPO_ROOT}/.mypy_cache" \
     "${REPO_ROOT}/dist" \
