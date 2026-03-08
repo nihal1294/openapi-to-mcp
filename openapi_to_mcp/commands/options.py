@@ -9,6 +9,8 @@ import rich_click as click
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+ERROR_MODE_CHOICE = click.Choice(["fail", "skip"], case_sensitive=False)
+
 
 def add_options(options: list[click.Option]) -> Callable:
     """Decorator to apply a sequence of Click option decorators."""
@@ -81,6 +83,16 @@ generate_options = [
         show_default=True,
         help="Strict mode fails generation on unsupported required constructs.",
     ),
+    click.option(
+        "--on-mapping-error",
+        type=ERROR_MODE_CHOICE,
+        help="How to handle operation mapping failures. Defaults to fail in strict mode and skip in non-strict mode.",
+    ),
+    click.option(
+        "--on-schema-error",
+        type=ERROR_MODE_CHOICE,
+        help="How to handle schema conversion failures. Defaults to fail in strict mode and skip in non-strict mode.",
+    ),
 ]
 
 
@@ -142,6 +154,16 @@ run_options = [
         default=True,
         show_default=True,
         help="Strict mode fails generation on unsupported required constructs.",
+    ),
+    click.option(
+        "--on-mapping-error",
+        type=ERROR_MODE_CHOICE,
+        help="How to handle operation mapping failures. Defaults to fail in strict mode and skip in non-strict mode.",
+    ),
+    click.option(
+        "--on-schema-error",
+        type=ERROR_MODE_CHOICE,
+        help="How to handle schema conversion failures. Defaults to fail in strict mode and skip in non-strict mode.",
     ),
     click.option(
         "--target-api-base-url",

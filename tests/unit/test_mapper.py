@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 
-from openapi_to_mcp.common.exceptions import MappingError
+from openapi_to_mcp.common.exceptions import MappingError, SchemaError
 from openapi_to_mcp.mapping.mapper import Mapper
 
 
@@ -229,6 +229,100 @@ def test_mapper_non_strict_skips_invalid_operation_and_reports() -> None:
     assert len(report["skipped_operations"]) == 1
     assert report["skipped_operations"][0]["method"] == "GET"
     assert report["skipped_operations"][0]["path"] == "/bad"
+
+
+def test_mapper_schema_error_skip_overrides_strict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Schema Skip", "version": "1.0.0"},
+        "paths": {
+            "/ok": {
+                "get": {
+                    "operationId": "okTool",
+                    "parameters": [
+                        {"name": "q", "in": "query", "schema": {"type": "string"}}
+                    ],
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+            "/bad": {
+                "get": {
+                    "operationId": "badTool",
+                    "parameters": [
+                        {
+                            "name": "q",
+                            "in": "query",
+                            "schema": {"type": "string", "description": "raise"},
+                        }
+                    ],
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+        },
+    }
+
+    def fake_convert(
+        schema: dict[str, Any], _: dict[str, Any], *, raise_on_error: bool = False
+    ) -> dict[str, Any]:
+        if schema.get("description") == "raise":
+            raise SchemaError("Broken schema")
+        return {"type": "string"}
+
+    monkeypatch.setattr(
+        "openapi_to_mcp.mapping.mapper.openapi_schema_to_json_schema", fake_convert
+    )
+    mapper = Mapper(spec=spec, strict=True, on_schema_error="skip")
+
+    tools = mapper.map_tools()
+
+    assert [tool["name"] for tool in tools] == ["okTool"]
+    report = mapper.get_report()
+    assert report["on_schema_error"] == "skip"
+    assert report["mapped_tools"] == 1
+    assert report["skipped_operations"][0]["path"] == "/bad"
+
+
+def test_mapper_schema_error_fail_overrides_non_strict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Schema Fail", "version": "1.0.0"},
+        "paths": {
+            "/bad": {
+                "get": {
+                    "operationId": "badTool",
+                    "parameters": [
+                        {
+                            "name": "q",
+                            "in": "query",
+                            "schema": {"type": "string", "description": "raise"},
+                        }
+                    ],
+                    "responses": {"200": {"description": "OK"}},
+                }
+            }
+        },
+    }
+
+    def fake_convert(
+        schema: dict[str, Any], _: dict[str, Any], *, raise_on_error: bool = False
+    ) -> dict[str, Any]:
+        if schema.get("description") == "raise":
+            raise SchemaError("Broken schema")
+        return {"type": "string"}
+
+    monkeypatch.setattr(
+        "openapi_to_mcp.mapping.mapper.openapi_schema_to_json_schema", fake_convert
+    )
+    mapper = Mapper(spec=spec, strict=False, on_schema_error="fail")
+
+    with pytest.raises(
+        SchemaError, match="Schema error while mapping operation GET /bad"
+    ):
+        mapper.map_tools()
 
 
 def test_mapper_invalid_paths_object_raises() -> None:

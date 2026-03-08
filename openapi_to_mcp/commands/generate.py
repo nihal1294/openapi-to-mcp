@@ -11,10 +11,12 @@ import rich_click as click
 from openapi_to_mcp.adapters.generator import Generator
 from openapi_to_mcp.adapters.spec_loader import SpecLoader
 from openapi_to_mcp.commands.options import add_options, generate_options
+from openapi_to_mcp.common.error_policy import ErrorMode, resolve_error_mode
 from openapi_to_mcp.common.exceptions import (
     GenerationError,
     MappingError,
     NoToolsMappedError,
+    SchemaError,
     SpecLoaderError,
 )
 from openapi_to_mcp.common.terminal import print_success_panel
@@ -152,7 +154,12 @@ def _derive_auth_env_vars(mcp_tools: list[dict[str, Any]]) -> list[str]:
 
 
 def _build_generation_report(
-    mapper: Mapper, *, strict: bool, transport: str
+    mapper: Mapper,
+    *,
+    strict: bool,
+    transport: str,
+    on_mapping_error: ErrorMode,
+    on_schema_error: ErrorMode,
 ) -> dict[str, Any]:
     """Build generation diagnostics report."""
     mapper_report = mapper.get_report()
@@ -160,6 +167,8 @@ def _build_generation_report(
         "strict_mode": strict,
         "transport": transport,
         "mapped_tools": mapper_report.get("mapped_tools", 0),
+        "on_mapping_error": on_mapping_error,
+        "on_schema_error": on_schema_error,
         "skipped_operations": mapper_report.get("skipped_operations", []),
         "warnings": mapper_report.get("warnings", []),
     }
@@ -192,7 +201,12 @@ def generate_project(  # noqa: PLR0913
     mcp_endpoint: str,
     *,
     strict: bool,
+    on_mapping_error: ErrorMode | None = None,
+    on_schema_error: ErrorMode | None = None,
 ) -> None:
+    resolved_mapping_error_mode = resolve_error_mode(on_mapping_error, strict=strict)
+    resolved_schema_error_mode = resolve_error_mode(on_schema_error, strict=strict)
+
     logger.info(
         "Starting MCP server generation...",
         extra={
@@ -206,6 +220,8 @@ def generate_project(  # noqa: PLR0913
                 "port": port,
                 "mcp_endpoint": mcp_endpoint,
                 "strict": strict,
+                "on_mapping_error": resolved_mapping_error_mode,
+                "on_schema_error": resolved_schema_error_mode,
             },
         },
     )
@@ -224,7 +240,12 @@ def generate_project(  # noqa: PLR0913
             raise click.UsageError("--mcp-endpoint must start with '/'.")
 
     logger.info("Mapping OpenAPI paths to MCP tools...")
-    mapper = Mapper(spec=spec, strict=strict)
+    mapper = Mapper(
+        spec=spec,
+        strict=strict,
+        on_mapping_error=resolved_mapping_error_mode,
+        on_schema_error=resolved_schema_error_mode,
+    )
     mcp_tools = mapper.map_tools()
     logger.info("Mapped %d tools.", len(mcp_tools))
     _raise_if_no_tools_mapped(mcp_tools)
@@ -251,6 +272,8 @@ def generate_project(  # noqa: PLR0913
         mapper=mapper,
         strict=strict,
         transport=transport,
+        on_mapping_error=resolved_mapping_error_mode,
+        on_schema_error=resolved_schema_error_mode,
     )
     _write_generation_report(output_dir=output_dir, report=generation_report)
     logger.info("File generation complete.")
@@ -269,6 +292,8 @@ def generate(  # noqa: PLR0913
     mcp_endpoint: str,
     *,
     strict: bool,
+    on_mapping_error: str | None,
+    on_schema_error: str | None,
 ) -> None:
     """Generates a Node.js/TypeScript MCP server from an OpenAPI specification."""
     try:
@@ -282,6 +307,8 @@ def generate(  # noqa: PLR0913
             port=port,
             mcp_endpoint=mcp_endpoint,
             strict=strict,
+            on_mapping_error=on_mapping_error,
+            on_schema_error=on_schema_error,
         )
         logger.info("MCP server generation successful.")
         print_success_panel(
@@ -294,7 +321,7 @@ def generate(  # noqa: PLR0913
     except NoToolsMappedError as exc:
         click.echo(str(exc))
         return
-    except SpecLoaderError, MappingError, GenerationError:
+    except SpecLoaderError, MappingError, GenerationError, SchemaError:
         logger.exception("Generation failed")
         sys.exit(1)
     except Exception as e:
