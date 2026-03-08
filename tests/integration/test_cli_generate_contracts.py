@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import TYPE_CHECKING
 
 import pytest
@@ -10,6 +11,10 @@ from openapi_to_mcp.cli import cli
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+def _normalize_output(text: str) -> str:
+    return " ".join(re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text).split())
 
 
 @pytest.fixture
@@ -75,6 +80,6 @@ def test_generate_rejects_invalid_streamable_endpoint_cleanly(
     )
 
     assert result.exit_code != 0
-    assert "--mcp-endpoint must start with '/'" in result.output
+    assert "--mcp-endpoint must start with '/'" in _normalize_output(result.output)
     assert "Traceback" not in result.output
     assert not (output_dir / "generation_report.json").exists()
