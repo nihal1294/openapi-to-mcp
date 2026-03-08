@@ -16,6 +16,16 @@ def resolve_ref(ref: str, full_spec: dict) -> dict:
     return handler.resolve_ref(ref)
 
 
+def _contains_internal_marker(schema: dict[str, Any]) -> bool:
+    """Check whether converted output leaked internal cycle markers."""
+    if "_is_cyclic_reference" in schema:
+        return True
+    for value in schema.values():
+        if isinstance(value, dict) and _contains_internal_marker(value):
+            return True
+    return False
+
+
 SAMPLE_FULL_SPEC: dict[str, Any] = {
     "openapi": "3.0.0",
     "info": {"title": "Test API", "version": "1.0"},
@@ -40,6 +50,13 @@ SAMPLE_FULL_SPEC: dict[str, Any] = {
             "ArrayOfSimple": {
                 "type": "array",
                 "items": {"$ref": "#/components/schemas/SimpleObject"},
+            },
+            "ObjectWithSiblingRefs": {
+                "type": "object",
+                "properties": {
+                    "primary": {"$ref": "#/components/schemas/SimpleObject"},
+                    "secondary": {"$ref": "#/components/schemas/SimpleObject"},
+                },
             },
             "NullableString": {
                 "type": "string",
@@ -256,6 +273,29 @@ def test_schema_conversion_array_ref() -> None:
     assert openapi_schema_to_json_schema(openapi_schema, SAMPLE_FULL_SPEC) == expected
 
 
+def test_schema_conversion_sibling_refs_do_not_trigger_false_cycle() -> None:
+    """Test that sibling refs are converted independently without false cycles."""
+    openapi_schema = SAMPLE_FULL_SPEC["components"]["schemas"]["ObjectWithSiblingRefs"]
+    result = openapi_schema_to_json_schema(openapi_schema, SAMPLE_FULL_SPEC)
+
+    expected_ref = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "integer", "format": "int64"},
+            "name": {"type": "string", "description": "Object name"},
+        },
+        "required": ["id"],
+        "description": "(from ref: #/components/schemas/SimpleObject)",
+    }
+
+    assert result == {
+        "type": "object",
+        "properties": {"primary": expected_ref, "secondary": expected_ref},
+        "required": [],
+    }
+    assert not _contains_internal_marker(result)
+
+
 def test_schema_conversion_cycle_detection() -> None:
     """Test that cyclic references are detected and handled."""
     openapi_schema = {"$ref": "#/components/schemas/CyclicA"}
@@ -264,8 +304,11 @@ def test_schema_conversion_cycle_detection() -> None:
     assert "description" in result
     assert result["description"] == "(from ref: #/components/schemas/CyclicA)"
 
-    def contains_cyclic_reference(schema: dict) -> bool:
-        if "_is_cyclic_reference" in schema:
+    def contains_cyclic_reference(schema: dict[str, Any]) -> bool:
+        description = schema.get("description")
+        if isinstance(description, str) and description.startswith(
+            "Cyclic reference detected:"
+        ):
             return True
         for value in schema.values():
             if isinstance(value, dict) and contains_cyclic_reference(value):
@@ -273,6 +316,19 @@ def test_schema_conversion_cycle_detection() -> None:
         return False
 
     assert contains_cyclic_reference(result)
+    assert not _contains_internal_marker(result)
+
+
+def test_schema_converter_mismatched_pop_clears_stack() -> None:
+    """Test mismatched ref pops reset the active ref stack deterministically."""
+    converter = SchemaConverter(SAMPLE_FULL_SPEC)
+    converter.push_ref("#/components/schemas/CyclicA")
+    converter.push_ref("#/components/schemas/CyclicB")
+
+    converter.pop_ref("#/components/schemas/CyclicA")
+
+    assert not converter.is_ref_on_stack("#/components/schemas/CyclicA")
+    assert not converter.is_ref_on_stack("#/components/schemas/CyclicB")
 
 
 def test_schema_conversion_invalid_input() -> None:

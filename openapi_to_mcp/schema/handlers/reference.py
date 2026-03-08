@@ -5,18 +5,16 @@ from typing import Any
 
 import requests.utils
 
-from openapi_to_mcp.schema.handlers.base import SchemaConverterProtocol, SchemaHandler
+from openapi_to_mcp.schema.handlers.base import (
+    INTERNAL_CYCLIC_REFERENCE_MARKER,
+    SchemaHandler,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class ReferenceHandler(SchemaHandler):
     """Handler for $ref schema references."""
-
-    def __init__(self, converter: SchemaConverterProtocol) -> None:
-        """Initialize the handler."""
-        super().__init__(converter)
-        self.visited_refs: set[str] = set()
 
     def can_handle(self, schema: dict[str, Any]) -> bool:
         """Check if this handler can process the given schema."""
@@ -32,54 +30,70 @@ class ReferenceHandler(SchemaHandler):
         """
         ref_path = openapi_schema["$ref"]
 
-        if ref_path in self.visited_refs:
+        if self.converter.is_ref_on_stack(ref_path):
             logger.warning(
                 "Cyclic reference detected: %s. Returning placeholder.", ref_path
             )
             json_schema.update(
                 {"description": f"Cyclic reference detected: {ref_path}"}
             )
-            json_schema["_is_cyclic_reference"] = True
+            json_schema[INTERNAL_CYCLIC_REFERENCE_MARKER] = True
             return
 
-        self.visited_refs.add(ref_path)
+        self.converter.push_ref(ref_path)
+        try:
+            resolved_schema = self.resolve_ref(ref_path)
 
-        resolved_schema = self.resolve_ref(ref_path)
-
-        if isinstance(resolved_schema, dict) and resolved_schema.get(
-            "description", ""
-        ).startswith(("Unresolved reference:", "Resolved reference is not an object:")):
-            json_schema.update(resolved_schema)
-            return
-
-        result = self.converter.convert(resolved_schema)
-
-        if isinstance(result, dict):
-            is_recursive_error = result.get("description", "").startswith(
-                (
-                    "Unresolved reference:",
-                    "Cyclic reference detected:",
-                    "Resolved reference is not an object:",
-                )
-            )
-
-            if result.get("_is_cyclic_reference") is True:
-                json_schema["_is_cyclic_reference"] = True
-
-            if is_recursive_error:
-                json_schema.update(result)
+            if self._is_resolution_error(resolved_schema):
+                json_schema.update(resolved_schema)
                 return
 
-        json_schema.update(result)
+            result = self.converter.convert(
+                resolved_schema, include_internal_markers=True
+            )
+            recursive_error = self._is_recursive_error(result)
+            propagated_cycle = bool(result.pop(INTERNAL_CYCLIC_REFERENCE_MARKER, False))
+            json_schema.update(result)
+            if propagated_cycle:
+                json_schema[INTERNAL_CYCLIC_REFERENCE_MARKER] = True
+            if recursive_error:
+                return
+            self._add_ref_description(openapi_schema, json_schema, ref_path)
+        finally:
+            self.converter.pop_ref(ref_path)
 
-        if "description" not in json_schema:
-            original_ref_desc = openapi_schema.get("description")
-            if original_ref_desc:
-                json_schema["description"] = (
-                    f"{original_ref_desc} (from ref: {ref_path})"
-                )
-            else:
-                json_schema["description"] = f"(from ref: {ref_path})"
+    def _is_resolution_error(self, resolved_schema: dict[str, Any]) -> bool:
+        """Check whether ref resolution returned an error payload."""
+        return resolved_schema.get("description", "").startswith(
+            ("Unresolved reference:", "Resolved reference is not an object:")
+        )
+
+    def _is_recursive_error(self, result: dict[str, Any]) -> bool:
+        """Check whether recursive conversion returned an error payload."""
+        return result.get("description", "").startswith(
+            (
+                "Unresolved reference:",
+                "Cyclic reference detected:",
+                "Resolved reference is not an object:",
+            )
+        )
+
+    def _add_ref_description(
+        self,
+        openapi_schema: dict[str, Any],
+        json_schema: dict[str, Any],
+        ref_path: str,
+    ) -> None:
+        """Attach a ref-derived description when one is missing."""
+        if "description" in json_schema:
+            return
+
+        original_ref_desc = openapi_schema.get("description")
+        if original_ref_desc:
+            json_schema["description"] = f"{original_ref_desc} (from ref: {ref_path})"
+            return
+
+        json_schema["description"] = f"(from ref: {ref_path})"
 
     def resolve_ref(self, ref: str) -> dict[str, Any]:
         """

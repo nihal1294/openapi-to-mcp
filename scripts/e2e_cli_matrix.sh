@@ -42,6 +42,21 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 PY
 }
 
+write_duplicate_operation_spec() {
+  local path="$1"
+  cat >"$path" <<'EOF'
+{
+  "openapi": "3.0.0",
+  "info": {"title": "Generated Name Collision API", "version": "1.0.0"},
+  "servers": [{"url": "https://example.com/api"}],
+  "paths": {
+    "/a-b": {"get": {"summary": "Dash path", "responses": {"200": {"description": "OK"}}}},
+    "/a_b": {"get": {"summary": "Underscore path", "responses": {"200": {"description": "OK"}}}}
+  }
+}
+EOF
+}
+
 strip_ansi() {
   python3 -c '
 import re
@@ -141,9 +156,21 @@ assert_failure_contains() {
   status="$?"
   set -e
   cleaned="$(printf '%s' "$output" | strip_ansi)"
-  printf '%s\n' "$output"
-  [[ "$status" -ne 0 ]] || { echo "Expected command to fail" >&2; exit 1; }
-  grep -Fq -- "$expected" <<<"$cleaned" || { echo "Expected failure output to contain: $expected" >&2; exit 1; }
+  if [[ "$status" -eq 0 ]]; then
+    printf '%s\n' "$output"
+    echo "Expected command to fail" >&2
+    exit 1
+  fi
+  if ! grep -Fq -- "$expected" <<<"$cleaned"; then
+    printf '%s\n' "$output"
+    echo "Expected failure output to contain: $expected" >&2
+    exit 1
+  fi
+  if [[ "${E2E_VERBOSE:-0}" == "1" ]]; then
+    printf '%s\n' "$output"
+  else
+    echo "Verified expected failure: $expected"
+  fi
 }
 
 generate_server() {
@@ -194,6 +221,8 @@ start_run_command() {
 trap cleanup EXIT
 
 main() {
+  local duplicate_spec="${TMP_ROOT}/duplicate-operation-spec.json"
+  local duplicate_output_dir="${TMP_ROOT}/generated-duplicate-fail"
   ensure_command uv; ensure_command npm; ensure_command node; ensure_command python3; ensure_command curl
   mkdir -p "$TMP_ROOT"
   MOCK_API_PORT="${MOCK_API_PORT:-$(choose_free_port "$MOCK_API_HOST")}"
@@ -227,6 +256,8 @@ main() {
 
   assert_failure_contains "--server-cmd is required for stdio transport" uv run openapi-to-mcp test-server --transport stdio --list-tools
   assert_failure_contains "TARGET_API_BASE_URL is unresolved" uv run openapi-to-mcp run --openapi-json "$BASIC_OPENAPI_SPEC"
+  write_duplicate_operation_spec "$duplicate_spec"
+  assert_failure_contains "Duplicate tool name detected" uv run openapi-to-mcp generate --openapi-json "$duplicate_spec" --output-dir "$duplicate_output_dir" --no-strict --on-mapping-error fail
 
   start_run_command "${TMP_ROOT}/run.log"
   assert_output_contains "testConversionTool" uv run openapi-to-mcp test-server --transport streamable-http --host "$HTTP_HOST" --port "$RUN_HTTP_PORT" --mcp-endpoint "$MCP_ENDPOINT" --list-tools

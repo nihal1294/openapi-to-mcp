@@ -4,7 +4,7 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import rich_click as click
 
@@ -15,10 +15,14 @@ from openapi_to_mcp.common.exceptions import (
     GenerationError,
     MappingError,
     NoToolsMappedError,
+    SchemaError,
     SpecLoaderError,
 )
 from openapi_to_mcp.common.terminal import print_success_panel
 from openapi_to_mcp.mapping import Mapper
+
+if TYPE_CHECKING:
+    from openapi_to_mcp.common.error_policy import ErrorMode
 
 logger = logging.getLogger(__name__)
 
@@ -152,16 +156,17 @@ def _derive_auth_env_vars(mcp_tools: list[dict[str, Any]]) -> list[str]:
 
 
 def _build_generation_report(
-    mapper: Mapper, *, strict: bool, transport: str
+    mapper: Mapper,
+    *,
+    strict: bool,
+    transport: str,
 ) -> dict[str, Any]:
     """Build generation diagnostics report."""
     mapper_report = mapper.get_report()
     return {
         "strict_mode": strict,
         "transport": transport,
-        "mapped_tools": mapper_report.get("mapped_tools", 0),
-        "skipped_operations": mapper_report.get("skipped_operations", []),
-        "warnings": mapper_report.get("warnings", []),
+        **mapper_report,
     }
 
 
@@ -192,6 +197,8 @@ def generate_project(  # noqa: PLR0913
     mcp_endpoint: str,
     *,
     strict: bool,
+    on_mapping_error: ErrorMode | None = None,
+    on_schema_error: ErrorMode | None = None,
 ) -> None:
     logger.info(
         "Starting MCP server generation...",
@@ -206,6 +213,8 @@ def generate_project(  # noqa: PLR0913
                 "port": port,
                 "mcp_endpoint": mcp_endpoint,
                 "strict": strict,
+                "on_mapping_error": on_mapping_error,
+                "on_schema_error": on_schema_error,
             },
         },
     )
@@ -224,7 +233,12 @@ def generate_project(  # noqa: PLR0913
             raise click.UsageError("--mcp-endpoint must start with '/'.")
 
     logger.info("Mapping OpenAPI paths to MCP tools...")
-    mapper = Mapper(spec=spec, strict=strict)
+    mapper = Mapper(
+        spec=spec,
+        strict=strict,
+        on_mapping_error=on_mapping_error,
+        on_schema_error=on_schema_error,
+    )
     mcp_tools = mapper.map_tools()
     logger.info("Mapped %d tools.", len(mcp_tools))
     _raise_if_no_tools_mapped(mcp_tools)
@@ -269,6 +283,8 @@ def generate(  # noqa: PLR0913
     mcp_endpoint: str,
     *,
     strict: bool,
+    on_mapping_error: str | None,
+    on_schema_error: str | None,
 ) -> None:
     """Generates a Node.js/TypeScript MCP server from an OpenAPI specification."""
     try:
@@ -282,6 +298,8 @@ def generate(  # noqa: PLR0913
             port=port,
             mcp_endpoint=mcp_endpoint,
             strict=strict,
+            on_mapping_error=on_mapping_error,
+            on_schema_error=on_schema_error,
         )
         logger.info("MCP server generation successful.")
         print_success_panel(
@@ -294,9 +312,8 @@ def generate(  # noqa: PLR0913
     except NoToolsMappedError as exc:
         click.echo(str(exc))
         return
-    except SpecLoaderError, MappingError, GenerationError:
-        logger.exception("Generation failed")
-        sys.exit(1)
+    except (SpecLoaderError, MappingError, GenerationError, SchemaError) as exc:
+        raise click.ClickException(str(exc)) from exc
     except Exception as e:
         logger.critical("An unexpected critical error occurred: %s", e, exc_info=True)
         sys.exit(1)

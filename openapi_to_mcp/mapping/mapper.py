@@ -3,7 +3,8 @@
 import logging
 from typing import Any
 
-from openapi_to_mcp.common import MappingError
+from openapi_to_mcp.common import MappingError, SchemaError
+from openapi_to_mcp.common.error_policy import ErrorMode, resolve_error_mode
 from openapi_to_mcp.mapping.utils import generate_tool_name
 from openapi_to_mcp.schema.converter import (
     SchemaConverter,
@@ -17,7 +18,14 @@ logger = logging.getLogger(__name__)
 class Mapper:
     """Maps OpenAPI operations to MCP tool definitions."""
 
-    def __init__(self, spec: dict[str, Any], *, strict: bool = True) -> None:
+    def __init__(
+        self,
+        spec: dict[str, Any],
+        *,
+        strict: bool = True,
+        on_mapping_error: ErrorMode | None = None,
+        on_schema_error: ErrorMode | None = None,
+    ) -> None:
         """
         Initialize the mapper with the loaded OpenAPI spec.
 
@@ -33,7 +41,8 @@ class Mapper:
             raise MappingError(err_msg)
         self.spec = spec
         self.strict = strict
-        self._schema_converter = SchemaConverter(spec)
+        self.on_mapping_error = resolve_error_mode(on_mapping_error, strict=strict)
+        self.on_schema_error = resolve_error_mode(on_schema_error, strict=strict)
         self.mcp_tools: list[dict[str, Any]] = []
         self._diagnostics: list[str] = []
         self._skipped_operations: list[dict[str, str]] = []
@@ -94,19 +103,12 @@ class Mapper:
                         merged_parameters,
                     )
                     self.mcp_tools.append(tool_definition)
-                except Exception as exc:
-                    message = f"Failed to map operation {method.upper()} {path}: {exc}"
-                    if self.strict:
-                        raise MappingError(message) from exc
-                    logger.exception(message)
-                    self._diagnostics.append(message)
-                    self._skipped_operations.append(
-                        {
-                            "method": method.upper(),
-                            "path": path,
-                            "reason": str(exc),
-                        }
-                    )
+                except SchemaError as exc:
+                    self._handle_schema_error(method, path, exc)
+                except MappingError as exc:
+                    self._handle_mapping_error(method, path, exc)
+                except Exception as exc:  # noqa: BLE001
+                    self._handle_mapping_error(method, path, exc)
 
         return self.mcp_tools
 
@@ -114,13 +116,43 @@ class Mapper:
         """Get mapper warnings and skipped operations for generation report."""
         return {
             "mapped_tools": len(self.mcp_tools),
+            "on_mapping_error": self.on_mapping_error,
+            "on_schema_error": self.on_schema_error,
             "warnings": self._diagnostics,
             "skipped_operations": self._skipped_operations,
         }
 
+    def _handle_mapping_error(self, method: str, path: str, exc: Exception) -> None:
+        """Handle non-schema mapping failures according to the configured policy."""
+        message = f"Failed to map operation {method.upper()} {path}: {exc}"
+        if self.on_mapping_error == "fail":
+            raise MappingError(message) from exc
+        self._record_skipped_operation(method, path, str(exc), message)
+
+    def _handle_schema_error(self, method: str, path: str, exc: SchemaError) -> None:
+        """Handle schema-conversion failures according to the configured policy."""
+        message = f"Schema error while mapping operation {method.upper()} {path}: {exc}"
+        if self.on_schema_error == "fail":
+            raise SchemaError(message) from exc
+        self._record_skipped_operation(method, path, str(exc), message)
+
+    def _record_skipped_operation(
+        self, method: str, path: str, reason: str, message: str
+    ) -> None:
+        """Record a skipped operation and its diagnostic message."""
+        logger.warning(message)
+        self._diagnostics.append(message)
+        self._skipped_operations.append(
+            {
+                "method": method.upper(),
+                "path": path,
+                "reason": reason,
+            }
+        )
+
     def _resolve_ref(self, ref: str) -> dict[str, Any]:
         """
-        Resolve a reference using the schema converter's reference handler.
+        Resolve a reference using a converter dedicated to ref traversal.
 
         Args:
             ref: The reference string to resolve.
@@ -128,7 +160,7 @@ class Mapper:
         Returns:
             The resolved schema dictionary.
         """
-        ref_handler = ReferenceHandler(self._schema_converter)
+        ref_handler = ReferenceHandler(SchemaConverter(self.spec))
         return ref_handler.resolve_ref(ref)
 
     def _normalize_security_requirements(
@@ -255,8 +287,8 @@ class Mapper:
             )
             return candidate_name
 
-        if self.strict:
-            err_msg = f"Duplicate tool name detected in strict mode: {candidate_name}"
+        if self.on_mapping_error == "fail":
+            err_msg = f"Duplicate tool name detected: {candidate_name}"
             raise MappingError(err_msg)
 
         count = self._tool_name_counts.get(candidate_name, 1)
@@ -307,7 +339,7 @@ class Mapper:
 
             param_schema_openapi = param.get("schema", {})
             param_schema_json = openapi_schema_to_json_schema(
-                param_schema_openapi, self.spec
+                param_schema_openapi, self.spec, raise_on_error=True
             )
 
             if "description" in param:
@@ -378,7 +410,7 @@ class Mapper:
 
         if primary_content_type and isinstance(body_schema_openapi, dict):
             body_schema_json = openapi_schema_to_json_schema(
-                body_schema_openapi, self.spec
+                body_schema_openapi, self.spec, raise_on_error=True
             )
             input_schema["properties"]["requestBody"] = body_schema_json
             if request_body.get("required", False):

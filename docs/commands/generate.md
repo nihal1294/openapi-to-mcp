@@ -21,6 +21,8 @@ openapi-to-mcp generate [OPTIONS]
 | `--port`, `-p` | No | `8080` | Port for `streamable-http` |
 | `--mcp-endpoint` | No | `/mcp` | HTTP MCP endpoint path |
 | `--strict/--no-strict` | No | `--strict` | Fail or degrade on unsupported required behavior |
+| `--on-mapping-error` | No | strict=`fail`, non-strict=`skip` | How to handle non-schema operation mapping failures |
+| `--on-schema-error` | No | strict=`fail`, non-strict=`skip` | How to handle schema conversion failures while mapping operations |
 
 ## Examples
 
@@ -56,6 +58,25 @@ openapi-to-mcp generate \
 
 Use non-strict mode only when you accept degraded generation plus warnings in `generation_report.json`.
 
+### Explicitly skip mapping failures in strict mode
+
+```bash
+openapi-to-mcp generate \
+  --openapi-json ./openapi.yaml \
+  --output-dir ./generated-partial \
+  --on-mapping-error skip
+```
+
+### Explicitly fail on schema errors in non-strict mode
+
+```bash
+openapi-to-mcp generate \
+  --openapi-json ./openapi.yaml \
+  --output-dir ./generated-strict-schema \
+  --no-strict \
+  --on-schema-error fail
+```
+
 ## Generated artifacts
 
 `generate` writes:
@@ -73,6 +94,7 @@ The report captures:
 - `strict_mode`
 - selected `transport`
 - mapped tool count
+- resolved `on_mapping_error` and `on_schema_error` modes
 - skipped operations
 - warnings
 

@@ -14,6 +14,7 @@ from openapi_to_mcp.common.exceptions import (
     GenerationError,
     MappingError,
     NoToolsMappedError,
+    SchemaError,
     SpecLoaderError,
 )
 from openapi_to_mcp.common.terminal import print_section, print_success_panel
@@ -120,6 +121,8 @@ def run_server(  # noqa: PLR0913
     mcp_endpoint: str,
     *,
     strict: bool,
+    on_mapping_error: str | None,
+    on_schema_error: str | None,
     target_api_base_url: str | None,
     env_source: str | None,
 ) -> None:
@@ -140,6 +143,8 @@ def run_server(  # noqa: PLR0913
             port=port,
             mcp_endpoint=mcp_endpoint,
             strict=strict,
+            on_mapping_error=on_mapping_error,
+            on_schema_error=on_schema_error,
         )
         runtime_env = _prepare_runtime_env(output_path, target_api_base_url, env_source)
         print_section("Installing generated server dependencies")
@@ -162,6 +167,7 @@ def run_server(  # noqa: PLR0913
         GenerationError,
         MappingError,
         NoToolsMappedError,
+        SchemaError,
         SpecLoaderError,
         ValueError,
     ) as exc:

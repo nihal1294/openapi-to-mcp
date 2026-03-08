@@ -29,6 +29,8 @@ openapi-to-mcp run [OPTIONS]
 | `--port`, `-p` | No | `8080` | Port for `streamable-http` |
 | `--mcp-endpoint` | No | `/mcp` | HTTP MCP endpoint path |
 | `--strict/--no-strict` | No | `--strict` | Same generation mode as `generate` |
+| `--on-mapping-error` | No | strict=`fail`, non-strict=`skip` | How to handle non-schema operation mapping failures during generation |
+| `--on-schema-error` | No | strict=`fail`, non-strict=`skip` | How to handle schema conversion failures during generation |
 | `--target-api-base-url` | No | None | Override `TARGET_API_BASE_URL` explicitly |
 | `--env-source` | No | None | Runtime env values as JSON string or path to `.json` or `.env` |
 
@@ -57,6 +59,15 @@ openapi-to-mcp run \
 openapi-to-mcp run \
   --openapi-json ./openapi.yaml \
   --env-source '{"TARGET_API_BASE_URL":"https://example.com/api"}'
+```
+
+### Keep going on mapping failures while staying strict elsewhere
+
+```bash
+openapi-to-mcp run \
+  --openapi-json ./openapi.yaml \
+  --on-mapping-error skip \
+  --target-api-base-url https://example.com/api
 ```
 
 ## `--env-source` formats
