@@ -121,6 +121,7 @@ def run_server(  # noqa: PLR0913
     mcp_endpoint: str,
     *,
     strict: bool,
+    runtime_validation: str,
     on_mapping_error: str | None,
     on_schema_error: str | None,
     target_api_base_url: str | None,
@@ -143,6 +144,7 @@ def run_server(  # noqa: PLR0913
             port=port,
             mcp_endpoint=mcp_endpoint,
             strict=strict,
+            runtime_validation=runtime_validation,
             on_mapping_error=on_mapping_error,
             on_schema_error=on_schema_error,
         )
