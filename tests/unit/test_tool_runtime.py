@@ -81,3 +81,19 @@ def test_derive_auth_env_vars_reads_runtime_registry_security() -> None:
         "AUTH_OAUTH2AUTH_TOKEN",
         "AUTH_OIDCAUTH_TOKEN",
     ]
+
+
+def test_derive_auth_env_vars_ignores_malformed_scheme_metadata() -> None:
+    runtime_tools = {
+        "badMap": {"securitySchemes": []},
+        "mixed": {
+            "securitySchemes": {
+                123: {"type": "apiKey"},
+                "Good Auth": {"type": "apiKey"},
+                "!!!": {"type": "apiKey"},
+                "Broken": "nope",
+            }
+        },
+    }
+
+    assert derive_auth_env_vars(runtime_tools) == ["AUTH_GOOD_AUTH_API_KEY"]
