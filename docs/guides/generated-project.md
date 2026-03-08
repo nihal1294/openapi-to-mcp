@@ -39,6 +39,8 @@ SSE generation is intentionally gone.
 - bounded concurrency and queue controls
 - tool timeout with abort propagation
 - streamable HTTP host and origin allowlist handling
+- object-shaped response schemas emitted as MCP `outputSchema`
+- structured JSON object results returned as `structuredContent`
 
 ## `generation_report.json`
 
@@ -49,12 +51,3 @@ Use the report to check:
 - mapped tool count
 - skipped operations
 - warnings emitted during generation
-
-## Next runtime direction
-
-The current P1 direction for generated projects is:
-
-1. cleaner module boundaries,
-2. output schema support,
-3. runtime validation toggles,
-4. clearer separation between public MCP tool fields and internal metadata.

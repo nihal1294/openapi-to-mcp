@@ -5,6 +5,7 @@ from typing import Any
 
 from openapi_to_mcp.common import MappingError, SchemaError
 from openapi_to_mcp.common.error_policy import ErrorMode, resolve_error_mode
+from openapi_to_mcp.mapping.output_schema import extract_output_schema
 from openapi_to_mcp.mapping.utils import generate_tool_name
 from openapi_to_mcp.schema.converter import (
     SchemaConverter,
@@ -475,7 +476,7 @@ class Mapper:
         if "required" in input_schema:
             input_schema["required"] = sorted(set(input_schema["required"]))
 
-        return {
+        tool_definition = {
             "name": tool_name,
             "description": description,
             "inputSchema": input_schema,
@@ -486,3 +487,7 @@ class Mapper:
             "_original_security": security_requirements,
             "_original_security_schemes": security_schemes,
         }
+        output_schema = extract_output_schema(operation, self.spec, self._resolve_ref)
+        if output_schema:
+            tool_definition["outputSchema"] = output_schema
+        return tool_definition
