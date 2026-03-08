@@ -86,14 +86,23 @@ def test_generate_streamable_http_end_to_end(runner: CliRunner, tmp_path: Path) 
     assert (output_dir / "package.json").exists()
     assert (output_dir / "src" / "transport.ts").exists()
     assert (output_dir / "generation_report.json").exists()
+    assert (output_dir / "src" / "runtime" / "generated.ts").exists()
+    assert (output_dir / "src" / "runtime" / "executor.ts").exists()
 
     transport_source = (output_dir / "src" / "transport.ts").read_text(encoding="utf-8")
     server_source = (output_dir / "src" / "server.ts").read_text(encoding="utf-8")
+    generated_source = (output_dir / "src" / "runtime" / "generated.ts").read_text(
+        encoding="utf-8"
+    )
+    serialization_source = (
+        output_dir / "src" / "runtime" / "serialization.ts"
+    ).read_text(encoding="utf-8")
     assert "StreamableHTTPServerTransport" in transport_source
     assert "SSEServerTransport" not in transport_source
-    assert "encodeURIComponent" in server_source
-    assert "_original_" not in server_source
-    assert "const toolRuntimeData = {" in server_source
+    assert "encodeURIComponent" in serialization_source
+    assert "_original_" not in generated_source
+    assert "const toolRuntimeData = {" in generated_source
+    assert "new ToolExecutor()" in server_source
     assert "extractHostFromHeaderValue" in transport_source
     assert "first.split(':')[0]" not in transport_source
     assert "process.once('SIGINT'" in server_source
@@ -213,8 +222,10 @@ def test_generate_no_strict_generated_name_collision_dedupes_and_reports(
         output_dir / ".env.example"
     ).read_text(encoding="utf-8")
 
-    server_source = (output_dir / "src" / "server.ts").read_text(encoding="utf-8")
-    assert "get_a_b_2" in server_source
+    generated_source = (output_dir / "src" / "runtime" / "generated.ts").read_text(
+        encoding="utf-8"
+    )
+    assert "get_a_b_2" in generated_source
 
 
 def test_generate_no_strict_generated_name_collision_with_mapping_fail_exits(

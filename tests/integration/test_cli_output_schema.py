@@ -67,7 +67,12 @@ def test_generate_emits_output_schema_and_structured_result_helper(
     )
 
     assert result.exit_code == 0
-    server_source = (output_dir / "src" / "server.ts").read_text(encoding="utf-8")
-    assert '"outputSchema": {' in server_source
-    assert "function buildToolSuccessResult(" in server_source
-    assert "structuredContent: responseData" in server_source
+    generated_source = (output_dir / "src" / "runtime" / "generated.ts").read_text(
+        encoding="utf-8"
+    )
+    response_source = (output_dir / "src" / "runtime" / "response.ts").read_text(
+        encoding="utf-8"
+    )
+    assert '"outputSchema": {' in generated_source
+    assert "function buildToolSuccessResult(" in response_source
+    assert "structuredContent: responseData" in response_source
