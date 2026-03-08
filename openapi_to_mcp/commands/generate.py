@@ -19,6 +19,11 @@ from openapi_to_mcp.common.exceptions import (
     SpecLoaderError,
 )
 from openapi_to_mcp.common.terminal import print_success_panel
+from openapi_to_mcp.common.tool_runtime import (
+    build_public_tools,
+    build_runtime_tool_registry,
+    derive_auth_env_vars,
+)
 from openapi_to_mcp.mapping import Mapper
 
 if TYPE_CHECKING:
@@ -103,7 +108,8 @@ def _prepare_template_context(  # noqa: PLR0913
     mcp_endpoint: str,
     *,
     strict: bool,
-    mcp_tools: list[dict[str, Any]],
+    public_tools: list[dict[str, Any]],
+    runtime_tools: dict[str, dict[str, Any]],
     auth_env_vars: list[str],
 ) -> dict[str, Any]:
     """Prepares the context dictionary for Jinja2 rendering."""
@@ -120,39 +126,12 @@ def _prepare_template_context(  # noqa: PLR0913
         "port": port,
         "mcp_endpoint": mcp_endpoint,
         "strict": strict,
-        "tools": mcp_tools,
+        "tools": public_tools,
+        "runtime_tools": runtime_tools,
         "auth_env_vars": auth_env_vars,
         "api_base_url_comment": api_base_url,
         "server_description": spec_info.get("description", ""),
     }
-
-
-def _derive_auth_env_vars(mcp_tools: list[dict[str, Any]]) -> list[str]:
-    """Collect auth-related env variable names required by mapped tools."""
-    env_vars: set[str] = set()
-    for tool in mcp_tools:
-        security_schemes = tool.get("_original_security_schemes", {})
-        if not isinstance(security_schemes, dict):
-            continue
-        for scheme_name, scheme_def in security_schemes.items():
-            if not isinstance(scheme_name, str) or not isinstance(scheme_def, dict):
-                continue
-            normalized = "".join(
-                c if c.isalnum() else "_" for c in scheme_name.upper()
-            ).strip("_")
-            normalized = "_".join(part for part in normalized.split("_") if part)
-            if not normalized:
-                continue
-            scheme_type = str(scheme_def.get("type", "")).lower()
-            http_scheme = str(scheme_def.get("scheme", "")).lower()
-            if scheme_type == "apikey":
-                env_vars.add(f"AUTH_{normalized}_API_KEY")
-            elif (scheme_type == "http" and http_scheme == "bearer") or scheme_type in {
-                "oauth2",
-                "openidconnect",
-            }:
-                env_vars.add(f"AUTH_{normalized}_TOKEN")
-    return sorted(env_vars)
 
 
 def _build_generation_report(
@@ -242,8 +221,10 @@ def generate_project(  # noqa: PLR0913
     mcp_tools = mapper.map_tools()
     logger.info("Mapped %d tools.", len(mcp_tools))
     _raise_if_no_tools_mapped(mcp_tools)
+    public_tools = build_public_tools(mcp_tools)
+    runtime_tools = build_runtime_tool_registry(mcp_tools)
 
-    auth_env_vars = _derive_auth_env_vars(mcp_tools)
+    auth_env_vars = derive_auth_env_vars(runtime_tools)
     logger.debug("Preparing template context.")
     template_context = _prepare_template_context(
         spec=spec,
@@ -254,7 +235,8 @@ def generate_project(  # noqa: PLR0913
         port=port,
         mcp_endpoint=mcp_endpoint,
         strict=strict,
-        mcp_tools=mcp_tools,
+        public_tools=public_tools,
+        runtime_tools=runtime_tools,
         auth_env_vars=auth_env_vars,
     )
 

@@ -22,14 +22,13 @@ const MAX_QUEUE_SIZE = parseIntegerEnv('MCP_MAX_QUEUE_SIZE', 256);
 const QUEUE_TIMEOUT_MS = parseIntegerEnv('MCP_QUEUE_TIMEOUT_MS', 5000);
 const TOOL_TIMEOUT_MS = parseIntegerEnv('MCP_TOOL_TIMEOUT_MS', 30000);
 
-const toolRuntimeData = {{ tools | tojson(indent=2) }} as ToolRuntimeDefinition[];
-const tools: Tool[] = toolRuntimeData.map((tool) => ({
-  name: tool.name,
-  description: tool.description,
-  inputSchema: tool.inputSchema as Tool['inputSchema'],
-}));
-const toolRuntimeMap = new Map<string, ToolRuntimeDefinition>(
-  toolRuntimeData.map((tool) => [tool.name, tool])
+const tools = {{ tools | tojson(indent=2) }} as Tool[];
+const toolRuntimeData = {{ runtime_tools | tojson(indent=2) }} as Record<
+  string,
+  ToolRuntimeMetadata
+>;
+const toolRuntimeMap = new Map<string, ToolRuntimeMetadata>(
+  Object.entries(toolRuntimeData)
 );
 
 type ParameterLocation = 'path' | 'query' | 'header' | 'cookie';
@@ -55,16 +54,13 @@ interface SecuritySchemeDefinition {
   scheme?: string;
 }
 
-interface ToolRuntimeDefinition {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-  _original_method: Method;
-  _original_path: string;
-  _original_parameters: ToolParameterMetadata[];
-  _original_request_body: RequestBodyMetadata | null;
-  _original_security?: Array<Record<string, unknown>> | null;
-  _original_security_schemes?: Record<string, SecuritySchemeDefinition>;
+interface ToolRuntimeMetadata {
+  method: Method;
+  path: string;
+  parameters: ToolParameterMetadata[];
+  requestBody: RequestBodyMetadata | null;
+  security?: Array<Record<string, unknown>> | null;
+  securitySchemes?: Record<string, SecuritySchemeDefinition>;
 }
 
 interface ResolvedAuth {
@@ -394,9 +390,9 @@ function applyCookieParam(
   cookieValues[parameter.name] = stringifyValue(value);
 }
 
-function resolveAuthForTool(tool: ToolRuntimeDefinition): ResolvedAuth {
-  const securityRequirements = tool._original_security;
-  const securitySchemes = tool._original_security_schemes || {};
+function resolveAuthForTool(tool: ToolRuntimeMetadata): ResolvedAuth {
+  const securityRequirements = tool.security;
+  const securitySchemes = tool.securitySchemes || {};
 
   if (!securityRequirements) {
     return { ok: true, headers: {}, query: {}, cookies: {}, missing: [] };
@@ -618,13 +614,13 @@ export class OpenApiMcpServer {
         await perToolLimiter.acquire();
         acquiredPerTool = true;
 
-        let targetPath = tool._original_path;
+        let targetPath = tool.path;
         const queryParams: Record<string, unknown> = {};
         const headers: Record<string, string> = { Accept: 'application/json' };
         const cookieValues: Record<string, string> = {};
         let requestData: unknown;
 
-        for (const parameter of tool._original_parameters || []) {
+        for (const parameter of tool.parameters || []) {
           const paramName = parameter.name;
           const paramValue = args[paramName];
 
@@ -668,7 +664,7 @@ export class OpenApiMcpServer {
           }
         }
 
-        const requestBodyInfo = tool._original_request_body;
+        const requestBodyInfo = tool.requestBody;
         if (requestBodyInfo && args.requestBody !== undefined && args.requestBody !== null) {
           requestData = args.requestBody;
           headers['Content-Type'] = requestBodyInfo.content_type || 'application/json';
@@ -689,7 +685,7 @@ export class OpenApiMcpServer {
 
         try {
           const response = await this.axiosInstance.request({
-            method: tool._original_method,
+            method: tool.method,
             url: targetPath,
             params: queryParams,
             headers,
