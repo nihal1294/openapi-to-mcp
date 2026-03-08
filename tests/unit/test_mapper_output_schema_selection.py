@@ -1,8 +1,13 @@
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from openapi_to_mcp.common.exceptions import SchemaError
 from openapi_to_mcp.mapping.mapper import Mapper
 from openapi_to_mcp.mapping.output_schema import extract_output_schema
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def test_mapper_emits_output_schema_for_vendor_json_media_type() -> None:
@@ -96,7 +101,7 @@ def test_extract_output_schema_ignores_non_dict_ref_resolution() -> None:
 
 
 def test_extract_output_schema_handles_schema_conversion_failures(
-    monkeypatch: object,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     operation: dict[str, Any] = {
         "responses": {

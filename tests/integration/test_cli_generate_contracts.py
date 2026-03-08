@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import json
 import re
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
 from openapi_to_mcp.cli import cli
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _normalize_output(text: str) -> str:
@@ -62,6 +59,7 @@ def test_generate_prefills_swagger2_base_url(runner: CliRunner, tmp_path: Path) 
 def test_generate_rejects_invalid_streamable_endpoint_cleanly(
     runner: CliRunner, tmp_path: Path
 ) -> None:
+    spec_path = Path(__file__).resolve().parents[1] / "resources" / "test_openapi.yaml"
     output_dir = tmp_path / "generated"
 
     result = runner.invoke(
@@ -69,7 +67,7 @@ def test_generate_rejects_invalid_streamable_endpoint_cleanly(
         [
             "generate",
             "--openapi-json",
-            "tests/resources/test_openapi.yaml",
+            str(spec_path),
             "--output-dir",
             str(output_dir),
             "--transport",

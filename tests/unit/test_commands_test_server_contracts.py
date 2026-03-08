@@ -11,6 +11,8 @@ from openapi_to_mcp.cli import cli
 if TYPE_CHECKING:
     from unittest.mock import MagicMock
 
+    from pytest_mock import MockerFixture
+
 
 def _normalize_output(text: str) -> str:
     return " ".join(re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text).split())
@@ -22,7 +24,7 @@ def runner() -> CliRunner:
 
 
 @pytest.fixture
-def mock_execute_mcp_server(mocker: MagicMock) -> MagicMock:
+def mock_execute_mcp_server(mocker: MockerFixture) -> MagicMock:
     return mocker.patch("openapi_to_mcp.commands.test_server.execute_mcp_server")
 
 
