@@ -1,0 +1,77 @@
+export class QueueFullError extends Error {
+  constructor() {
+    super('Execution queue is full');
+    this.name = 'QueueFullError';
+  }
+}
+
+export class QueueTimeoutError extends Error {
+  constructor() {
+    super('Execution queue timeout exceeded');
+    this.name = 'QueueTimeoutError';
+  }
+}
+
+export class ConcurrencyLimiter {
+  private active = 0;
+  private queue: Array<{
+    resolve: () => void;
+    reject: (error: Error) => void;
+    timeoutHandle?: NodeJS.Timeout;
+  }> = [];
+
+  constructor(
+    private readonly maxActive: number,
+    private readonly maxQueueSize: number,
+    private readonly queueTimeoutMs: number
+  ) {}
+
+  async acquire(): Promise<void> {
+    if (this.maxActive <= 0) {
+      return;
+    }
+    if (this.active < this.maxActive) {
+      this.active += 1;
+      return;
+    }
+    if (this.queue.length >= this.maxQueueSize) {
+      throw new QueueFullError();
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const queued = {
+        resolve: () => {
+          this.active += 1;
+          resolve();
+        },
+        reject,
+        timeoutHandle: undefined as NodeJS.Timeout | undefined,
+      };
+      if (this.queueTimeoutMs > 0) {
+        queued.timeoutHandle = setTimeout(() => {
+          this.queue = this.queue.filter((entry) => entry !== queued);
+          reject(new QueueTimeoutError());
+        }, this.queueTimeoutMs);
+      }
+      this.queue.push(queued);
+    });
+  }
+
+  release(): void {
+    if (this.maxActive <= 0) {
+      return;
+    }
+    if (this.active > 0) {
+      this.active -= 1;
+    }
+
+    const next = this.queue.shift();
+    if (!next) {
+      return;
+    }
+    if (next.timeoutHandle) {
+      clearTimeout(next.timeoutHandle);
+    }
+    next.resolve();
+  }
+}

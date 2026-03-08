@@ -1,0 +1,42 @@
+export const PLACEHOLDER_BASE_URL = 'YOUR_API_BASE_URL_HERE';
+export const TARGET_API_BASE_URL = parseBaseUrlEnv();
+export const TARGET_API_AUTH_HEADER = process.env.TARGET_API_AUTH_HEADER;
+
+export const MAX_CONCURRENCY = parseIntegerEnv('MCP_MAX_CONCURRENCY', 32, 1);
+export const PER_TOOL_MAX_CONCURRENCY = parseIntegerEnv(
+  'MCP_PER_TOOL_MAX_CONCURRENCY',
+  8,
+  1
+);
+export const MAX_QUEUE_SIZE = parseIntegerEnv('MCP_MAX_QUEUE_SIZE', 256, 0);
+export const QUEUE_TIMEOUT_MS = parseIntegerEnv('MCP_QUEUE_TIMEOUT_MS', 5000, 0);
+export const TOOL_TIMEOUT_MS = parseIntegerEnv('MCP_TOOL_TIMEOUT_MS', 30000, 1);
+
+function parseBaseUrlEnv(): string {
+  const raw = process.env.TARGET_API_BASE_URL?.trim() || '';
+  if (!raw || raw === PLACEHOLDER_BASE_URL) {
+    throw new Error('TARGET_API_BASE_URL must be set to an absolute http(s) URL.');
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(`TARGET_API_BASE_URL must be an absolute http(s) URL. Received '${raw}'.`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`TARGET_API_BASE_URL must use http or https. Received '${raw}'.`);
+  }
+  return raw;
+}
+
+function parseIntegerEnv(envName: string, fallback: number, minimum: number): number {
+  const raw = process.env[envName]?.trim();
+  if (!raw) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isInteger(parsed) || parsed < minimum) {
+    throw new Error(`${envName} must be an integer >= ${minimum}. Received '${raw}'.`);
+  }
+  return parsed;
+}

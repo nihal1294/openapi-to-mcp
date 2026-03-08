@@ -1,0 +1,23 @@
+import { randomUUID } from 'node:crypto';
+import * as console from 'console';
+
+type LogLevel = 'info' | 'error';
+
+export function createRequestId(): string {
+  return randomUUID();
+}
+
+export function logEvent(
+  level: LogLevel,
+  event: string,
+  fields: Record<string, unknown>
+): void {
+  console.error(
+    JSON.stringify({
+      level,
+      event,
+      timestamp: new Date().toISOString(),
+      ...fields,
+    })
+  );
+}

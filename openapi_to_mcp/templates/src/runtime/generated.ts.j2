@@ -1,0 +1,43 @@
+import type { Method } from 'axios';
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+
+export type ParameterLocation = 'path' | 'query' | 'header' | 'cookie';
+
+export interface ToolParameterMetadata {
+  name: string;
+  in: ParameterLocation;
+  required: boolean;
+  style?: string | null;
+  explode?: boolean | null;
+  allow_reserved?: boolean | null;
+}
+
+export interface RequestBodyMetadata {
+  required: boolean;
+  content_type: string | null;
+}
+
+export interface SecuritySchemeDefinition {
+  type?: string;
+  in?: string;
+  name?: string;
+  scheme?: string;
+}
+
+export interface ToolRuntimeMetadata {
+  method: Method;
+  path: string;
+  parameters?: ToolParameterMetadata[];
+  requestBody?: RequestBodyMetadata | null;
+  security?: Array<Record<string, unknown>> | null;
+  securitySchemes?: Record<string, SecuritySchemeDefinition>;
+}
+
+export const tools = {{ tools | tojson(indent=2) }} as Tool[];
+export const toolRuntimeData = {{ runtime_tools | tojson(indent=2) }} as Record<
+  string,
+  ToolRuntimeMetadata
+>;
+export const toolRuntimeMap = new Map<string, ToolRuntimeMetadata>(
+  Object.entries(toolRuntimeData)
+);

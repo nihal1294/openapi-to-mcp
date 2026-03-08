@@ -74,6 +74,8 @@ class Generator:
             self.output_path.mkdir(parents=True, exist_ok=True)
             src_path = self.output_path / "src"
             src_path.mkdir(exist_ok=True)
+            runtime_path = src_path / "runtime"
+            runtime_path.mkdir(exist_ok=True)
         except OSError as e:
             err_msg = (
                 f"Failed to create output directories in '{self.output_path}': {e}"
@@ -91,6 +93,43 @@ class Generator:
             "package.json.j2": self.output_path / "package.json",
             "tsconfig.json.j2": self.output_path / "tsconfig.json",
             "src/server.ts.j2": self.output_path / "src" / "server.ts",
+            "src/runtime/auth.ts.j2": self.output_path / "src" / "runtime" / "auth.ts",
+            "src/runtime/config.ts.j2": self.output_path
+            / "src"
+            / "runtime"
+            / "config.ts",
+            "src/runtime/errors.ts.j2": self.output_path
+            / "src"
+            / "runtime"
+            / "errors.ts",
+            "src/runtime/executor.ts.j2": self.output_path
+            / "src"
+            / "runtime"
+            / "executor.ts",
+            "src/runtime/generated.ts.j2": self.output_path
+            / "src"
+            / "runtime"
+            / "generated.ts",
+            "src/runtime/limiter.ts.j2": self.output_path
+            / "src"
+            / "runtime"
+            / "limiter.ts",
+            "src/runtime/observability.ts.j2": self.output_path
+            / "src"
+            / "runtime"
+            / "observability.ts",
+            "src/runtime/response.ts.j2": self.output_path
+            / "src"
+            / "runtime"
+            / "response.ts",
+            "src/runtime/serialization.ts.j2": self.output_path
+            / "src"
+            / "runtime"
+            / "serialization.ts",
+            "src/runtime/validation.ts.j2": self.output_path
+            / "src"
+            / "runtime"
+            / "validation.ts",
             "README.md.j2": self.output_path / "README.md",
             ".env.example.j2": self.output_path / ".env.example",
             "src/index.ts.j2": self.output_path / "src" / "index.ts",

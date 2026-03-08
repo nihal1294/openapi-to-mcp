@@ -1,0 +1,32 @@
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+
+function isJsonContentType(contentType: unknown): contentType is string {
+  return typeof contentType === 'string' && contentType.includes('json');
+}
+
+function isStructuredObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function formatResponseText(responseData: unknown, contentType: unknown): string {
+  if (isJsonContentType(contentType) && typeof responseData === 'object') {
+    return JSON.stringify(responseData, null, 2);
+  }
+  return String(responseData);
+}
+
+export function buildToolSuccessResult(
+  responseData: unknown,
+  contentType: unknown,
+  requestId: string
+): CallToolResult {
+  const responseText = formatResponseText(responseData, contentType);
+  if (isJsonContentType(contentType) && isStructuredObject(responseData)) {
+    return {
+      content: [{ type: 'text', text: responseText }],
+      meta: { requestId },
+      structuredContent: responseData,
+    };
+  }
+  return { content: [{ type: 'text', text: responseText }], meta: { requestId } };
+}
