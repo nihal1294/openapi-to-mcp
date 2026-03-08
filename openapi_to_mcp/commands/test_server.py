@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import sys
 from typing import Any
 
 import rich_click as click
@@ -72,10 +71,10 @@ def run_test_server(  # noqa: PLR0913
     except click.ClickException:
         raise
     except Exception as e:
-        logger.critical(
-            "An unexpected error occurred during testing: %s", e, exc_info=True
+        logger.error(  # noqa: TRY400
+            "An unexpected error occurred during testing: %s", e
         )
-        sys.exit(1)
+        raise click.ClickException(f"Unexpected error during testing: {e}") from e
 
 
 def _parse_tool_args(tool_args: str | None) -> dict[str, Any]:

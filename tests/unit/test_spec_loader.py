@@ -103,6 +103,17 @@ def test_spec_loader_url_fetch_error(mock_requests_get: MagicMock) -> None:
     mock_requests_get.assert_called_once()
 
 
+def test_spec_loader_url_timeout_error(mock_requests_get: MagicMock) -> None:
+    """Test timeout handling when fetching an OpenAPI spec URL."""
+    mock_requests_get.side_effect = requests.exceptions.Timeout("Request timed out")
+
+    loader = SpecLoader(source="http://example.com/slow_spec.json")
+
+    with pytest.raises(SpecLoaderError, match="Timeout fetching OpenAPI spec from URL"):
+        loader.load_and_validate()
+    mock_requests_get.assert_called_once()
+
+
 def test_spec_loader_url_http_error(mock_requests_get: MagicMock) -> None:
     """Test error handling for HTTP error status codes (e.g., 404) from URL."""
     mock_response = MagicMock()
