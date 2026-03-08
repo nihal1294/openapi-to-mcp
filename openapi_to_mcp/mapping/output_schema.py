@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
+from openapi_to_mcp.common.exceptions import SchemaError
 from openapi_to_mcp.schema.converter import openapi_schema_to_json_schema
 
 if TYPE_CHECKING:
@@ -11,6 +13,7 @@ if TYPE_CHECKING:
 
 _PREFERRED_RESPONSE_CODES = ("200", "201", "202", "203", "206", "207", "208", "226")
 _HTTP_STATUS_CODE_LENGTH = 3
+logger = logging.getLogger(__name__)
 
 
 def extract_output_schema(
@@ -25,7 +28,13 @@ def extract_output_schema(
     schema = _extract_response_schema(response)
     if not schema:
         return None
-    json_schema = openapi_schema_to_json_schema(schema, spec, raise_on_error=True)
+    try:
+        json_schema = openapi_schema_to_json_schema(schema, spec, raise_on_error=True)
+    except SchemaError:
+        logger.warning(
+            "Skipping outputSchema because response schema conversion failed."
+        )
+        return None
     if not _supports_structured_output(json_schema):
         return None
     return json_schema
@@ -98,9 +107,7 @@ def _preferred_media_types(content: dict[str, Any]) -> list[str]:
     json_like = sorted(
         key
         for key in content
-        if isinstance(key, str)
-        and key not in exact
-        and ("json" in key or key.endswith("+json"))
+        if isinstance(key, str) and key not in exact and "json" in key
     )
     return exact + json_like
 
@@ -112,4 +119,4 @@ def _supports_structured_output(schema: dict[str, Any]) -> bool:
         return True
     if schema_type in {"array", "string", "number", "integer", "boolean"}:
         return False
-    return any(key in schema for key in ("properties", "allOf", "anyOf", "oneOf"))
+    return any(key in schema for key in ("properties", "allOf"))
