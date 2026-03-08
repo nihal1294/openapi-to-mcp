@@ -57,8 +57,8 @@ interface SecuritySchemeDefinition {
 interface ToolRuntimeMetadata {
   method: Method;
   path: string;
-  parameters: ToolParameterMetadata[];
-  requestBody: RequestBodyMetadata | null;
+  parameters?: ToolParameterMetadata[];
+  requestBody?: RequestBodyMetadata | null;
   security?: Array<Record<string, unknown>> | null;
   securitySchemes?: Record<string, SecuritySchemeDefinition>;
 }

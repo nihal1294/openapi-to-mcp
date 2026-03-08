@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from openapi_to_mcp.common.exceptions import GenerationError
+
+# Keep this in sync with Mapper._map_operation_to_tool runtime-only fields.
 _RUNTIME_FIELD_MAP = {
     "_original_method": "method",
     "_original_path": "path",
@@ -15,11 +18,22 @@ _RUNTIME_FIELD_MAP = {
 
 
 def build_public_tools(mcp_tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return only the public MCP tool contract fields."""
+    """Return only public MCP tool fields.
+
+    Any underscore-prefixed keys are treated as internal implementation detail.
+    """
     return [
         {key: value for key, value in tool.items() if not key.startswith("_")}
         for tool in mcp_tools
     ]
+
+
+def _require_tool_name(tool: dict[str, Any]) -> str:
+    """Return the tool name or raise a generation error."""
+    tool_name = tool.get("name")
+    if isinstance(tool_name, str) and tool_name:
+        return tool_name
+    raise GenerationError(f"Mapped tool is missing a valid 'name': {tool!r}")
 
 
 def build_runtime_tool_registry(
@@ -27,7 +41,7 @@ def build_runtime_tool_registry(
 ) -> dict[str, dict[str, Any]]:
     """Return runtime execution metadata keyed by tool name."""
     return {
-        str(tool["name"]): {
+        _require_tool_name(tool): {
             target_key: tool[source_key]
             for source_key, target_key in _RUNTIME_FIELD_MAP.items()
             if source_key in tool

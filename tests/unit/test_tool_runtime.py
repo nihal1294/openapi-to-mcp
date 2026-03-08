@@ -1,3 +1,6 @@
+import pytest
+
+from openapi_to_mcp.common.exceptions import GenerationError
 from openapi_to_mcp.common.tool_runtime import (
     build_public_tools,
     build_runtime_tool_registry,
@@ -5,7 +8,7 @@ from openapi_to_mcp.common.tool_runtime import (
 )
 
 
-def test_build_public_tools_strips_internal_runtime_fields() -> None:
+def test_build_public_tools_strips_underscore_fields() -> None:
     tools = [
         {
             "name": "getThing",
@@ -24,12 +27,40 @@ def test_build_public_tools_strips_internal_runtime_fields() -> None:
         }
     ]
 
+
+def test_build_runtime_tool_registry_renames_all_runtime_fields() -> None:
+    tools = [
+        {
+            "name": "getThing",
+            "_original_method": "GET",
+            "_original_path": "/things/{thingId}",
+            "_original_parameters": [{"name": "thingId", "in": "path"}],
+            "_original_request_body": {
+                "required": True,
+                "content_type": "application/json",
+            },
+            "_original_security": [{"BearerAuth": []}],
+            "_original_security_schemes": {
+                "BearerAuth": {"type": "http", "scheme": "bearer"}
+            },
+        }
+    ]
+
     assert build_runtime_tool_registry(tools) == {
         "getThing": {
             "method": "GET",
             "path": "/things/{thingId}",
+            "parameters": [{"name": "thingId", "in": "path"}],
+            "requestBody": {"required": True, "content_type": "application/json"},
+            "security": [{"BearerAuth": []}],
+            "securitySchemes": {"BearerAuth": {"type": "http", "scheme": "bearer"}},
         }
     }
+
+
+def test_build_runtime_tool_registry_requires_tool_name() -> None:
+    with pytest.raises(GenerationError, match="missing a valid 'name'"):
+        build_runtime_tool_registry([{"_original_method": "GET"}])
 
 
 def test_derive_auth_env_vars_reads_runtime_registry_security() -> None:
@@ -38,6 +69,8 @@ def test_derive_auth_env_vars_reads_runtime_registry_security() -> None:
             "securitySchemes": {
                 "Header Key": {"type": "apiKey"},
                 "BearerAuth": {"type": "http", "scheme": "bearer"},
+                "OAuth2Auth": {"type": "oauth2"},
+                "OidcAuth": {"type": "openidconnect"},
             }
         }
     }
@@ -45,4 +78,6 @@ def test_derive_auth_env_vars_reads_runtime_registry_security() -> None:
     assert derive_auth_env_vars(runtime_tools) == [
         "AUTH_BEARERAUTH_TOKEN",
         "AUTH_HEADER_KEY_API_KEY",
+        "AUTH_OAUTH2AUTH_TOKEN",
+        "AUTH_OIDCAUTH_TOKEN",
     ]
