@@ -92,6 +92,8 @@ def test_generate_streamable_http_end_to_end(runner: CliRunner, tmp_path: Path) 
     assert "StreamableHTTPServerTransport" in transport_source
     assert "SSEServerTransport" not in transport_source
     assert "encodeURIComponent" in server_source
+    assert "_original_" not in server_source
+    assert "const toolRuntimeData = {" in server_source
     assert "extractHostFromHeaderValue" in transport_source
     assert "first.split(':')[0]" not in transport_source
     assert "process.once('SIGINT'" in server_source
