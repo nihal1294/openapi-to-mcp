@@ -39,8 +39,10 @@ SSE generation is intentionally gone.
 - bounded concurrency and queue controls
 - tool timeout with abort propagation
 - streamable HTTP host and origin allowlist handling
+- runtime input validation against generated `inputSchema` by default
 - object-shaped response schemas emitted as MCP `outputSchema`
 - structured JSON object results returned as `structuredContent`
+- structured tool-error results with machine-readable metadata under `meta.error`
 
 ## `generation_report.json`
 

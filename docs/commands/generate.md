@@ -23,6 +23,7 @@ openapi-to-mcp generate [OPTIONS]
 | `--strict/--no-strict` | No | `--strict` | Fail or degrade on unsupported required behavior |
 | `--on-mapping-error` | No | strict=`fail`, non-strict=`skip` | How to handle non-schema operation mapping failures |
 | `--on-schema-error` | No | strict=`fail`, non-strict=`skip` | How to handle schema conversion failures while mapping operations |
+| `--runtime-validation` | No | `input` | Runtime validation mode compiled into the generated server |
 
 ## Examples
 
@@ -75,6 +76,15 @@ openapi-to-mcp generate \
   --output-dir ./generated-strict-schema \
   --no-strict \
   --on-schema-error fail
+```
+
+### Disable generated runtime input validation
+
+```bash
+openapi-to-mcp generate \
+  --openapi-json ./openapi.yaml \
+  --output-dir ./generated-no-validation \
+  --runtime-validation none
 ```
 
 ## Generated artifacts
