@@ -20,6 +20,7 @@ class ToolExpectation:
     arguments: dict[str, Any]
     expected: dict[str, Any] | None = None
     expected_error: str | None = None
+    expected_error_meta: dict[str, Any] | None = None
 
 
 SUITES = {
@@ -57,6 +58,43 @@ SUITES = {
             name="getBearerAuth",
             arguments={},
             expected_error="AUTH_BEARERAUTH_TOKEN",
+            expected_error_meta={
+                "code": "missing_credentials",
+                "source": "auth",
+                "retryable": False,
+            },
+        )
+    ],
+    "validation-failure": [
+        ToolExpectation(
+            name="testConversionTool",
+            arguments={"status": 123},
+            expected_error="Input validation failed",
+            expected_error_meta={
+                "code": "input_validation_failed",
+                "source": "validation",
+                "retryable": False,
+            },
+        )
+    ],
+    "validation-disabled": [
+        ToolExpectation(
+            name="testConversionTool",
+            arguments={"status": 123},
+            expected={"status": "123"},
+        )
+    ],
+    "upstream-server-error": [
+        ToolExpectation(
+            name="testConversionTool",
+            arguments={"status": "server_error"},
+            expected_error="API server error (503)",
+            expected_error_meta={
+                "code": "api_server_error",
+                "source": "upstream",
+                "retryable": True,
+                "httpStatus": 503,
+            },
         )
     ],
 }
@@ -135,7 +173,24 @@ def _assert_success_payload(
             raise AssertionError(json.dumps(payload, indent=2))
 
 
-def _assert_error_payload(response: dict[str, Any], expected_error: str) -> None:
+def _extract_error_meta(response: dict[str, Any]) -> dict[str, Any] | None:
+    error = response.get("error")
+    if isinstance(error, dict):
+        data = error.get("data")
+        return data if isinstance(data, dict) else None
+    payload = _extract_result_payload(response)
+    meta = payload.get("meta")
+    if not isinstance(meta, dict):
+        return None
+    error_meta = meta.get("error")
+    return error_meta if isinstance(error_meta, dict) else None
+
+
+def _assert_error_payload(
+    response: dict[str, Any],
+    expected_error: str,
+    expected_error_meta: dict[str, Any] | None,
+) -> None:
     error = response.get("error")
     if isinstance(error, dict):
         message = str(error.get("message", ""))
@@ -146,6 +201,14 @@ def _assert_error_payload(response: dict[str, Any], expected_error: str) -> None
         message = _extract_text_content(payload)
     if expected_error not in message:
         raise AssertionError(json.dumps(response, indent=2))
+    if expected_error_meta is None:
+        return
+    actual_meta = _extract_error_meta(response)
+    if not isinstance(actual_meta, dict):
+        raise TypeError(json.dumps(response, indent=2))
+    for key, value in expected_error_meta.items():
+        if actual_meta.get(key) != value:
+            raise AssertionError(json.dumps(response, indent=2))
 
 
 async def _assert_tool(
@@ -161,7 +224,11 @@ async def _assert_tool(
         },
     )
     if expectation.expected_error:
-        _assert_error_payload(response, expectation.expected_error)
+        _assert_error_payload(
+            response,
+            expectation.expected_error,
+            expectation.expected_error_meta,
+        )
         return
     _assert_success_payload(response, expectation.expected)
 

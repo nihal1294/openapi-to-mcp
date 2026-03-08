@@ -17,6 +17,7 @@ TARGET_API_BASE_URL=""
 CURRENT_HTTP_PORT=""
 STDIO_OUTPUT_DIR="${TMP_ROOT}/generated-stdio"
 HTTP_OUTPUT_DIR="${TMP_ROOT}/generated-http"
+NO_VALIDATION_OUTPUT_DIR="${TMP_ROOT}/generated-no-validation-stdio"
 AUTH_STDIO_OUTPUT_DIR="${TMP_ROOT}/generated-auth-stdio"
 AUTH_HTTP_OUTPUT_DIR="${TMP_ROOT}/generated-auth-http"
 AUTH_HEADER_API_KEY="${AUTH_HEADER_API_KEY:-header-secret}"
@@ -206,6 +207,7 @@ generate_server() {
   local transport="$2"
   local openapi_spec="$3"
   local server_name="$4"
+  local runtime_validation="${5:-input}"
 
   rm -rf "$output_dir"
 
@@ -215,6 +217,7 @@ generate_server() {
     --output-dir "$output_dir"
     --mcp-server-name "$server_name"
     --transport "$transport"
+    --runtime-validation "$runtime_validation"
   )
 
   if [[ "$transport" == "streamable-http" ]]; then
@@ -322,6 +325,8 @@ main() {
     "$STDIO_OUTPUT_DIR" "stdio" "$BASIC_OPENAPI_SPEC" "generated-stdio-e2e"
   build_generated_server "$STDIO_OUTPUT_DIR"
   run_suite_assertions "basic" "stdio" "$STDIO_OUTPUT_DIR" "${STDIO_OUTPUT_DIR}/.env"
+  run_suite_assertions "validation-failure" "stdio" \
+    "$STDIO_OUTPUT_DIR" "${STDIO_OUTPUT_DIR}/.env"
 
   echo "Generating and validating streamable-http server"
   generate_server \
@@ -329,6 +334,16 @@ main() {
   build_generated_server "$HTTP_OUTPUT_DIR"
   start_streamable_http_server "$HTTP_OUTPUT_DIR"
   run_suite_assertions "basic" "streamable-http" "$HTTP_OUTPUT_DIR"
+  run_suite_assertions "validation-failure" "streamable-http" "$HTTP_OUTPUT_DIR"
+  run_suite_assertions "upstream-server-error" "streamable-http" "$HTTP_OUTPUT_DIR"
+
+  echo "Generating and validating stdio server without runtime validation"
+  generate_server \
+    "$NO_VALIDATION_OUTPUT_DIR" "stdio" "$BASIC_OPENAPI_SPEC" \
+    "generated-no-validation-stdio-e2e" "none"
+  build_generated_server "$NO_VALIDATION_OUTPUT_DIR"
+  run_suite_assertions "validation-disabled" "stdio" \
+    "$NO_VALIDATION_OUTPUT_DIR" "${NO_VALIDATION_OUTPUT_DIR}/.env"
 
   echo "Generating and validating auth stdio server"
   generate_server \

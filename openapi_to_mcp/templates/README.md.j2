@@ -30,6 +30,12 @@ This MCP server was automatically generated from an OpenAPI specification by the
     *   **MCP Runtime Controls (Optional but Recommended):**
         *   `MCP_MAX_CONCURRENCY`, `MCP_PER_TOOL_MAX_CONCURRENCY`, `MCP_MAX_QUEUE_SIZE`, `MCP_QUEUE_TIMEOUT_MS`, `MCP_TOOL_TIMEOUT_MS`
         *   These control parallel tool execution, queueing behavior, and timeouts.
+    *   **Runtime Validation:**
+        *   Generated tool input validation is set to `{{ runtime_validation }}`.
+        *   When set to `input`, tool arguments are validated against the generated `inputSchema` before the upstream API call.
+    *   **Structured Tool Errors:**
+        *   Tool failures return machine-readable metadata under `meta.error`.
+        *   `meta.error.retryable` is advisory only and does not define any retry interval or backoff policy.
     *   **Streamable HTTP Settings (if transport is `streamable-http`):**
         *   `MCP_HTTP_HOST`, `MCP_HTTP_PORT`, `MCP_HTTP_ENDPOINT`, `MCP_ALLOWED_ORIGINS`, `MCP_ALLOWED_HOSTS`
 

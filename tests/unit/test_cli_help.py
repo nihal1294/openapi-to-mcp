@@ -22,3 +22,13 @@ def test_generate_help_lists_required_options() -> None:
     assert result.exit_code == 0
     assert "--openapi-json" in result.output
     assert "--output-dir" in result.output
+    assert "--runtime-validation" in result.output
+
+
+def test_run_help_lists_runtime_validation_option() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["run", "--help"])
+
+    assert result.exit_code == 0
+    assert "--runtime-validation" in result.output

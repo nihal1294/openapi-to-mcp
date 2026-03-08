@@ -7,7 +7,8 @@ import {
   ErrorCode,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
-import axios, { AxiosError, Method } from 'axios';
+{% if runtime_validation == 'input' %}import { Ajv, type ErrorObject, type ValidateFunction } from 'ajv';
+{% endif %}import axios, { Method } from 'axios';
 import * as http from 'http';
 import * as https from 'https';
 import * as console from 'console';
@@ -30,6 +31,15 @@ const toolRuntimeData = {{ runtime_tools | tojson(indent=2) }} as Record<
 const toolRuntimeMap = new Map<string, ToolRuntimeMetadata>(
   Object.entries(toolRuntimeData)
 );
+{% if runtime_validation == 'input' %}
+const ajv = new Ajv({ allErrors: true, strict: false });
+const inputValidators = new Map<string, ValidateFunction<Record<string, unknown>>>(
+  tools.map((tool) => [
+    tool.name,
+    ajv.compile(tool.inputSchema as Record<string, unknown>) as ValidateFunction<Record<string, unknown>>,
+  ])
+);
+{% endif %}
 
 type ParameterLocation = 'path' | 'query' | 'header' | 'cookie';
 
@@ -71,6 +81,20 @@ interface ResolvedAuth {
   missing: string[];
 }
 
+class QueueFullError extends Error {
+  constructor() {
+    super('Execution queue is full');
+    this.name = 'QueueFullError';
+  }
+}
+
+class QueueTimeoutError extends Error {
+  constructor() {
+    super('Execution queue timeout exceeded');
+    this.name = 'QueueTimeoutError';
+  }
+}
+
 class ConcurrencyLimiter {
   private active = 0;
   private queue: Array<{
@@ -96,7 +120,7 @@ class ConcurrencyLimiter {
     }
 
     if (this.queue.length >= this.maxQueueSize) {
-      throw new Error('Execution queue is full');
+      throw new QueueFullError();
     }
 
     await new Promise<void>((resolve, reject) => {
@@ -112,7 +136,7 @@ class ConcurrencyLimiter {
       if (this.queueTimeoutMs > 0) {
         queued.timeoutHandle = setTimeout(() => {
           this.queue = this.queue.filter((entry) => entry !== queued);
-          reject(new Error('Execution queue timeout exceeded'));
+          reject(new QueueTimeoutError());
         }, this.queueTimeoutMs);
       }
 
@@ -156,49 +180,169 @@ function parseIntegerEnv(envName: string, fallback: number): number {
   return parsed;
 }
 
-function mapApiErrorToMcpError(error: unknown): McpError {
-  if (axios.isAxiosError(error)) {
-    const axiosError = error as AxiosError;
-    const status = axiosError.response?.status;
-    const apiMessage =
-      (axiosError.response?.data as { message?: string; detail?: string } | undefined)?.message ||
-      (axiosError.response?.data as { message?: string; detail?: string } | undefined)?.detail ||
-      axiosError.message;
+type ToolErrorSource = 'validation' | 'auth' | 'upstream' | 'runtime';
 
-    if (axiosError.code === 'ERR_CANCELED') {
-      return new McpError(ErrorCode.RequestTimeout, `API request cancelled or timed out: ${apiMessage}`);
+interface ToolErrorMeta {
+  code: string;
+  source: ToolErrorSource;
+  retryable: boolean;
+  httpStatus?: number;
+}
+
+class ToolExecutionError extends Error {
+  constructor(
+    readonly meta: ToolErrorMeta,
+    message: string
+  ) {
+    super(message);
+    this.name = 'ToolExecutionError';
+  }
+}
+
+function createToolExecutionError(
+  code: string,
+  source: ToolErrorSource,
+  retryable: boolean,
+  message: string,
+  httpStatus?: number
+): ToolExecutionError {
+  return new ToolExecutionError(
+    { code, source, retryable, httpStatus },
+    message
+  );
+}
+
+function buildToolErrorResult(error: ToolExecutionError): CallToolResult {
+  return {
+    content: [{ type: 'text', text: error.message }],
+    meta: { error: error.meta },
+    isError: true,
+  };
+}
+
+function mapApiErrorToToolError(error: unknown): ToolExecutionError {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+    const apiMessage =
+      (error.response?.data as { message?: string; detail?: string } | undefined)?.message ||
+      (error.response?.data as { message?: string; detail?: string } | undefined)?.detail ||
+      error.message;
+
+    if (error.code === 'ERR_CANCELED') {
+      return createToolExecutionError(
+        'tool_timeout',
+        'runtime',
+        true,
+        `API request cancelled or timed out: ${apiMessage}`
+      );
     }
 
     switch (status) {
       case 400:
-        return new McpError(ErrorCode.InvalidParams, `API bad request: ${apiMessage}`);
+        return createToolExecutionError(
+          'api_bad_request',
+          'upstream',
+          false,
+          `API bad request: ${apiMessage}`,
+          status
+        );
       case 401:
       case 403:
-        return new McpError(ErrorCode.InvalidRequest, `API authorization failed: ${apiMessage}`);
+        return createToolExecutionError(
+          'api_authorization_failed',
+          'upstream',
+          false,
+          `API authorization failed: ${apiMessage}`,
+          status
+        );
       case 404:
-        return new McpError(ErrorCode.InvalidRequest, `API resource not found: ${apiMessage}`);
+        return createToolExecutionError(
+          'api_resource_not_found',
+          'upstream',
+          false,
+          `API resource not found: ${apiMessage}`,
+          status
+        );
       case 408:
-        return new McpError(ErrorCode.RequestTimeout, `API request timeout: ${apiMessage}`);
+        return createToolExecutionError(
+          'api_request_timeout',
+          'upstream',
+          true,
+          `API request timeout: ${apiMessage}`,
+          status
+        );
       case 429:
-        return new McpError(ErrorCode.InternalError, `API rate limit hit: ${apiMessage}`);
+        return createToolExecutionError(
+          'api_rate_limited',
+          'upstream',
+          true,
+          `API rate limit hit: ${apiMessage}`,
+          status
+        );
       case 500:
       case 502:
       case 503:
       case 504:
-        return new McpError(ErrorCode.InternalError, `API server error (${status}): ${apiMessage}`);
+        return createToolExecutionError(
+          'api_server_error',
+          'upstream',
+          true,
+          `API server error (${status}): ${apiMessage}`,
+          status
+        );
       default:
-        return new McpError(ErrorCode.InternalError, `API request failed (${status}): ${apiMessage}`);
+        return createToolExecutionError(
+          'api_request_failed',
+          'upstream',
+          typeof status === 'number' && status >= 500,
+          `API request failed (${status}): ${apiMessage}`,
+          status
+        );
     }
   }
 
   if (error instanceof Error) {
     if (error.name === 'AbortError') {
-      return new McpError(ErrorCode.RequestTimeout, `API request aborted: ${error.message}`);
+      return createToolExecutionError(
+        'tool_timeout',
+        'runtime',
+        true,
+        `API request aborted: ${error.message}`
+      );
     }
-    return new McpError(ErrorCode.InternalError, `Request failed: ${error.message}`);
+
+    if (error instanceof QueueFullError) {
+      return createToolExecutionError(
+        'execution_queue_full',
+        'runtime',
+        true,
+        'Execution queue is full'
+      );
+    }
+
+    if (error instanceof QueueTimeoutError) {
+      return createToolExecutionError(
+        'execution_queue_timeout',
+        'runtime',
+        true,
+        'Execution queue timeout exceeded'
+      );
+    }
+
+    return createToolExecutionError(
+      'request_failed',
+      'runtime',
+      false,
+      `Request failed: ${error.message}`
+    );
   }
 
-  return new McpError(ErrorCode.InternalError, 'An unknown internal error occurred');
+  return createToolExecutionError(
+    'unknown_internal_error',
+    'runtime',
+    false,
+    'An unknown internal error occurred'
+  );
 }
 
 function normalizeSchemeName(name: string): string {
@@ -221,6 +365,40 @@ function stringifyValue(value: unknown): string {
   }
   return JSON.stringify(value);
 }
+{% if runtime_validation == 'input' %}
+function formatValidationErrors(errors: ErrorObject[] | null | undefined): string {
+  if (!errors || errors.length === 0) {
+    return 'request arguments did not match the generated input schema';
+  }
+  return errors
+    .map((error) => {
+      const location = error.instancePath || error.schemaPath || '/';
+      return `${location}: ${error.message ?? 'invalid value'}`;
+    })
+    .join('; ');
+}
+
+function validateToolArguments(toolName: string, args: Record<string, unknown>): void {
+  const validator = inputValidators.get(toolName);
+  if (!validator) {
+    throw createToolExecutionError(
+      'missing_input_validator',
+      'runtime',
+      false,
+      `Input validator missing for tool: ${toolName}`
+    );
+  }
+  if (validator(args)) {
+    return;
+  }
+  throw createToolExecutionError(
+    'input_validation_failed',
+    'validation',
+    false,
+    `Input validation failed: ${formatValidationErrors(validator.errors)}`
+  );
+}
+{% endif %}
 
 function isJsonContentType(contentType: unknown): contentType is string {
   return typeof contentType === 'string' && contentType.includes('json');
@@ -631,12 +809,14 @@ export class OpenApiMcpServer {
       if (!tool) {
         throw new McpError(ErrorCode.MethodNotFound, `Tool '${toolName}' not found.`);
       }
-
       const perToolLimiter = this.getPerToolLimiter(toolName);
       let acquiredGlobal = false;
       let acquiredPerTool = false;
 
       try {
+{% if runtime_validation == 'input' %}
+        validateToolArguments(toolName, args);
+{% endif %}
         await this.globalLimiter.acquire();
         acquiredGlobal = true;
 
@@ -655,7 +835,12 @@ export class OpenApiMcpServer {
 
           if (paramValue === undefined || paramValue === null) {
             if (parameter.required) {
-              throw new McpError(ErrorCode.InvalidParams, `Missing required parameter: ${paramName}`);
+              throw createToolExecutionError(
+                'missing_required_parameter',
+                'validation',
+                false,
+                `Missing required parameter: ${paramName}`
+              );
             }
             continue;
           }
@@ -674,8 +859,10 @@ export class OpenApiMcpServer {
 
         const resolvedAuth = resolveAuthForTool(tool);
         if (!resolvedAuth.ok) {
-          throw new McpError(
-            ErrorCode.InvalidRequest,
+          throw createToolExecutionError(
+            'missing_credentials',
+            'auth',
+            false,
             `Missing credentials for required security scheme(s): ${resolvedAuth.missing.join(', ')}`
           );
         }
@@ -698,7 +885,12 @@ export class OpenApiMcpServer {
           requestData = args.requestBody;
           headers['Content-Type'] = requestBodyInfo.content_type || 'application/json';
         } else if (requestBodyInfo?.required) {
-          throw new McpError(ErrorCode.InvalidParams, 'Missing required requestBody');
+          throw createToolExecutionError(
+            'missing_required_request_body',
+            'validation',
+            false,
+            'Missing required requestBody'
+          );
         }
 
         if (Object.keys(cookieValues).length > 0) {
@@ -728,11 +920,11 @@ export class OpenApiMcpServer {
           clearTimeout(timeoutHandle);
         }
       } catch (error) {
-        const mcpError = error instanceof McpError ? error : mapApiErrorToMcpError(error);
-        return {
-          content: [{ type: 'text', text: mcpError.message }],
-          isError: true,
-        };
+        const toolError =
+          error instanceof ToolExecutionError
+            ? error
+            : mapApiErrorToToolError(error);
+        return buildToolErrorResult(toolError);
       } finally {
         if (acquiredPerTool) {
           perToolLimiter.release();

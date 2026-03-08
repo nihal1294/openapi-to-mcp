@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 ERROR_MODE_CHOICE = click.Choice(["fail", "skip"], case_sensitive=False)
+RUNTIME_VALIDATION_CHOICE = click.Choice(["none", "input"], case_sensitive=False)
 
 
 def add_options(options: list[click.Option]) -> Callable:
@@ -93,6 +94,13 @@ generate_options = [
         type=ERROR_MODE_CHOICE,
         help="How to handle schema conversion failures. Defaults to fail in strict mode and skip in non-strict mode.",
     ),
+    click.option(
+        "--runtime-validation",
+        default="input",
+        show_default=True,
+        type=RUNTIME_VALIDATION_CHOICE,
+        help="Runtime validation applied by the generated server.",
+    ),
 ]
 
 
@@ -164,6 +172,13 @@ run_options = [
         "--on-schema-error",
         type=ERROR_MODE_CHOICE,
         help="How to handle schema conversion failures. Defaults to fail in strict mode and skip in non-strict mode.",
+    ),
+    click.option(
+        "--runtime-validation",
+        default="input",
+        show_default=True,
+        type=RUNTIME_VALIDATION_CHOICE,
+        help="Runtime validation applied by the generated server.",
     ),
     click.option(
         "--target-api-base-url",

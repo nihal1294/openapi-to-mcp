@@ -39,8 +39,13 @@ SSE generation is intentionally gone.
 - bounded concurrency and queue controls
 - tool timeout with abort propagation
 - streamable HTTP host and origin allowlist handling
+- runtime input validation against generated `inputSchema` by default
 - object-shaped response schemas emitted as MCP `outputSchema`
 - structured JSON object results returned as `structuredContent`
+- structured tool-error results with machine-readable metadata under `meta.error`
+
+`meta.error.retryable` is advisory only. It tells callers whether an immediate retry is
+reasonable, but it does not guarantee success on retry and does not imply any backoff policy.
 
 ## `generation_report.json`
 

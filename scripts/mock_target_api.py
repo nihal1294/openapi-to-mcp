@@ -32,6 +32,12 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/test":
             query = self._query_params(parsed.query)
+            if query.get("status") == "server_error":
+                self._send_json(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"ok": False, "error": "temporary upstream issue"},
+                )
+                return
             self._send_json(
                 HTTPStatus.OK,
                 {
