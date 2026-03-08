@@ -177,6 +177,8 @@ def test_generate_strict_generated_name_collision_fails(
     )
 
     assert result.exit_code != 0
+    assert "Duplicate tool name detected" in result.output
+    assert "Traceback" not in result.output
     assert not (output_dir / "generation_report.json").exists()
 
 
@@ -211,6 +213,30 @@ def test_generate_no_strict_generated_name_collision_dedupes_and_reports(
 
     server_source = (output_dir / "src" / "server.ts").read_text(encoding="utf-8")
     assert "get_a_b_2" in server_source
+
+
+def test_generate_no_strict_generated_name_collision_with_mapping_fail_exits(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    spec_path = _write_duplicate_operation_spec(tmp_path / "duplicate.json")
+    output_dir = tmp_path / "mapping-fail-output"
+
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--openapi-json",
+            str(spec_path),
+            "--output-dir",
+            str(output_dir),
+            "--no-strict",
+            "--on-mapping-error",
+            "fail",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert not (output_dir / "generation_report.json").exists()
 
 
 def test_generate_strict_on_mapping_error_skip_reports(

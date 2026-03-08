@@ -200,6 +200,31 @@ def test_mapper_non_strict_dedupe_avoids_existing_suffix_collisions() -> None:
     assert any("sameName_3" in warning for warning in report["warnings"])
 
 
+def test_mapper_mapping_fail_overrides_non_strict_dedupe() -> None:
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Dup Fail", "version": "1.0.0"},
+        "paths": {
+            "/a": {
+                "get": {
+                    "operationId": "sameName",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+            "/b": {
+                "get": {
+                    "operationId": "sameName",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+        },
+    }
+
+    mapper = Mapper(spec=spec, strict=False, on_mapping_error="fail")
+    with pytest.raises(MappingError, match="Duplicate tool name"):
+        mapper.map_tools()
+
+
 def test_mapper_non_strict_skips_invalid_operation_and_reports() -> None:
     spec = {
         "openapi": "3.0.0",

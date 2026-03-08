@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from openapi_to_mcp.common.exceptions import SchemaError
 from openapi_to_mcp.schema.handlers.array_schema import ArraySchemaHandler
+from openapi_to_mcp.schema.handlers.base import INTERNAL_CYCLIC_REFERENCE_MARKER
 from openapi_to_mcp.schema.handlers.common import CommonSchemaHandler
 from openapi_to_mcp.schema.handlers.composition import CompositionHandler
 from openapi_to_mcp.schema.handlers.number_schema import NumberSchemaHandler
@@ -61,22 +62,39 @@ class SchemaConverter:
     def pop_ref(self, ref_path: str) -> None:
         """Pop a reference from the active conversion stack."""
         if not self._ref_stack:
+            logger.warning("Reference stack empty while popping %s.", ref_path)
             return
 
         current_ref = self._ref_stack.pop()
-        if current_ref != ref_path:
-            logger.warning(
-                "Reference stack out of sync. Expected %s, found %s.",
-                ref_path,
-                current_ref,
-            )
+        if current_ref == ref_path:
+            return
 
-    def convert(self, openapi_schema: dict[str, Any] | None) -> dict[str, Any]:
+        logger.warning(
+            "Reference stack out of sync. Expected %s, found %s.",
+            ref_path,
+            current_ref,
+        )
+        self._repair_ref_stack(ref_path)
+
+    def _repair_ref_stack(self, ref_path: str) -> None:
+        """Best-effort recovery when the reference stack gets out of sync."""
+        if ref_path in self._ref_stack:
+            self._ref_stack.remove(ref_path)
+            return
+        self._ref_stack.clear()
+
+    def convert(
+        self,
+        openapi_schema: dict[str, Any] | None,
+        *,
+        include_internal_markers: bool = False,
+    ) -> dict[str, Any]:
         """
         Convert an OpenAPI schema to a JSON Schema.
 
         Args:
             openapi_schema: The OpenAPI schema to convert.
+            include_internal_markers: Whether to keep internal helper keys.
 
         Returns:
             The converted JSON Schema.
@@ -88,32 +106,55 @@ class SchemaConverter:
             return {}
 
         json_schema: dict[str, Any] = {}
-        is_cyclic_reference = False
+        self._set_inferred_type(openapi_schema, json_schema)
+        self._apply_handlers(openapi_schema, json_schema)
+        self._strip_internal_markers(
+            json_schema, include_internal_markers=include_internal_markers
+        )
+        return json_schema
 
-        # Infer schema type if not provided
+    def _set_inferred_type(
+        self, openapi_schema: dict[str, Any], json_schema: dict[str, Any]
+    ) -> None:
+        """Infer and set the schema type when it is not explicit."""
         schema_type = openapi_schema.get("type") or self._infer_type(openapi_schema)
         if schema_type:
             json_schema["type"] = schema_type
 
-        # Apply handlers in sequence
+    def _apply_handlers(
+        self, openapi_schema: dict[str, Any], json_schema: dict[str, Any]
+    ) -> None:
+        """Apply matching handlers in sequence."""
         for handler in self._handlers:
-            if handler.can_handle(openapi_schema):
-                try:
-                    handler.handle(openapi_schema, json_schema)
-                    if json_schema.get("_is_cyclic_reference"):
-                        is_cyclic_reference = True
-                except Exception as e:
-                    err_msg = (
-                        f"Error in schema handler {handler.__class__.__name__}: {e}"
-                    )
-                    if self._raise_on_error:
-                        raise SchemaError(err_msg) from e
-                    logger.warning(err_msg)
+            if not handler.can_handle(openapi_schema):
+                continue
+            self._run_handler(handler, openapi_schema, json_schema)
 
-        if is_cyclic_reference:
-            json_schema["_is_cyclic_reference"] = True
+    def _run_handler(
+        self,
+        handler: SchemaHandler,
+        openapi_schema: dict[str, Any],
+        json_schema: dict[str, Any],
+    ) -> None:
+        """Run a single schema handler with consistent error handling."""
+        try:
+            handler.handle(openapi_schema, json_schema)
+        except Exception as exc:
+            err_msg = f"Error in schema handler {handler.__class__.__name__}: {exc}"
+            if self._raise_on_error:
+                raise SchemaError(err_msg) from exc
+            logger.warning(err_msg)
 
-        return json_schema
+    def _strip_internal_markers(
+        self,
+        json_schema: dict[str, Any],
+        *,
+        include_internal_markers: bool,
+    ) -> None:
+        """Remove internal helper keys from public conversion output."""
+        if include_internal_markers:
+            return
+        json_schema.pop(INTERNAL_CYCLIC_REFERENCE_MARKER, None)
 
     def _infer_type(self, openapi_schema: dict[str, Any]) -> str | None:
         """

@@ -4,14 +4,13 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import rich_click as click
 
 from openapi_to_mcp.adapters.generator import Generator
 from openapi_to_mcp.adapters.spec_loader import SpecLoader
 from openapi_to_mcp.commands.options import add_options, generate_options
-from openapi_to_mcp.common.error_policy import ErrorMode, resolve_error_mode
 from openapi_to_mcp.common.exceptions import (
     GenerationError,
     MappingError,
@@ -21,6 +20,9 @@ from openapi_to_mcp.common.exceptions import (
 )
 from openapi_to_mcp.common.terminal import print_success_panel
 from openapi_to_mcp.mapping import Mapper
+
+if TYPE_CHECKING:
+    from openapi_to_mcp.common.error_policy import ErrorMode
 
 logger = logging.getLogger(__name__)
 
@@ -158,19 +160,13 @@ def _build_generation_report(
     *,
     strict: bool,
     transport: str,
-    on_mapping_error: ErrorMode,
-    on_schema_error: ErrorMode,
 ) -> dict[str, Any]:
     """Build generation diagnostics report."""
     mapper_report = mapper.get_report()
     return {
         "strict_mode": strict,
         "transport": transport,
-        "mapped_tools": mapper_report.get("mapped_tools", 0),
-        "on_mapping_error": on_mapping_error,
-        "on_schema_error": on_schema_error,
-        "skipped_operations": mapper_report.get("skipped_operations", []),
-        "warnings": mapper_report.get("warnings", []),
+        **mapper_report,
     }
 
 
@@ -204,9 +200,6 @@ def generate_project(  # noqa: PLR0913
     on_mapping_error: ErrorMode | None = None,
     on_schema_error: ErrorMode | None = None,
 ) -> None:
-    resolved_mapping_error_mode = resolve_error_mode(on_mapping_error, strict=strict)
-    resolved_schema_error_mode = resolve_error_mode(on_schema_error, strict=strict)
-
     logger.info(
         "Starting MCP server generation...",
         extra={
@@ -220,8 +213,8 @@ def generate_project(  # noqa: PLR0913
                 "port": port,
                 "mcp_endpoint": mcp_endpoint,
                 "strict": strict,
-                "on_mapping_error": resolved_mapping_error_mode,
-                "on_schema_error": resolved_schema_error_mode,
+                "on_mapping_error": on_mapping_error,
+                "on_schema_error": on_schema_error,
             },
         },
     )
@@ -243,8 +236,8 @@ def generate_project(  # noqa: PLR0913
     mapper = Mapper(
         spec=spec,
         strict=strict,
-        on_mapping_error=resolved_mapping_error_mode,
-        on_schema_error=resolved_schema_error_mode,
+        on_mapping_error=on_mapping_error,
+        on_schema_error=on_schema_error,
     )
     mcp_tools = mapper.map_tools()
     logger.info("Mapped %d tools.", len(mcp_tools))
@@ -272,8 +265,6 @@ def generate_project(  # noqa: PLR0913
         mapper=mapper,
         strict=strict,
         transport=transport,
-        on_mapping_error=resolved_mapping_error_mode,
-        on_schema_error=resolved_schema_error_mode,
     )
     _write_generation_report(output_dir=output_dir, report=generation_report)
     logger.info("File generation complete.")
@@ -321,9 +312,8 @@ def generate(  # noqa: PLR0913
     except NoToolsMappedError as exc:
         click.echo(str(exc))
         return
-    except SpecLoaderError, MappingError, GenerationError, SchemaError:
-        logger.exception("Generation failed")
-        sys.exit(1)
+    except (SpecLoaderError, MappingError, GenerationError, SchemaError) as exc:
+        raise click.ClickException(str(exc)) from exc
     except Exception as e:
         logger.critical("An unexpected critical error occurred: %s", e, exc_info=True)
         sys.exit(1)

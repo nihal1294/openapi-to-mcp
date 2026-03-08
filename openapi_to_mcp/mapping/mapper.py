@@ -106,6 +106,8 @@ class Mapper:
                     self.mcp_tools.append(tool_definition)
                 except SchemaError as exc:
                     self._handle_schema_error(method, path, exc)
+                except MappingError as exc:
+                    self._handle_mapping_error(method, path, exc)
                 except Exception as exc:  # noqa: BLE001
                     self._handle_mapping_error(method, path, exc)
 
@@ -139,7 +141,7 @@ class Mapper:
         self, method: str, path: str, reason: str, message: str
     ) -> None:
         """Record a skipped operation and its diagnostic message."""
-        logger.exception(message)
+        logger.warning(message)
         self._diagnostics.append(message)
         self._skipped_operations.append(
             {
@@ -286,8 +288,8 @@ class Mapper:
             )
             return candidate_name
 
-        if self.strict:
-            err_msg = f"Duplicate tool name detected in strict mode: {candidate_name}"
+        if self.on_mapping_error == "fail":
+            err_msg = f"Duplicate tool name detected: {candidate_name}"
             raise MappingError(err_msg)
 
         count = self._tool_name_counts.get(candidate_name, 1)

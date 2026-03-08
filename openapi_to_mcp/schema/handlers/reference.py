@@ -5,7 +5,10 @@ from typing import Any
 
 import requests.utils
 
-from openapi_to_mcp.schema.handlers.base import SchemaHandler
+from openapi_to_mcp.schema.handlers.base import (
+    INTERNAL_CYCLIC_REFERENCE_MARKER,
+    SchemaHandler,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +37,7 @@ class ReferenceHandler(SchemaHandler):
             json_schema.update(
                 {"description": f"Cyclic reference detected: {ref_path}"}
             )
-            json_schema["_is_cyclic_reference"] = True
+            json_schema[INTERNAL_CYCLIC_REFERENCE_MARKER] = True
             return
 
         self.converter.push_ref(ref_path)
@@ -45,16 +48,16 @@ class ReferenceHandler(SchemaHandler):
                 json_schema.update(resolved_schema)
                 return
 
-            result = self.converter.convert(resolved_schema)
-
-            if self._is_recursive_error(result):
-                json_schema.update(result)
-                return
-
-            if result.get("_is_cyclic_reference") is True:
-                json_schema["_is_cyclic_reference"] = True
-
+            result = self.converter.convert(
+                resolved_schema, include_internal_markers=True
+            )
+            recursive_error = self._is_recursive_error(result)
+            propagated_cycle = bool(result.pop(INTERNAL_CYCLIC_REFERENCE_MARKER, False))
             json_schema.update(result)
+            if propagated_cycle:
+                json_schema[INTERNAL_CYCLIC_REFERENCE_MARKER] = True
+            if recursive_error:
+                return
             self._add_ref_description(openapi_schema, json_schema, ref_path)
         finally:
             self.converter.pop_ref(ref_path)

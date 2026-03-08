@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
+INTERNAL_CYCLIC_REFERENCE_MARKER = "_is_cyclic_reference"
 
 
 class SchemaConverterProtocol(Protocol):
@@ -14,7 +15,12 @@ class SchemaConverterProtocol(Protocol):
     creating circular imports.
     """
 
-    def convert(self, openapi_schema: dict[str, Any]) -> dict[str, Any]:
+    def convert(
+        self,
+        openapi_schema: dict[str, Any],
+        *,
+        include_internal_markers: bool = False,
+    ) -> dict[str, Any]:
         """Convert OpenAPI schema to JSON Schema."""
         ...
 

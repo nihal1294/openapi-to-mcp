@@ -16,6 +16,16 @@ def resolve_ref(ref: str, full_spec: dict) -> dict:
     return handler.resolve_ref(ref)
 
 
+def _contains_internal_marker(schema: dict[str, Any]) -> bool:
+    """Check whether converted output leaked internal cycle markers."""
+    if "_is_cyclic_reference" in schema:
+        return True
+    for value in schema.values():
+        if isinstance(value, dict) and _contains_internal_marker(value):
+            return True
+    return False
+
+
 SAMPLE_FULL_SPEC: dict[str, Any] = {
     "openapi": "3.0.0",
     "info": {"title": "Test API", "version": "1.0"},
@@ -283,6 +293,7 @@ def test_schema_conversion_sibling_refs_do_not_trigger_false_cycle() -> None:
         "properties": {"primary": expected_ref, "secondary": expected_ref},
         "required": [],
     }
+    assert not _contains_internal_marker(result)
 
 
 def test_schema_conversion_cycle_detection() -> None:
@@ -293,8 +304,11 @@ def test_schema_conversion_cycle_detection() -> None:
     assert "description" in result
     assert result["description"] == "(from ref: #/components/schemas/CyclicA)"
 
-    def contains_cyclic_reference(schema: dict) -> bool:
-        if "_is_cyclic_reference" in schema:
+    def contains_cyclic_reference(schema: dict[str, Any]) -> bool:
+        description = schema.get("description")
+        if isinstance(description, str) and description.startswith(
+            "Cyclic reference detected:"
+        ):
             return True
         for value in schema.values():
             if isinstance(value, dict) and contains_cyclic_reference(value):
@@ -302,6 +316,7 @@ def test_schema_conversion_cycle_detection() -> None:
         return False
 
     assert contains_cyclic_reference(result)
+    assert not _contains_internal_marker(result)
 
 
 def test_schema_conversion_invalid_input() -> None:
