@@ -23,6 +23,18 @@ class SchemaConverterProtocol(Protocol):
         """Get the full OpenAPI spec."""
         ...
 
+    def is_ref_on_stack(self, ref_path: str) -> bool:
+        """Check whether a reference is already active in the current stack."""
+        ...
+
+    def push_ref(self, ref_path: str) -> None:
+        """Push a reference onto the active conversion stack."""
+        ...
+
+    def pop_ref(self, ref_path: str) -> None:
+        """Pop a reference from the active conversion stack."""
+        ...
+
 
 class SchemaHandler(ABC):
     """Base class for all schema type handlers."""

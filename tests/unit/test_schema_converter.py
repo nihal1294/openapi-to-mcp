@@ -41,6 +41,13 @@ SAMPLE_FULL_SPEC: dict[str, Any] = {
                 "type": "array",
                 "items": {"$ref": "#/components/schemas/SimpleObject"},
             },
+            "ObjectWithSiblingRefs": {
+                "type": "object",
+                "properties": {
+                    "primary": {"$ref": "#/components/schemas/SimpleObject"},
+                    "secondary": {"$ref": "#/components/schemas/SimpleObject"},
+                },
+            },
             "NullableString": {
                 "type": "string",
                 "nullable": True,
@@ -254,6 +261,28 @@ def test_schema_conversion_array_ref() -> None:
         },
     }
     assert openapi_schema_to_json_schema(openapi_schema, SAMPLE_FULL_SPEC) == expected
+
+
+def test_schema_conversion_sibling_refs_do_not_trigger_false_cycle() -> None:
+    """Test that sibling refs are converted independently without false cycles."""
+    openapi_schema = SAMPLE_FULL_SPEC["components"]["schemas"]["ObjectWithSiblingRefs"]
+    result = openapi_schema_to_json_schema(openapi_schema, SAMPLE_FULL_SPEC)
+
+    expected_ref = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "integer", "format": "int64"},
+            "name": {"type": "string", "description": "Object name"},
+        },
+        "required": ["id"],
+        "description": "(from ref: #/components/schemas/SimpleObject)",
+    }
+
+    assert result == {
+        "type": "object",
+        "properties": {"primary": expected_ref, "secondary": expected_ref},
+        "required": [],
+    }
 
 
 def test_schema_conversion_cycle_detection() -> None:
