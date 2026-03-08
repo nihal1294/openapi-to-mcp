@@ -8,7 +8,7 @@ import {
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 {% if runtime_validation == 'input' %}import { Ajv, type ErrorObject, type ValidateFunction } from 'ajv';
-{% endif %}import axios, { AxiosError, Method } from 'axios';
+{% endif %}import axios, { Method } from 'axios';
 import * as http from 'http';
 import * as https from 'https';
 import * as console from 'console';
@@ -81,6 +81,20 @@ interface ResolvedAuth {
   missing: string[];
 }
 
+class QueueFullError extends Error {
+  constructor() {
+    super('Execution queue is full');
+    this.name = 'QueueFullError';
+  }
+}
+
+class QueueTimeoutError extends Error {
+  constructor() {
+    super('Execution queue timeout exceeded');
+    this.name = 'QueueTimeoutError';
+  }
+}
+
 class ConcurrencyLimiter {
   private active = 0;
   private queue: Array<{
@@ -106,7 +120,7 @@ class ConcurrencyLimiter {
     }
 
     if (this.queue.length >= this.maxQueueSize) {
-      throw new Error('Execution queue is full');
+      throw new QueueFullError();
     }
 
     await new Promise<void>((resolve, reject) => {
@@ -122,7 +136,7 @@ class ConcurrencyLimiter {
       if (this.queueTimeoutMs > 0) {
         queued.timeoutHandle = setTimeout(() => {
           this.queue = this.queue.filter((entry) => entry !== queued);
-          reject(new Error('Execution queue timeout exceeded'));
+          reject(new QueueTimeoutError());
         }, this.queueTimeoutMs);
       }
 
@@ -172,7 +186,6 @@ interface ToolErrorMeta {
   code: string;
   source: ToolErrorSource;
   retryable: boolean;
-  mcpCode: number;
   httpStatus?: number;
 }
 
@@ -187,7 +200,6 @@ class ToolExecutionError extends Error {
 }
 
 function createToolExecutionError(
-  mcpCode: ErrorCode,
   code: string,
   source: ToolErrorSource,
   retryable: boolean,
@@ -195,7 +207,7 @@ function createToolExecutionError(
   httpStatus?: number
 ): ToolExecutionError {
   return new ToolExecutionError(
-    { code, source, retryable, mcpCode, httpStatus },
+    { code, source, retryable, httpStatus },
     message
   );
 }
@@ -210,16 +222,14 @@ function buildToolErrorResult(error: ToolExecutionError): CallToolResult {
 
 function mapApiErrorToToolError(error: unknown): ToolExecutionError {
   if (axios.isAxiosError(error)) {
-    const axiosError = error as AxiosError;
-    const status = axiosError.response?.status;
+    const status = error.response?.status;
     const apiMessage =
-      (axiosError.response?.data as { message?: string; detail?: string } | undefined)?.message ||
-      (axiosError.response?.data as { message?: string; detail?: string } | undefined)?.detail ||
-      axiosError.message;
+      (error.response?.data as { message?: string; detail?: string } | undefined)?.message ||
+      (error.response?.data as { message?: string; detail?: string } | undefined)?.detail ||
+      error.message;
 
-    if (axiosError.code === 'ERR_CANCELED') {
+    if (error.code === 'ERR_CANCELED') {
       return createToolExecutionError(
-        ErrorCode.RequestTimeout,
         'tool_timeout',
         'runtime',
         true,
@@ -230,7 +240,6 @@ function mapApiErrorToToolError(error: unknown): ToolExecutionError {
     switch (status) {
       case 400:
         return createToolExecutionError(
-          ErrorCode.InvalidParams,
           'api_bad_request',
           'upstream',
           false,
@@ -240,7 +249,6 @@ function mapApiErrorToToolError(error: unknown): ToolExecutionError {
       case 401:
       case 403:
         return createToolExecutionError(
-          ErrorCode.InvalidRequest,
           'api_authorization_failed',
           'upstream',
           false,
@@ -249,7 +257,6 @@ function mapApiErrorToToolError(error: unknown): ToolExecutionError {
         );
       case 404:
         return createToolExecutionError(
-          ErrorCode.InvalidRequest,
           'api_resource_not_found',
           'upstream',
           false,
@@ -258,7 +265,6 @@ function mapApiErrorToToolError(error: unknown): ToolExecutionError {
         );
       case 408:
         return createToolExecutionError(
-          ErrorCode.RequestTimeout,
           'api_request_timeout',
           'upstream',
           true,
@@ -267,7 +273,6 @@ function mapApiErrorToToolError(error: unknown): ToolExecutionError {
         );
       case 429:
         return createToolExecutionError(
-          ErrorCode.InternalError,
           'api_rate_limited',
           'upstream',
           true,
@@ -279,7 +284,6 @@ function mapApiErrorToToolError(error: unknown): ToolExecutionError {
       case 503:
       case 504:
         return createToolExecutionError(
-          ErrorCode.InternalError,
           'api_server_error',
           'upstream',
           true,
@@ -288,10 +292,9 @@ function mapApiErrorToToolError(error: unknown): ToolExecutionError {
         );
       default:
         return createToolExecutionError(
-          ErrorCode.InternalError,
           'api_request_failed',
           'upstream',
-          false,
+          typeof status === 'number' && status >= 500,
           `API request failed (${status}): ${apiMessage}`,
           status
         );
@@ -301,7 +304,6 @@ function mapApiErrorToToolError(error: unknown): ToolExecutionError {
   if (error instanceof Error) {
     if (error.name === 'AbortError') {
       return createToolExecutionError(
-        ErrorCode.RequestTimeout,
         'tool_timeout',
         'runtime',
         true,
@@ -309,9 +311,8 @@ function mapApiErrorToToolError(error: unknown): ToolExecutionError {
       );
     }
 
-    if (error.message === 'Execution queue is full') {
+    if (error instanceof QueueFullError) {
       return createToolExecutionError(
-        ErrorCode.InternalError,
         'execution_queue_full',
         'runtime',
         true,
@@ -319,9 +320,8 @@ function mapApiErrorToToolError(error: unknown): ToolExecutionError {
       );
     }
 
-    if (error.message === 'Execution queue timeout exceeded') {
+    if (error instanceof QueueTimeoutError) {
       return createToolExecutionError(
-        ErrorCode.RequestTimeout,
         'execution_queue_timeout',
         'runtime',
         true,
@@ -330,7 +330,6 @@ function mapApiErrorToToolError(error: unknown): ToolExecutionError {
     }
 
     return createToolExecutionError(
-      ErrorCode.InternalError,
       'request_failed',
       'runtime',
       false,
@@ -339,7 +338,6 @@ function mapApiErrorToToolError(error: unknown): ToolExecutionError {
   }
 
   return createToolExecutionError(
-    ErrorCode.InternalError,
     'unknown_internal_error',
     'runtime',
     false,
@@ -382,11 +380,18 @@ function formatValidationErrors(errors: ErrorObject[] | null | undefined): strin
 
 function validateToolArguments(toolName: string, args: Record<string, unknown>): void {
   const validator = inputValidators.get(toolName);
-  if (!validator || validator(args)) {
+  if (!validator) {
+    throw createToolExecutionError(
+      'missing_input_validator',
+      'runtime',
+      false,
+      `Input validator missing for tool: ${toolName}`
+    );
+  }
+  if (validator(args)) {
     return;
   }
   throw createToolExecutionError(
-    ErrorCode.InvalidParams,
     'input_validation_failed',
     'validation',
     false,
@@ -831,7 +836,6 @@ export class OpenApiMcpServer {
           if (paramValue === undefined || paramValue === null) {
             if (parameter.required) {
               throw createToolExecutionError(
-                ErrorCode.InvalidParams,
                 'missing_required_parameter',
                 'validation',
                 false,
@@ -856,7 +860,6 @@ export class OpenApiMcpServer {
         const resolvedAuth = resolveAuthForTool(tool);
         if (!resolvedAuth.ok) {
           throw createToolExecutionError(
-            ErrorCode.InvalidRequest,
             'missing_credentials',
             'auth',
             false,
@@ -883,7 +886,6 @@ export class OpenApiMcpServer {
           headers['Content-Type'] = requestBodyInfo.content_type || 'application/json';
         } else if (requestBodyInfo?.required) {
           throw createToolExecutionError(
-            ErrorCode.InvalidParams,
             'missing_required_request_body',
             'validation',
             false,

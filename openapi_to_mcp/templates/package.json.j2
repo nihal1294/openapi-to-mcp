@@ -18,8 +18,9 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.8.0",
-    {% if runtime_validation == 'input' %}"ajv": "^8.17.1",
-    {% endif %}
+    {%- if runtime_validation == 'input' %}
+    "ajv": "^8.17.1",
+    {%- endif %}
     "axios": "^1.8.0",
     "dotenv": "^16.4.0"{% if transport == 'streamable-http' %},
     "express": "^5.0.0"

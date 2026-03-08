@@ -44,6 +44,9 @@ SSE generation is intentionally gone.
 - structured JSON object results returned as `structuredContent`
 - structured tool-error results with machine-readable metadata under `meta.error`
 
+`meta.error.retryable` is advisory only. It tells callers whether an immediate retry is
+reasonable, but it does not guarantee success on retry and does not imply any backoff policy.
+
 ## `generation_report.json`
 
 Use the report to check:
