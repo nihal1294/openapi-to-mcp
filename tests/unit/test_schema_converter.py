@@ -319,6 +319,18 @@ def test_schema_conversion_cycle_detection() -> None:
     assert not _contains_internal_marker(result)
 
 
+def test_schema_converter_mismatched_pop_clears_stack() -> None:
+    """Test mismatched ref pops reset the active ref stack deterministically."""
+    converter = SchemaConverter(SAMPLE_FULL_SPEC)
+    converter.push_ref("#/components/schemas/CyclicA")
+    converter.push_ref("#/components/schemas/CyclicB")
+
+    converter.pop_ref("#/components/schemas/CyclicA")
+
+    assert not converter.is_ref_on_stack("#/components/schemas/CyclicA")
+    assert not converter.is_ref_on_stack("#/components/schemas/CyclicB")
+
+
 def test_schema_conversion_invalid_input() -> None:
     """Test conversion with invalid input types."""
     assert openapi_schema_to_json_schema(None, SAMPLE_FULL_SPEC) == {}

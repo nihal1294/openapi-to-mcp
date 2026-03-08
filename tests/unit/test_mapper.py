@@ -225,6 +225,36 @@ def test_mapper_mapping_fail_overrides_non_strict_dedupe() -> None:
         mapper.map_tools()
 
 
+def test_mapper_mapping_error_skip_overrides_strict() -> None:
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Skip Override", "version": "1.0.0"},
+        "paths": {
+            "/ok": {
+                "get": {
+                    "operationId": "okTool",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+            "/bad": {
+                "get": {
+                    "operationId": ["invalid", "unhashable"],
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+        },
+    }
+
+    mapper = Mapper(spec=spec, strict=True, on_mapping_error="skip")
+    tools = mapper.map_tools()
+
+    assert [tool["name"] for tool in tools] == ["okTool"]
+    report = mapper.get_report()
+    assert report["on_mapping_error"] == "skip"
+    assert report["mapped_tools"] == 1
+    assert report["skipped_operations"][0]["path"] == "/bad"
+
+
 def test_mapper_non_strict_skips_invalid_operation_and_reports() -> None:
     spec = {
         "openapi": "3.0.0",

@@ -77,10 +77,12 @@ class SchemaConverter:
         self._repair_ref_stack(ref_path)
 
     def _repair_ref_stack(self, ref_path: str) -> None:
-        """Best-effort recovery when the reference stack gets out of sync."""
-        if ref_path in self._ref_stack:
-            self._ref_stack.remove(ref_path)
-            return
+        """Reset the ref stack when ordering can no longer be trusted."""
+        logger.error(
+            "Resetting reference stack after mismatch while popping %s. Remaining stack: %s",
+            ref_path,
+            self._ref_stack,
+        )
         self._ref_stack.clear()
 
     def convert(

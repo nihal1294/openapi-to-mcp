@@ -41,7 +41,6 @@ class Mapper:
             raise MappingError(err_msg)
         self.spec = spec
         self.strict = strict
-        self._schema_converter = SchemaConverter(spec)
         self.on_mapping_error = resolve_error_mode(on_mapping_error, strict=strict)
         self.on_schema_error = resolve_error_mode(on_schema_error, strict=strict)
         self.mcp_tools: list[dict[str, Any]] = []
@@ -153,7 +152,7 @@ class Mapper:
 
     def _resolve_ref(self, ref: str) -> dict[str, Any]:
         """
-        Resolve a reference using the schema converter's reference handler.
+        Resolve a reference using a converter dedicated to ref traversal.
 
         Args:
             ref: The reference string to resolve.
@@ -161,7 +160,7 @@ class Mapper:
         Returns:
             The resolved schema dictionary.
         """
-        ref_handler = ReferenceHandler(self._schema_converter)
+        ref_handler = ReferenceHandler(SchemaConverter(self.spec))
         return ref_handler.resolve_ref(ref)
 
     def _normalize_security_requirements(
