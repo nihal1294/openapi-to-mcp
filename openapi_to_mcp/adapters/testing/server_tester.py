@@ -71,7 +71,16 @@ class StdioTransport(TransportStrategy):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     logger.info("MCP session initialized.")
-                    response_data = await _perform_mcp_request(session, method, params)
+                    try:
+                        response_data = await _perform_mcp_request(
+                            session, method, params
+                        )
+                    except McpError as e:
+                        logger.info(
+                            "Received MCP error response over stdio: %s",
+                            e.error.message,
+                        )
+                        return _format_mcp_error(e, req_id)
                     logger.info("Received response from MCP server.")
                     return _format_response(response_data, req_id)
         except Exception as e:
@@ -258,6 +267,15 @@ def _format_response(
     if "id" not in response_data_json:
         response_data_json["id"] = req_id
     return response_data_json
+
+
+def _format_mcp_error(error: McpError, req_id: int) -> dict[str, Any]:
+    """Convert an MCP error exception into a JSON-RPC error payload."""
+    return {
+        "jsonrpc": "2.0",
+        "id": req_id,
+        "error": error.error.model_dump(mode="json"),
+    }
 
 
 def _create_transport_strategy(

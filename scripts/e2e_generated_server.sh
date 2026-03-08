@@ -322,6 +322,8 @@ main() {
     "$STDIO_OUTPUT_DIR" "stdio" "$BASIC_OPENAPI_SPEC" "generated-stdio-e2e"
   build_generated_server "$STDIO_OUTPUT_DIR"
   run_suite_assertions "basic" "stdio" "$STDIO_OUTPUT_DIR" "${STDIO_OUTPUT_DIR}/.env"
+  run_suite_assertions "validation-failure" "stdio" \
+    "$STDIO_OUTPUT_DIR" "${STDIO_OUTPUT_DIR}/.env"
 
   echo "Generating and validating streamable-http server"
   generate_server \
@@ -329,6 +331,7 @@ main() {
   build_generated_server "$HTTP_OUTPUT_DIR"
   start_streamable_http_server "$HTTP_OUTPUT_DIR"
   run_suite_assertions "basic" "streamable-http" "$HTTP_OUTPUT_DIR"
+  run_suite_assertions "validation-failure" "streamable-http" "$HTTP_OUTPUT_DIR"
 
   echo "Generating and validating auth stdio server"
   generate_server \
