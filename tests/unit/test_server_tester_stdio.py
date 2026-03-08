@@ -29,11 +29,11 @@ class _FakeClientSession:
         _exc: object,
         _tb: object,
     ) -> None:
-        return None
+        pass
 
 
 @pytest.mark.asyncio
-async def test_stdio_transport_returns_jsonrpc_error_for_tool_failures() -> None:
+async def test_stdio_transport_returns_jsonrpc_error_for_protocol_tool_errors() -> None:
     transport = StdioTransport("node build/index.js")
     mcp_error = McpError(
         ErrorData(code=-32602, message="Input validation failed", data=None)
@@ -67,4 +67,57 @@ async def test_stdio_transport_returns_jsonrpc_error_for_tool_failures() -> None
             "message": "Input validation failed",
             "data": None,
         },
+    }
+
+
+@pytest.mark.asyncio
+async def test_stdio_transport_returns_in_band_tool_errors_unchanged() -> None:
+    transport = StdioTransport("node build/index.js")
+    tool_error_result = MagicMock()
+    tool_error_result.model_dump.return_value = {
+        "content": [{"type": "text", "text": "Upstream request failed"}],
+        "meta": {
+            "error": {
+                "code": "api_server_error",
+                "source": "upstream",
+                "retryable": True,
+                "httpStatus": 503,
+            }
+        },
+        "isError": True,
+    }
+
+    with (
+        patch(
+            "openapi_to_mcp.adapters.testing.server_tester.stdio_client",
+            _fake_stdio_client,
+        ),
+        patch(
+            "openapi_to_mcp.adapters.testing.server_tester.ClientSession",
+            _FakeClientSession,
+        ),
+        patch(
+            "openapi_to_mcp.adapters.testing.server_tester._perform_mcp_request",
+            return_value=tool_error_result,
+        ),
+    ):
+        response = await transport.connect_and_execute(
+            "call",
+            {"tool_name": "testConversionTool", "tool_arguments": {"status": "x"}},
+            10,
+        )
+
+    assert response == {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "content": [{"type": "text", "text": "Upstream request failed"}],
+        "meta": {
+            "error": {
+                "code": "api_server_error",
+                "source": "upstream",
+                "retryable": True,
+                "httpStatus": 503,
+            }
+        },
+        "isError": True,
     }

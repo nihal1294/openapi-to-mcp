@@ -58,7 +58,11 @@ SUITES = {
             name="getBearerAuth",
             arguments={},
             expected_error="AUTH_BEARERAUTH_TOKEN",
-            expected_error_meta={"code": "missing_credentials", "source": "auth"},
+            expected_error_meta={
+                "code": "missing_credentials",
+                "source": "auth",
+                "retryable": False,
+            },
         )
     ],
     "validation-failure": [
@@ -69,6 +73,27 @@ SUITES = {
             expected_error_meta={
                 "code": "input_validation_failed",
                 "source": "validation",
+                "retryable": False,
+            },
+        )
+    ],
+    "validation-disabled": [
+        ToolExpectation(
+            name="testConversionTool",
+            arguments={"status": 123},
+            expected={"status": "123"},
+        )
+    ],
+    "upstream-server-error": [
+        ToolExpectation(
+            name="testConversionTool",
+            arguments={"status": "server_error"},
+            expected_error="API server error (503)",
+            expected_error_meta={
+                "code": "api_server_error",
+                "source": "upstream",
+                "retryable": True,
+                "httpStatus": 503,
             },
         )
     ],
