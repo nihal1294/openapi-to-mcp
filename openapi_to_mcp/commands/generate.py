@@ -301,6 +301,8 @@ def generate(  # noqa: PLR0913
     except NoToolsMappedError as exc:
         click.echo(str(exc))
         return
+    except click.ClickException:
+        raise
     except (SpecLoaderError, MappingError, GenerationError, SchemaError) as exc:
         raise click.ClickException(str(exc)) from exc
     except Exception as e:
