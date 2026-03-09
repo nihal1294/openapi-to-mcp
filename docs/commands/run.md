@@ -34,6 +34,13 @@ openapi-to-mcp run [OPTIONS]
 | `--runtime-validation` | No | `input` | Runtime validation mode compiled into the generated server (`none` or `input`) |
 | `--target-api-base-url` | No | None | Override `TARGET_API_BASE_URL` explicitly |
 | `--env-source` | No | None | Runtime env values as JSON string or path to `.json` or `.env` |
+| `--origin-allowlist` | No | None | Override `MCP_ALLOWED_ORIGINS` for `streamable-http` |
+| `--host-allowlist` | No | None | Override `MCP_ALLOWED_HOSTS` for `streamable-http` |
+| `--max-concurrency` | No | None | Override `MCP_MAX_CONCURRENCY` |
+| `--per-tool-max-concurrency` | No | None | Override `MCP_PER_TOOL_MAX_CONCURRENCY` |
+| `--max-queue-size` | No | None | Override `MCP_MAX_QUEUE_SIZE` |
+| `--queue-timeout-ms` | No | None | Override `MCP_QUEUE_TIMEOUT_MS` |
+| `--tool-timeout-ms` | No | None | Override `MCP_TOOL_TIMEOUT_MS` |
 
 ## Examples
 
@@ -80,6 +87,18 @@ openapi-to-mcp run \
   --target-api-base-url https://example.com/api
 ```
 
+### Override runtime controls directly from the CLI
+
+```bash
+openapi-to-mcp run \
+  --openapi-json ./openapi.yaml \
+  --target-api-base-url https://example.com/api \
+  --origin-allowlist https://app.example.com,http://localhost:3000 \
+  --max-concurrency 64 \
+  --per-tool-max-concurrency 16 \
+  --tool-timeout-ms 45000
+```
+
 ## `--env-source` formats
 
 Accepted values:
@@ -89,6 +108,7 @@ Accepted values:
 - a path to a `.env` file
 
 `run` copies `.env.example` to `.env` when needed, writes overrides, and then starts the generated server with resolved runtime values.
+CLI runtime-control flags are written as the corresponding `MCP_*` env vars before startup.
 
 ## Base URL resolution
 
@@ -122,6 +142,8 @@ openapi-to-mcp test-server \
 ## Common failure cases
 
 - unresolved `TARGET_API_BASE_URL`
+- invalid runtime-control values such as `MCP_MAX_CONCURRENCY=0`
+- invalid `TARGET_API_BASE_URL` values that are not absolute `http` or `https` URLs
 - missing local runtime tools such as `node` or `npm`
 - `npm install` or `npm run build` failure in the generated project
 - invalid `--env-source` value or unreadable env file

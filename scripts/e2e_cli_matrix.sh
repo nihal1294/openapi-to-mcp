@@ -19,6 +19,8 @@ TARGET_API_BASE_URL=""
 SPEC_URL=""
 STDIO_OUTPUT_DIR="${TMP_ROOT}/generated-stdio"
 HTTP_OUTPUT_DIR="${TMP_ROOT}/generated-http"
+RUN_OUTPUT_DIR="${TMP_ROOT}/run-generated"
+RUN_NO_VALIDATION_OUTPUT_DIR="${TMP_ROOT}/run-no-validation"
 HTTP_SERVER_PID=""
 RUN_SERVER_PID=""
 PIDS=()
@@ -173,6 +175,14 @@ assert_failure_contains() {
   fi
 }
 
+assert_file_contains() {
+  local expected="$1" path="$2"
+  grep -Fq -- "$expected" "$path" || {
+    echo "Expected ${path} to contain: $expected" >&2
+    exit 1
+  }
+}
+
 generate_server() {
   local output_dir="$1" transport="$2" spec_source="$3"; shift 3
   rm -rf "$output_dir"
@@ -201,18 +211,33 @@ start_generated_http_server() {
   wait_for_http_status "http://${HTTP_HOST}:${HTTP_PORT}${MCP_ENDPOINT}" 400
 }
 
+stop_run_command() {
+  cleanup_pid "$RUN_SERVER_PID"
+  RUN_SERVER_PID=""
+}
+
 start_run_command() {
-  local log_file="$1"
-  RUN_HTTP_PORT="${RUN_HTTP_PORT:-$(choose_free_port "$HTTP_HOST")}"
+  local log_file="$1" output_dir="$2"; shift 2
+  RUN_HTTP_PORT="$(choose_free_port "$HTTP_HOST")"
+  local cmd=(
+    uv run openapi-to-mcp run
+    --openapi-json "$BASIC_OPENAPI_SPEC"
+    --output-dir "$output_dir"
+    --transport streamable-http
+    --host "$HTTP_HOST"
+    --port "$RUN_HTTP_PORT"
+    --mcp-endpoint "$MCP_ENDPOINT"
+    --target-api-base-url "$TARGET_API_BASE_URL"
+    "$@"
+  )
+  stop_run_command
+  rm -rf "$output_dir"
   (
     cd "$REPO_ROOT"
-    run_uv run openapi-to-mcp run \
-      --openapi-json "$BASIC_OPENAPI_SPEC" \
-      --transport streamable-http \
-      --host "$HTTP_HOST" \
-      --port "$RUN_HTTP_PORT" \
-      --mcp-endpoint "$MCP_ENDPOINT" \
-      --target-api-base-url "$TARGET_API_BASE_URL" >"$log_file" 2>&1
+    if [[ -n "${UV_CACHE_DIR:-}" ]]; then
+      exec env UV_CACHE_DIR="$UV_CACHE_DIR" "${cmd[@]}"
+    fi
+    exec "${cmd[@]}"
   ) &
   RUN_SERVER_PID="$!"
   wait_for_http_status "http://${HTTP_HOST}:${RUN_HTTP_PORT}${MCP_ENDPOINT}" 400
@@ -259,9 +284,14 @@ main() {
   write_duplicate_operation_spec "$duplicate_spec"
   assert_failure_contains "Duplicate tool name detected" uv run openapi-to-mcp generate --openapi-json "$duplicate_spec" --output-dir "$duplicate_output_dir" --no-strict --on-mapping-error fail
 
-  start_run_command "${TMP_ROOT}/run.log"
+  start_run_command "${TMP_ROOT}/run.log" "$RUN_OUTPUT_DIR" --max-concurrency 7
+  assert_file_contains "MCP_MAX_CONCURRENCY=7" "${RUN_OUTPUT_DIR}/.env"
   assert_output_contains "testConversionTool" uv run openapi-to-mcp test-server --transport streamable-http --host "$HTTP_HOST" --port "$RUN_HTTP_PORT" --mcp-endpoint "$MCP_ENDPOINT" --list-tools
   assert_output_matches '"result"\s*:\s*\{' uv run openapi-to-mcp test-server --transport streamable-http --host "$HTTP_HOST" --port "$RUN_HTTP_PORT" --mcp-endpoint "$MCP_ENDPOINT" --tool-name testConversionTool --tool-args '{"status":"available"}'
+  assert_output_contains "Input validation failed" uv run openapi-to-mcp test-server --transport streamable-http --host "$HTTP_HOST" --port "$RUN_HTTP_PORT" --mcp-endpoint "$MCP_ENDPOINT" --tool-name testConversionTool --tool-args '{"status":{"bad":1}}'
+
+  start_run_command "${TMP_ROOT}/run-no-validation.log" "$RUN_NO_VALIDATION_OUTPUT_DIR" --runtime-validation none
+  assert_output_contains '"bad": "1"' uv run openapi-to-mcp test-server --transport streamable-http --host "$HTTP_HOST" --port "$RUN_HTTP_PORT" --mcp-endpoint "$MCP_ENDPOINT" --tool-name testConversionTool --tool-args '{"status":{"bad":1}}'
 
   echo "CLI E2E matrix passed"
 }

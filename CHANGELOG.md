@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-03-09
+
+### Added
+
+- Added output schema emission for object-shaped success responses and structured JSON tool results in generated runtimes.
+- Added generated runtime input validation controls with `--runtime-validation {none,input}`.
+- Added structured in-band tool error metadata for validation, auth, upstream, and runtime failures.
+- Added startup configuration validation, runtime override support, and request ID observability for generated runtimes.
+- Added a GitHub Pages docs site with install-first command and guide documentation.
+
+### Changed
+
+- Modularized the generated TypeScript runtime into focused `src/runtime/*` modules instead of a monolithic `server.ts`.
+- Split public MCP tool definitions from internal execution metadata in generated servers.
+- Improved generation controls with explicit mapping-error and schema-error policies.
+- Hardened generated-server and CLI end-to-end coverage around auth, runtime validation, observability, and contract behavior.
+
 ## [0.3.0] - 2026-03-07
 
 ### Added

@@ -294,6 +294,65 @@ run_suite_assertions() {
   )
 }
 
+run_observability_assertion() {
+  local transport="$1"
+  local output_dir="$2"
+  local tool_arguments="$3"
+  local expect_error="${4:-0}"
+  local args=(--transport "$transport" --tool-name "testConversionTool" --tool-arguments "$tool_arguments")
+
+  if [[ "$transport" == "stdio" ]]; then
+    args+=(--server-cmd "node ${output_dir}/build/index.js" --env-source "${output_dir}/.env")
+  else
+    args+=(--endpoint-url "http://${HTTP_HOST}:${CURRENT_HTTP_PORT}${MCP_ENDPOINT}")
+  fi
+  if [[ "$expect_error" == "1" ]]; then
+    args+=(--expect-error)
+  fi
+
+  (
+    cd "$REPO_ROOT"
+    run_uv run python scripts/assert_runtime_observability.py "${args[@]}"
+  )
+}
+
+assert_startup_failure() {
+  local output_dir="$1"
+  local env_key="$2"
+  local env_value="$3"
+  local expected_message="$4"
+  local base_env="${output_dir}/.env"
+  local invalid_env="${output_dir}/.env.invalid"
+  local log_file="${TMP_ROOT}/$(basename "$output_dir")-invalid.log"
+
+  cp "$base_env" "$invalid_env"
+  replace_or_append_env_var "$invalid_env" "$env_key" "$env_value"
+
+  set +e
+  (
+    cd "$output_dir"
+    set -a
+    # shellcheck disable=SC1090
+    source "$invalid_env"
+    set +a
+    node build/index.js
+  ) >"$log_file" 2>&1
+  local exit_code="$?"
+  set -e
+
+  if [[ "$exit_code" -eq 0 ]]; then
+    echo "Expected startup failure for ${env_key}, but server started successfully." >&2
+    cat "$log_file" >&2
+    exit 1
+  fi
+
+  if ! grep -Fq -- "$expected_message" "$log_file"; then
+    echo "Startup failure log did not contain expected message: ${expected_message}" >&2
+    cat "$log_file" >&2
+    exit 1
+  fi
+}
+
 trap 'exit 1' INT TERM
 trap cleanup EXIT
 
@@ -327,6 +386,13 @@ main() {
   run_suite_assertions "basic" "stdio" "$STDIO_OUTPUT_DIR" "${STDIO_OUTPUT_DIR}/.env"
   run_suite_assertions "validation-failure" "stdio" \
     "$STDIO_OUTPUT_DIR" "${STDIO_OUTPUT_DIR}/.env"
+  run_observability_assertion "stdio" "$STDIO_OUTPUT_DIR" '{"status":"available"}'
+  assert_startup_failure \
+    "$STDIO_OUTPUT_DIR" "TARGET_API_BASE_URL" "ftp://example.com" \
+    "TARGET_API_BASE_URL must use http or https."
+  assert_startup_failure \
+    "$STDIO_OUTPUT_DIR" "MCP_MAX_CONCURRENCY" "0" \
+    "MCP_MAX_CONCURRENCY must be an integer >= 1."
 
   echo "Generating and validating streamable-http server"
   generate_server \
@@ -336,6 +402,8 @@ main() {
   run_suite_assertions "basic" "streamable-http" "$HTTP_OUTPUT_DIR"
   run_suite_assertions "validation-failure" "streamable-http" "$HTTP_OUTPUT_DIR"
   run_suite_assertions "upstream-server-error" "streamable-http" "$HTTP_OUTPUT_DIR"
+  run_observability_assertion "streamable-http" "$HTTP_OUTPUT_DIR" '{"status":"available"}'
+  run_observability_assertion "streamable-http" "$HTTP_OUTPUT_DIR" '{"status":"server_error"}' 1
 
   echo "Generating and validating stdio server without runtime validation"
   generate_server \
