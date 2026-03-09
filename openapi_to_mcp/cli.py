@@ -1,6 +1,6 @@
 import rich_click as click
 
-from openapi_to_mcp.commands import generate, run, test_server
+from openapi_to_mcp.commands import doctor, generate, run, test_server
 from openapi_to_mcp.common import configure_logger
 
 
@@ -30,13 +30,14 @@ _configure_rich_click()
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli() -> None:
-    """A CLI tool to generate and test MCP servers from OpenAPI specs."""
+    """A CLI tool to diagnose, generate, run, and test MCP servers from OpenAPI specs."""
     configure_logger()
 
 
 cli.add_command(generate)
 cli.add_command(run)
 cli.add_command(test_server)
+cli.add_command(doctor)
 
 
 if __name__ == "__main__":
