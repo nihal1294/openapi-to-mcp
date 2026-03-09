@@ -22,7 +22,8 @@ def test_run_reports_generate_project_failures_cleanly(
     runner: CliRunner, tmp_path: Path, mocker: MagicMock
 ) -> None:
     mocker.patch(
-        "openapi_to_mcp.commands.run.shutil.which", return_value="/usr/bin/tool"
+        "openapi_to_mcp.commands.run_support.shutil.which",
+        return_value="/usr/bin/tool",
     )
     mocker.patch(
         "openapi_to_mcp.commands.run.generate_project",
@@ -44,7 +45,8 @@ def test_run_reports_invalid_env_source_cleanly(
 ) -> None:
     output_dir = tmp_path / "generated"
     mocker.patch(
-        "openapi_to_mcp.commands.run.shutil.which", return_value="/usr/bin/tool"
+        "openapi_to_mcp.commands.run_support.shutil.which",
+        return_value="/usr/bin/tool",
     )
 
     def fake_generate_project(**_: object) -> None:

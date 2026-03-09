@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 import rich_click as click
 
+from openapi_to_mcp.commands.runtime_overrides import run_runtime_override_options
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -188,4 +190,5 @@ run_options = [
         "--env-source",
         help="Environment variables as a JSON string or path to a JSON/.env file.",
     ),
+    *run_runtime_override_options,
 ]
