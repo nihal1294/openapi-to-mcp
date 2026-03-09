@@ -11,6 +11,10 @@ from openapi_to_mcp.adapters.testing.server_tester import execute_mcp_server
 from openapi_to_mcp.common.utils import parse_env_source
 
 
+def _payload_error(payload: dict[str, Any]) -> None:
+    raise AssertionError(json.dumps(payload, indent=2))
+
+
 def _transport_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     if args.transport == "stdio":
         return {
@@ -28,14 +32,14 @@ def _extract_payload(response: dict[str, Any]) -> dict[str, Any]:
 def _extract_request_id(payload: dict[str, Any]) -> str:
     meta = payload.get("meta")
     if not isinstance(meta, dict) or not isinstance(meta.get("requestId"), str):
-        raise TypeError(json.dumps(payload, indent=2))
+        _payload_error(payload)
     return meta["requestId"]
 
 
 def _extract_text(payload: dict[str, Any]) -> str:
     content = payload.get("content")
     if not isinstance(content, list) or not content:
-        raise AssertionError(json.dumps(payload, indent=2))
+        _payload_error(payload)
     text = content[0].get("text")
     if not isinstance(text, str):
         raise TypeError(json.dumps(payload, indent=2))
@@ -46,14 +50,12 @@ def _assert_success_correlation(payload: dict[str, Any], request_id: str) -> Non
     text = _extract_text(payload)
     body = json.loads(text)
     if body.get("request_id") != request_id:
-        raise AssertionError(json.dumps(payload, indent=2))
+        _payload_error(payload)
 
 
-def _assert_error_request_id(payload: dict[str, Any], request_id: str) -> None:
+def _assert_error_request_id(payload: dict[str, Any]) -> None:
     if payload.get("isError") is not True:
-        raise AssertionError(json.dumps(payload, indent=2))
-    if not request_id:
-        raise AssertionError(json.dumps(payload, indent=2))
+        _payload_error(payload)
 
 
 async def _main(args: argparse.Namespace) -> None:
@@ -70,7 +72,7 @@ async def _main(args: argparse.Namespace) -> None:
     payload = _extract_payload(response)
     request_id = _extract_request_id(payload)
     if args.expect_error:
-        _assert_error_request_id(payload, request_id)
+        _assert_error_request_id(payload)
         return
     _assert_success_correlation(payload, request_id)
 

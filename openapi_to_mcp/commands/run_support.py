@@ -92,12 +92,15 @@ def _copy_example_env(output_dir: Path) -> Path:
 def _write_env_vars(env_path: Path, variables: dict[str, str]) -> None:
     existing = (parse_env_source(str(env_path)) or {}) if env_path.exists() else {}
     merged = {**existing, **variables}
-    lines = [f"{key}={value}" for key, value in sorted(merged.items())]
+    lines = [
+        f"{key}={_serialize_env_value(key, value)}"
+        for key, value in sorted(merged.items())
+    ]
     env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _meaningful_value(value: str | None) -> str | None:
-    return value if value and value != PLACEHOLDER_BASE_URL else None
+    return value if value not in (None, "", PLACEHOLDER_BASE_URL) else None
 
 
 def _filter_runtime_env(file_env: dict[str, str]) -> dict[str, str]:
@@ -106,3 +109,11 @@ def _filter_runtime_env(file_env: dict[str, str]) -> dict[str, str]:
         for key, value in file_env.items()
         if _meaningful_value(value) is not None
     }
+
+
+def _serialize_env_value(key: str, value: str) -> str:
+    if "\n" in value or "\r" in value:
+        raise click.UsageError(
+            f"{key} contains a newline, which cannot be written safely to .env."
+        )
+    return value

@@ -218,31 +218,26 @@ stop_run_command() {
 
 start_run_command() {
   local log_file="$1" output_dir="$2"; shift 2
-  stop_run_command
   RUN_HTTP_PORT="$(choose_free_port "$HTTP_HOST")"
+  local cmd=(
+    uv run openapi-to-mcp run
+    --openapi-json "$BASIC_OPENAPI_SPEC"
+    --output-dir "$output_dir"
+    --transport streamable-http
+    --host "$HTTP_HOST"
+    --port "$RUN_HTTP_PORT"
+    --mcp-endpoint "$MCP_ENDPOINT"
+    --target-api-base-url "$TARGET_API_BASE_URL"
+    "$@"
+  )
+  stop_run_command
   rm -rf "$output_dir"
   (
     cd "$REPO_ROOT"
     if [[ -n "${UV_CACHE_DIR:-}" ]]; then
-      exec env UV_CACHE_DIR="$UV_CACHE_DIR" uv run openapi-to-mcp run \
-        --openapi-json "$BASIC_OPENAPI_SPEC" \
-        --output-dir "$output_dir" \
-        --transport streamable-http \
-        --host "$HTTP_HOST" \
-        --port "$RUN_HTTP_PORT" \
-        --mcp-endpoint "$MCP_ENDPOINT" \
-        --target-api-base-url "$TARGET_API_BASE_URL" \
-        "$@"
+      exec env UV_CACHE_DIR="$UV_CACHE_DIR" "${cmd[@]}"
     fi
-    exec uv run openapi-to-mcp run \
-      --openapi-json "$BASIC_OPENAPI_SPEC" \
-      --output-dir "$output_dir" \
-      --transport streamable-http \
-      --host "$HTTP_HOST" \
-      --port "$RUN_HTTP_PORT" \
-      --mcp-endpoint "$MCP_ENDPOINT" \
-      --target-api-base-url "$TARGET_API_BASE_URL" \
-      "$@"
+    exec "${cmd[@]}"
   ) &
   RUN_SERVER_PID="$!"
   wait_for_http_status "http://${HTTP_HOST}:${RUN_HTTP_PORT}${MCP_ENDPOINT}" 400

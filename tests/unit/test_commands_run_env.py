@@ -116,3 +116,88 @@ def test_run_applies_runtime_control_overrides(
     assert "MCP_QUEUE_TIMEOUT_MS=2000" in env_contents
     assert "MCP_TOOL_TIMEOUT_MS=45000" in env_contents
     assert subprocess_run.call_args_list[0].kwargs["env"]["MCP_MAX_CONCURRENCY"] == "64"
+
+
+def test_run_cli_runtime_overrides_beat_env_source(
+    runner: CliRunner, tmp_path: Path, mocker: MagicMock
+) -> None:
+    output_dir = tmp_path / "generated"
+    subprocess_run = mocker.patch("openapi_to_mcp.commands.run_support.subprocess.run")
+    mocker.patch(
+        "openapi_to_mcp.commands.run_support.shutil.which", return_value="/usr/bin/tool"
+    )
+
+    def fake_generate_project(**_: object) -> None:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / ".env.example").write_text(
+            "TARGET_API_BASE_URL=https://example.com\n", encoding="utf-8"
+        )
+
+    mocker.patch(
+        "openapi_to_mcp.commands.run.generate_project",
+        side_effect=fake_generate_project,
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "run",
+            "--openapi-json",
+            str(tmp_path / "openapi.yaml"),
+            "--output-dir",
+            str(output_dir),
+            "--env-source",
+            '{"MCP_MAX_CONCURRENCY":"4"}',
+            "--max-concurrency",
+            "64",
+        ],
+    )
+
+    assert result.exit_code == 0
+    env_contents = (output_dir / ".env").read_text(encoding="utf-8")
+    assert "MCP_MAX_CONCURRENCY=64" in env_contents
+    assert subprocess_run.call_args_list[0].kwargs["env"]["MCP_MAX_CONCURRENCY"] == "64"
+
+
+def test_run_env_source_empty_value_overrides_shell_env(
+    runner: CliRunner, tmp_path: Path, mocker: MagicMock
+) -> None:
+    output_dir = tmp_path / "generated"
+    subprocess_run = mocker.patch("openapi_to_mcp.commands.run_support.subprocess.run")
+    mocker.patch(
+        "openapi_to_mcp.commands.run_support.shutil.which", return_value="/usr/bin/tool"
+    )
+    mocker.patch.dict(
+        "openapi_to_mcp.commands.run_support.os.environ",
+        {"MCP_ALLOWED_HOSTS": "from-shell"},
+        clear=False,
+    )
+
+    def fake_generate_project(**_: object) -> None:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / ".env.example").write_text(
+            "TARGET_API_BASE_URL=https://example.com\n", encoding="utf-8"
+        )
+
+    mocker.patch(
+        "openapi_to_mcp.commands.run.generate_project",
+        side_effect=fake_generate_project,
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "run",
+            "--openapi-json",
+            str(tmp_path / "openapi.yaml"),
+            "--output-dir",
+            str(output_dir),
+            "--env-source",
+            '{"MCP_ALLOWED_HOSTS":""}',
+        ],
+    )
+
+    assert result.exit_code == 0
+    env_contents = (output_dir / ".env").read_text(encoding="utf-8")
+    assert "MCP_ALLOWED_HOSTS=" in env_contents
+    assert subprocess_run.call_args_list[0].kwargs["env"]["MCP_ALLOWED_HOSTS"] == ""
