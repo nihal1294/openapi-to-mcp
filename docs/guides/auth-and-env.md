@@ -14,6 +14,7 @@ Resolution order:
 4. current process environment
 
 If no real base URL can be resolved, startup fails.
+If the base URL is present but not an absolute `http` or `https` URL, startup also fails.
 
 ## `--env-source` formats
 
@@ -78,6 +79,8 @@ Current generated `.env.example` includes:
 - `MCP_QUEUE_TIMEOUT_MS`
 - `MCP_TOOL_TIMEOUT_MS`
 - auth env vars derived from the OpenAPI security schemes
+
+Invalid runtime-control values fail fast at startup instead of silently using defaults.
 
 ## Security behavior
 
