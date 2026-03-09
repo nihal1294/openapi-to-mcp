@@ -7,6 +7,8 @@ It is meant for:
 - CI checks around breaking MCP changes
 - comparing two spec revisions before regeneration
 
+Both inputs can be local JSON/YAML files or URLs.
+
 ## Command
 
 ```bash
@@ -61,3 +63,5 @@ openapi-to-mcp diff \
 - Input, output, and auth changes are treated as breaking.
 - Added tools are treated as non-breaking.
 - If either spec cannot be mapped cleanly, fix that first with `doctor`.
+- If either spec produces partial mapping results, `diff` exits `1` instead of
+  comparing an incomplete MCP surface.

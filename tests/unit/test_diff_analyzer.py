@@ -114,6 +114,34 @@ def test_diff_analyzer_reports_rename_and_contract_changes() -> None:
     ]
 
 
+def test_diff_analyzer_reports_rename_only_when_contract_is_identical() -> None:
+    before = _spec(
+        {
+            "/pets": {
+                "get": {
+                    "operationId": "listPets",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            }
+        }
+    )
+    after = _spec(
+        {
+            "/pets": {
+                "get": {
+                    "operationId": "fetchPets",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            }
+        }
+    )
+
+    report = DiffAnalyzer(before, after).analyze("before.json", "after.json")
+
+    assert report.breaking_count() == 1
+    assert [change.code for change in report.changes] == ["tool_renamed"]
+
+
 def _spec(paths: dict, *, components: dict | None = None) -> dict:
     spec = {
         "openapi": "3.0.0",

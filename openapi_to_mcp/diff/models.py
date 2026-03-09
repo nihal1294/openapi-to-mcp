@@ -18,7 +18,7 @@ class DiffChange:
     message: str
     location: str
     hint: str
-    details: dict[str, str] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable change payload."""

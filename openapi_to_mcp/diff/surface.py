@@ -13,6 +13,8 @@ from openapi_to_mcp.common.tool_runtime import (
 )
 from openapi_to_mcp.mapping.mapper import Mapper
 
+_SKIPPED_OPERATION_PREVIEW_LIMIT = 3
+
 
 @dataclass(frozen=True)
 class ToolSurface:
@@ -41,6 +43,7 @@ def build_tool_surfaces(spec: dict[str, Any]) -> dict[str, ToolSurface]:
         on_schema_error="skip",
     )
     mapped_tools = mapper.map_tools()
+    _raise_if_mapper_skipped_operations(mapper.get_report())
     public_tools = build_public_tools(mapped_tools)
     runtime_tools = build_runtime_tool_registry(mapped_tools)
     return {
@@ -60,6 +63,24 @@ def build_tool_surfaces(spec: dict[str, Any]) -> dict[str, ToolSurface]:
 def canonicalize(value: object) -> str:
     """Return a stable string representation for diff comparisons."""
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _raise_if_mapper_skipped_operations(report: dict[str, Any]) -> None:
+    skipped = report.get("skipped_operations")
+    if not isinstance(skipped, list) or not skipped:
+        return
+    summary = ", ".join(
+        f"{item['method']} {item['path']}"
+        for item in skipped[:_SKIPPED_OPERATION_PREVIEW_LIMIT]
+        if isinstance(item, dict)
+        and isinstance(item.get("method"), str)
+        and isinstance(item.get("path"), str)
+    )
+    suffix = "..." if len(skipped) > _SKIPPED_OPERATION_PREVIEW_LIMIT else ""
+    raise MappingError(
+        "Spec mapping skipped operation schema(s) during diff: "
+        f"{summary}{suffix}. Run `openapi-to-mcp doctor` first."
+    )
 
 
 def _require_string(

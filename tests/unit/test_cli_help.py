@@ -56,4 +56,5 @@ def test_diff_help_lists_required_options() -> None:
     assert result.exit_code == 0
     assert "--before-openapi-json" in result.output
     assert "--after-openapi-json" in result.output
+    assert "--format" in result.output
     assert "--fail-on" in result.output

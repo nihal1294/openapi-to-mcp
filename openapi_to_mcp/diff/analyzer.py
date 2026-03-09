@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from openapi_to_mcp.diff.models import DiffChange, DiffReport
 from openapi_to_mcp.diff.surface import ToolSurface, build_tool_surfaces, canonicalize
+
+ContractCode = Literal[
+    "input_schema_changed",
+    "output_schema_changed",
+    "auth_changed",
+]
 
 
 class DiffAnalyzer:
@@ -101,21 +107,21 @@ class DiffAnalyzer:
         self,
         report: DiffReport,
         operation: tuple[str, str],
-        code: str,
+        code: ContractCode,
         before: ToolSurface,
         after: ToolSurface,
     ) -> None:
-        if canonicalize(_contract_value(code, before)) == canonicalize(
-            _contract_value(code, after)
-        ):
+        _, _, before_value = _contract_config(code, before)
+        message, hint, after_value = _contract_config(code, after)
+        if canonicalize(before_value) == canonicalize(after_value):
             return
         report.add(
             DiffChange(
                 code=code,
                 impact="breaking",
-                message=_message_for(code),
+                message=message,
                 location=_format_operation(operation),
-                hint=_hint_for(code),
+                hint=hint,
             )
         )
 
@@ -132,25 +138,26 @@ def _format_operation(operation: tuple[str, str]) -> str:
     return f"{method} {path}"
 
 
-def _message_for(code: str) -> str:
-    return {
-        "input_schema_changed": "The tool input schema changed.",
-        "output_schema_changed": "The tool output schema changed.",
-        "auth_changed": "The tool auth requirements changed.",
-    }[code]
-
-
-def _hint_for(code: str) -> str:
-    return {
-        "input_schema_changed": "Review callers because argument compatibility changed.",
-        "output_schema_changed": "Review consumers because structured output compatibility changed.",
-        "auth_changed": "Review runtime credentials and access expectations for this tool.",
-    }[code]
-
-
-def _contract_value(code: str, surface: ToolSurface) -> object:
-    return {
-        "input_schema_changed": surface.input_schema,
-        "output_schema_changed": surface.output_schema,
-        "auth_changed": _auth_contract(surface),
-    }[code]
+def _contract_config(
+    code: ContractCode,
+    surface: ToolSurface,
+) -> tuple[str, str, object]:
+    if code == "input_schema_changed":
+        return (
+            "The tool input schema changed.",
+            "Review callers because argument compatibility changed.",
+            surface.input_schema,
+        )
+    if code == "output_schema_changed":
+        return (
+            "The tool output schema changed.",
+            "Review consumers because structured output compatibility changed.",
+            surface.output_schema,
+        )
+    if code == "auth_changed":
+        return (
+            "The tool auth requirements changed.",
+            "Review runtime credentials and access expectations for this tool.",
+            _auth_contract(surface),
+        )
+    raise ValueError(f"Unsupported diff contract code: {code}")

@@ -26,9 +26,17 @@ if TYPE_CHECKING:
 
 @click.command()
 @click.option(
-    "--before-openapi-json", "-b", required=True, help="Old spec path or URL."
+    "--before-openapi-json",
+    "-b",
+    required=True,
+    help="Old OpenAPI specification JSON or YAML path or URL.",
 )
-@click.option("--after-openapi-json", "-a", required=True, help="New spec path or URL.")
+@click.option(
+    "--after-openapi-json",
+    "-a",
+    required=True,
+    help="New OpenAPI specification JSON or YAML path or URL.",
+)
 @click.option(
     "--format",
     "output_format",
@@ -115,7 +123,7 @@ def _print_summary(report: DiffReport, fail_on: FailMode) -> None:
 
 
 def _render_change(change: dict[str, object]) -> None:
-    print_section(f"{str(change['impact']).upper()}: {change['code']}")
+    print_section(f"{_format_impact(change['impact'])}: {change['code']}")
     click.echo(f"Location: {change['location']}")
     click.echo(f"Issue: {change['message']}")
     details = change.get("details")
@@ -123,3 +131,8 @@ def _render_change(change: dict[str, object]) -> None:
         click.echo(f"Details: {json.dumps(details, sort_keys=True)}")
     click.echo(f"Hint: {change['hint']}")
     click.echo()
+
+
+def _format_impact(impact: object) -> str:
+    value = str(impact).replace("_", "-")
+    return value.upper()
