@@ -1,0 +1,101 @@
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import axios from 'axios';
+
+import { QueueFullError, QueueTimeoutError } from './limiter.js';
+
+export type ToolErrorSource = 'validation' | 'auth' | 'upstream' | 'runtime';
+
+export interface ToolErrorMeta {
+  code: string;
+  source: ToolErrorSource;
+  retryable: boolean;
+  httpStatus?: number;
+}
+
+export class ToolExecutionError extends Error {
+  constructor(
+    readonly meta: ToolErrorMeta,
+    message: string
+  ) {
+    super(message);
+    this.name = 'ToolExecutionError';
+  }
+}
+
+export function createToolExecutionError(
+  code: string,
+  source: ToolErrorSource,
+  retryable: boolean,
+  message: string,
+  httpStatus?: number
+): ToolExecutionError {
+  return new ToolExecutionError({ code, source, retryable, httpStatus }, message);
+}
+
+export function buildToolErrorResult(
+  error: ToolExecutionError,
+  requestId: string
+): CallToolResult {
+  return {
+    content: [{ type: 'text', text: error.message }],
+    meta: { requestId, error: error.meta },
+    isError: true,
+  };
+}
+
+export function mapApiErrorToToolError(error: unknown): ToolExecutionError {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+    const apiMessage =
+      (error.response?.data as { message?: string; detail?: string } | undefined)
+        ?.message ||
+      (error.response?.data as { message?: string; detail?: string } | undefined)
+        ?.detail ||
+      error.message;
+
+    if (error.code === 'ERR_CANCELED') {
+      return createToolExecutionError(
+        'tool_timeout',
+        'runtime',
+        true,
+        `API request cancelled or timed out: ${apiMessage}`
+      );
+    }
+
+    switch (status) {
+      case 400:
+        return createToolExecutionError('api_bad_request', 'upstream', false, `API bad request: ${apiMessage}`, status);
+      case 401:
+      case 403:
+        return createToolExecutionError('api_authorization_failed', 'upstream', false, `API authorization failed: ${apiMessage}`, status);
+      case 404:
+        return createToolExecutionError('api_resource_not_found', 'upstream', false, `API resource not found: ${apiMessage}`, status);
+      case 408:
+        return createToolExecutionError('api_request_timeout', 'upstream', true, `API request timeout: ${apiMessage}`, status);
+      case 429:
+        return createToolExecutionError('api_rate_limited', 'upstream', true, `API rate limit hit: ${apiMessage}`, status);
+      case 500:
+      case 502:
+      case 503:
+      case 504:
+        return createToolExecutionError('api_server_error', 'upstream', true, `API server error (${status}): ${apiMessage}`, status);
+      default:
+        return createToolExecutionError('api_request_failed', 'upstream', typeof status === 'number' && status >= 500, `API request failed (${status}): ${apiMessage}`, status);
+    }
+  }
+
+  if (error instanceof Error) {
+    if (error.name === 'AbortError') {
+      return createToolExecutionError('tool_timeout', 'runtime', true, `API request aborted: ${error.message}`);
+    }
+    if (error instanceof QueueFullError) {
+      return createToolExecutionError('execution_queue_full', 'runtime', true, 'Execution queue is full');
+    }
+    if (error instanceof QueueTimeoutError) {
+      return createToolExecutionError('execution_queue_timeout', 'runtime', true, 'Execution queue timeout exceeded');
+    }
+    return createToolExecutionError('request_failed', 'runtime', false, `Request failed: ${error.message}`);
+  }
+
+  return createToolExecutionError('unknown_internal_error', 'runtime', false, 'An unknown internal error occurred');
+}

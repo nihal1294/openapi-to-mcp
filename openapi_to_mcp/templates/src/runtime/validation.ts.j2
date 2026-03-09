@@ -1,0 +1,53 @@
+{% if runtime_validation == 'input' %}import { Ajv, type ErrorObject, type ValidateFunction } from 'ajv';
+
+import { tools } from './generated.js';
+import { createToolExecutionError } from './errors.js';
+
+const ajv = new Ajv({ allErrors: true, strict: false });
+const inputValidators = new Map<string, ValidateFunction<Record<string, unknown>>>(
+  tools.map((tool) => [
+    tool.name,
+    ajv.compile(tool.inputSchema as Record<string, unknown>) as ValidateFunction<Record<string, unknown>>,
+  ])
+);
+
+function formatValidationErrors(errors: ErrorObject[] | null | undefined): string {
+  if (!errors || errors.length === 0) {
+    return 'request arguments did not match the generated input schema';
+  }
+  return errors
+    .map((error) => {
+      const location = error.instancePath || error.schemaPath || '/';
+      return `${location}: ${error.message ?? 'invalid value'}`;
+    })
+    .join('; ');
+}
+
+export function validateToolArguments(
+  toolName: string,
+  args: Record<string, unknown>
+): void {
+  const validator = inputValidators.get(toolName);
+  if (!validator) {
+    throw createToolExecutionError(
+      'missing_input_validator',
+      'runtime',
+      false,
+      `Input validator missing for tool: ${toolName}`
+    );
+  }
+  if (validator(args)) {
+    return;
+  }
+  throw createToolExecutionError(
+    'input_validation_failed',
+    'validation',
+    false,
+    `Input validation failed: ${formatValidationErrors(validator.errors)}`
+  );
+}
+{% else %}export function validateToolArguments(
+  _toolName: string,
+  _args: Record<string, unknown>
+): void {}
+{% endif %}

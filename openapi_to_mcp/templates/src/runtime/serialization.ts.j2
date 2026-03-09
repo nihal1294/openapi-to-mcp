@@ -1,0 +1,167 @@
+import type { ToolParameterMetadata } from './generated.js';
+
+function stringifyValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
+function encodePathToken(value: unknown): string {
+  return encodeURIComponent(stringifyValue(value));
+}
+
+function serializePathObject(
+  objectValue: Record<string, unknown>,
+  explode: boolean
+): string {
+  if (explode) {
+    return Object.entries(objectValue)
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodePathToken(value)}`)
+      .join(',');
+  }
+  return Object.entries(objectValue)
+    .flatMap(([key, value]) => [encodeURIComponent(key), encodePathToken(value)])
+    .join(',');
+}
+
+function serializeObjectSimple(
+  objectValue: Record<string, unknown>,
+  explode: boolean
+): string {
+  if (explode) {
+    return Object.entries(objectValue)
+      .map(([key, value]) => `${key}=${stringifyValue(value)}`)
+      .join(',');
+  }
+  return Object.entries(objectValue)
+    .flatMap(([key, value]) => [key, stringifyValue(value)])
+    .join(',');
+}
+
+export function serializePathValue(
+  parameter: ToolParameterMetadata,
+  value: unknown
+): string {
+  const style = parameter.style ?? 'simple';
+  const explode = parameter.explode ?? false;
+  const encodedParamName = encodeURIComponent(parameter.name);
+  const simpleValue = Array.isArray(value)
+    ? value.map((item) => encodePathToken(item)).join(',')
+    : value && typeof value === 'object'
+      ? serializePathObject(value as Record<string, unknown>, explode)
+      : encodePathToken(value);
+
+  if (style === 'label') {
+    if (Array.isArray(value) && explode) {
+      return `.${value.map((item) => encodePathToken(item)).join('.')}`;
+    }
+    if (value && typeof value === 'object' && explode) {
+      return `.${Object.entries(value as Record<string, unknown>)
+        .map(([key, objectValue]) => `${encodeURIComponent(key)}=${encodePathToken(objectValue)}`)
+        .join('.')}`;
+    }
+    return `.${simpleValue}`;
+  }
+  if (style === 'matrix') {
+    if (Array.isArray(value) && explode) {
+      return value.map((item) => `;${encodedParamName}=${encodePathToken(item)}`).join('');
+    }
+    if (value && typeof value === 'object' && explode) {
+      return Object.entries(value as Record<string, unknown>)
+        .map(([key, objectValue]) => `;${encodeURIComponent(key)}=${encodePathToken(objectValue)}`)
+        .join('');
+    }
+    return `;${encodedParamName}=${simpleValue}`;
+  }
+  return simpleValue;
+}
+
+export function applyQueryParam(
+  queryParams: Record<string, unknown>,
+  parameter: ToolParameterMetadata,
+  value: unknown
+): void {
+  const style = parameter.style ?? 'form';
+  const explode = parameter.explode ?? true;
+  if (style === 'deepObject' && value && typeof value === 'object' && !Array.isArray(value)) {
+    for (const [key, objectValue] of Object.entries(value as Record<string, unknown>)) {
+      queryParams[`${parameter.name}[${key}]`] = stringifyValue(objectValue);
+    }
+    return;
+  }
+  if (style === 'spaceDelimited' && Array.isArray(value)) {
+    queryParams[parameter.name] = value.map((item) => stringifyValue(item)).join(' ');
+    return;
+  }
+  if (style === 'pipeDelimited' && Array.isArray(value)) {
+    queryParams[parameter.name] = value.map((item) => stringifyValue(item)).join('|');
+    return;
+  }
+  if (Array.isArray(value)) {
+    queryParams[parameter.name] = explode
+      ? value.map((item) => stringifyValue(item))
+      : value.map((item) => stringifyValue(item)).join(',');
+    return;
+  }
+  if (value && typeof value === 'object') {
+    const objectValue = value as Record<string, unknown>;
+    if (explode) {
+      for (const [key, objectItem] of Object.entries(objectValue)) {
+        queryParams[key] = stringifyValue(objectItem);
+      }
+    } else {
+      queryParams[parameter.name] = Object.entries(objectValue)
+        .flatMap(([key, objectItem]) => [key, stringifyValue(objectItem)])
+        .join(',');
+    }
+    return;
+  }
+  queryParams[parameter.name] = stringifyValue(value);
+}
+
+export function serializeHeaderValue(
+  parameter: ToolParameterMetadata,
+  value: unknown
+): string {
+  const explode = parameter.explode ?? false;
+  if (Array.isArray(value)) {
+    return value.map((item) => stringifyValue(item)).join(',');
+  }
+  if (value && typeof value === 'object') {
+    return serializeObjectSimple(value as Record<string, unknown>, explode);
+  }
+  return stringifyValue(value);
+}
+
+export function applyCookieParam(
+  cookieValues: Record<string, string>,
+  parameter: ToolParameterMetadata,
+  value: unknown
+): void {
+  const explode = parameter.explode ?? true;
+  if (Array.isArray(value)) {
+    cookieValues[parameter.name] = value.map((item) => stringifyValue(item)).join(',');
+    return;
+  }
+  if (value && typeof value === 'object') {
+    const objectValue = value as Record<string, unknown>;
+    if (explode) {
+      for (const [key, objectItem] of Object.entries(objectValue)) {
+        cookieValues[key] = stringifyValue(objectItem);
+      }
+    } else {
+      cookieValues[parameter.name] = Object.entries(objectValue)
+        .flatMap(([key, objectItem]) => [key, stringifyValue(objectItem)])
+        .join(',');
+    }
+    return;
+  }
+  cookieValues[parameter.name] = stringifyValue(value);
+}

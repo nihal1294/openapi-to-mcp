@@ -31,11 +31,13 @@ def test_generate_runtime_validation_input_emits_ajv_and_validator(
 
     assert result.exit_code == 0
     package_json = json.loads((output_dir / "package.json").read_text(encoding="utf-8"))
-    server_source = (output_dir / "src" / "server.ts").read_text(encoding="utf-8")
+    validation_source = (output_dir / "src" / "runtime" / "validation.ts").read_text(
+        encoding="utf-8"
+    )
 
     assert "ajv" in package_json["dependencies"]
-    assert "function validateToolArguments(" in server_source
-    assert "Input validation failed:" in server_source
+    assert "Ajv" in validation_source
+    assert "Input validation failed:" in validation_source
 
 
 def test_generate_runtime_validation_none_omits_ajv_and_validator(
@@ -58,7 +60,9 @@ def test_generate_runtime_validation_none_omits_ajv_and_validator(
 
     assert result.exit_code == 0
     package_json = json.loads((output_dir / "package.json").read_text(encoding="utf-8"))
-    server_source = (output_dir / "src" / "server.ts").read_text(encoding="utf-8")
+    validation_source = (output_dir / "src" / "runtime" / "validation.ts").read_text(
+        encoding="utf-8"
+    )
 
     assert "ajv" not in package_json["dependencies"]
-    assert "function validateToolArguments(" not in server_source
+    assert "Ajv" not in validation_source

@@ -10,6 +10,19 @@ from openapi_to_mcp.common.exceptions import GenerationError
 
 logger = logging.getLogger(__name__)
 
+RUNTIME_TEMPLATE_NAMES = (
+    "auth",
+    "config",
+    "errors",
+    "executor",
+    "generated",
+    "limiter",
+    "observability",
+    "response",
+    "serialization",
+    "validation",
+)
+
 
 class Generator:
     """Handles rendering templates and writing MCP server files."""
@@ -74,6 +87,8 @@ class Generator:
             self.output_path.mkdir(parents=True, exist_ok=True)
             src_path = self.output_path / "src"
             src_path.mkdir(exist_ok=True)
+            runtime_path = src_path / "runtime"
+            runtime_path.mkdir(exist_ok=True)
         except OSError as e:
             err_msg = (
                 f"Failed to create output directories in '{self.output_path}': {e}"
@@ -95,9 +110,17 @@ class Generator:
             ".env.example.j2": self.output_path / ".env.example",
             "src/index.ts.j2": self.output_path / "src" / "index.ts",
         }
+        static_templates.update(self._runtime_templates())
 
         for template_name, output_file in static_templates.items():
             self._render_and_write(template_name, output_file)
+
+    def _runtime_templates(self) -> dict[str, Path]:
+        runtime_output = self.output_path / "src" / "runtime"
+        return {
+            f"src/runtime/{name}.ts.j2": runtime_output / f"{name}.ts"
+            for name in RUNTIME_TEMPLATE_NAMES
+        }
 
     def _generate_transport_file(self) -> None:
         """

@@ -1,0 +1,118 @@
+import type { ToolRuntimeMetadata } from './generated.js';
+
+export interface ResolvedAuth {
+  ok: boolean;
+  headers: Record<string, string>;
+  query: Record<string, unknown>;
+  cookies: Record<string, string>;
+  missing: string[];
+}
+
+function normalizeSchemeName(name: string): string {
+  return name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .replace(/_+/g, '_');
+}
+
+export function resolveAuthForTool(tool: ToolRuntimeMetadata): ResolvedAuth {
+  const securityRequirements = tool.security;
+  const securitySchemes = tool.securitySchemes || {};
+  if (!Array.isArray(securityRequirements) || securityRequirements.length === 0) {
+    return { ok: true, headers: {}, query: {}, cookies: {}, missing: [] };
+  }
+
+  const missingAcrossRequirements: Set<string> = new Set();
+  for (const requirement of securityRequirements) {
+    if (!requirement || typeof requirement !== 'object') {
+      continue;
+    }
+    const requirementEntries = Object.entries(requirement);
+    if (requirementEntries.length === 0) {
+      return { ok: true, headers: {}, query: {}, cookies: {}, missing: [] };
+    }
+
+    const headers: Record<string, string> = {};
+    const query: Record<string, unknown> = {};
+    const cookies: Record<string, string> = {};
+    let satisfied = true;
+
+    for (const [schemeName] of requirementEntries) {
+      const schemeDef = securitySchemes[schemeName];
+      if (!schemeDef || typeof schemeDef !== 'object') {
+        satisfied = false;
+        missingAcrossRequirements.add(schemeName);
+        break;
+      }
+
+      const normalizedScheme = normalizeSchemeName(schemeName);
+      const schemeType = String(schemeDef.type || '').toLowerCase();
+      const httpScheme = String(schemeDef.scheme || '').toLowerCase();
+      if (schemeType === 'apikey') {
+        const apiKey = process.env[`AUTH_${normalizedScheme}_API_KEY`];
+        if (!apiKey) {
+          satisfied = false;
+          missingAcrossRequirements.add(`AUTH_${normalizedScheme}_API_KEY`);
+          break;
+        }
+        const apiKeyName = typeof schemeDef.name === 'string' ? schemeDef.name : schemeName;
+        const apiKeyIn = String(schemeDef.in || 'header').toLowerCase();
+        if (apiKeyIn === 'query') {
+          query[apiKeyName] = apiKey;
+        } else if (apiKeyIn === 'cookie') {
+          cookies[apiKeyName] = apiKey;
+        } else {
+          headers[apiKeyName] = apiKey;
+        }
+        continue;
+      }
+
+      if (schemeType === 'http' && httpScheme === 'bearer') {
+        const token = process.env[`AUTH_${normalizedScheme}_TOKEN`];
+        if (!token) {
+          satisfied = false;
+          missingAcrossRequirements.add(`AUTH_${normalizedScheme}_TOKEN`);
+          break;
+        }
+        headers.Authorization = `Bearer ${token}`;
+        continue;
+      }
+
+      if (schemeType === 'oauth2' || schemeType === 'openidconnect') {
+        const token = process.env[`AUTH_${normalizedScheme}_TOKEN`];
+        if (!token) {
+          satisfied = false;
+          missingAcrossRequirements.add(`AUTH_${normalizedScheme}_TOKEN`);
+          break;
+        }
+        headers.Authorization = `Bearer ${token}`;
+        continue;
+      }
+
+      satisfied = false;
+      if (schemeType === 'http') {
+        missingAcrossRequirements.add(
+          `${schemeName} (unsupported http scheme: ${httpScheme || 'unknown'})`
+        );
+      } else {
+        missingAcrossRequirements.add(
+          `${schemeName} (unsupported type: ${schemeType || 'unknown'})`
+        );
+      }
+      break;
+    }
+
+    if (satisfied) {
+      return { ok: true, headers, query, cookies, missing: [] };
+    }
+  }
+
+  return {
+    ok: false,
+    headers: {},
+    query: {},
+    cookies: {},
+    missing: [...missingAcrossRequirements],
+  };
+}
