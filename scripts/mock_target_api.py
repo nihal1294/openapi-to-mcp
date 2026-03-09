@@ -35,7 +35,11 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
             if query.get("status") == "server_error":
                 self._send_json(
                     HTTPStatus.SERVICE_UNAVAILABLE,
-                    {"ok": False, "error": "temporary upstream issue"},
+                    {
+                        "ok": False,
+                        "error": "temporary upstream issue",
+                        "request_id": self.headers.get("X-Request-Id"),
+                    },
                 )
                 return
             self._send_json(
@@ -44,6 +48,7 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
                     "ok": True,
                     "path": parsed.path,
                     "query": query,
+                    "request_id": self.headers.get("X-Request-Id"),
                     "status": query.get("status", "available"),
                 },
             )
@@ -108,13 +113,19 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
                     "auth": auth_kind,
                     "error": "Missing or invalid credential",
                     "received": received,
+                    "request_id": self.headers.get("X-Request-Id"),
                 },
             )
             return
 
         self._send_json(
             HTTPStatus.OK,
-            {"ok": True, "auth": auth_kind, "credential": expected},
+            {
+                "ok": True,
+                "auth": auth_kind,
+                "credential": expected,
+                "request_id": self.headers.get("X-Request-Id"),
+            },
         )
 
 
