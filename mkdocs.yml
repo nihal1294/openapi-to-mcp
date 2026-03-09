@@ -20,6 +20,7 @@ nav:
   - Installation: installation.md
   - Getting Started: getting-started.md
   - Commands:
+      - diff: commands/diff.md
       - generate: commands/generate.md
       - run: commands/run.md
       - test-server: commands/test-server.md
