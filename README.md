@@ -13,7 +13,7 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/nihal1294/openapi-to-mcp"></a>
 </p>
 
-Standalone CLI for generating, running, and testing Node.js/TypeScript MCP servers from OpenAPI specifications.
+Standalone CLI for diagnosing, generating, running, and testing Node.js/TypeScript MCP servers from OpenAPI specifications.
 
 ## Install
 

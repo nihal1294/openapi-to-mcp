@@ -29,16 +29,31 @@ def print_section(title: str) -> None:
     _STDOUT.print(f"[bold cyan]{title}[/bold cyan]")
 
 
-def print_success_panel(title: str, lines: list[str]) -> None:
-    """Render a success summary panel."""
+def _print_summary_panel(title: str, lines: list[str], *, border_style: str) -> None:
+    """Render a summary panel with the requested border style."""
     _STDOUT.print(
         Panel.fit(
             "\n".join(lines),
-            border_style="green",
+            border_style=border_style,
             title=title,
             title_align="left",
         )
     )
+
+
+def print_success_panel(title: str, lines: list[str]) -> None:
+    """Render a success summary panel."""
+    _print_summary_panel(title, lines, border_style="green")
+
+
+def print_warning_panel(title: str, lines: list[str]) -> None:
+    """Render a warning summary panel."""
+    _print_summary_panel(title, lines, border_style="yellow")
+
+
+def print_error_panel(title: str, lines: list[str]) -> None:
+    """Render an error summary panel."""
+    _print_summary_panel(title, lines, border_style="red")
 
 
 def print_error(message: str) -> None:

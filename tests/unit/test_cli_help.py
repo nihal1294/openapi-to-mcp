@@ -12,6 +12,7 @@ def test_root_help_lists_commands() -> None:
     assert "generate" in result.output
     assert "run" in result.output
     assert "test-server" in result.output
+    assert "doctor" in result.output
 
 
 def test_generate_help_lists_required_options() -> None:
@@ -34,3 +35,13 @@ def test_run_help_lists_runtime_options() -> None:
     assert "--runtime-validation" in result.output
     assert "--origin-allowlist" in result.output
     assert "--max-concurrency" in result.output
+
+
+def test_doctor_help_lists_output_options() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["doctor", "--help"])
+
+    assert result.exit_code == 0
+    assert "--openapi-json" in result.output
+    assert "--format" in result.output
