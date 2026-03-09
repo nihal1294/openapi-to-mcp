@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Literal
 
 import rich_click as click
@@ -9,9 +10,10 @@ import rich_click as click
 from openapi_to_mcp.adapters.spec_loader import SpecLoader
 from openapi_to_mcp.common.exceptions import SpecLoaderError
 from openapi_to_mcp.common.terminal import (
-    print_json_panel,
+    print_error_panel,
     print_section,
     print_success_panel,
+    print_warning_panel,
 )
 from openapi_to_mcp.doctor import DoctorAnalyzer, DoctorReport
 
@@ -57,7 +59,7 @@ def _build_report(source: str) -> DoctorReport:
 
 def _render_report(report: DoctorReport, output_format: OutputFormat) -> None:
     if output_format == "json":
-        print_json_panel("doctor report", report.to_dict())
+        click.echo(json.dumps(report.to_dict(), indent=2))
         return
     if not report.issues:
         print_success_panel(
@@ -69,15 +71,7 @@ def _render_report(report: DoctorReport, output_format: OutputFormat) -> None:
             ],
         )
         return
-    print_success_panel(
-        "Doctor Summary",
-        [
-            f"Source: {report.source}",
-            f"Errors: {report.error_count()}",
-            f"Warnings: {report.warning_count()}",
-            f"Exit code: {report.exit_code()}",
-        ],
-    )
+    _print_summary_panel(report)
     for issue in report.issues:
         _render_issue(issue.to_dict())
 
@@ -88,3 +82,16 @@ def _render_issue(issue: dict[str, str]) -> None:
     click.echo(f"Issue: {issue['message']}")
     click.echo(f"Hint: {issue['hint']}")
     click.echo()
+
+
+def _print_summary_panel(report: DoctorReport) -> None:
+    lines = [
+        f"Source: {report.source}",
+        f"Errors: {report.error_count()}",
+        f"Warnings: {report.warning_count()}",
+        f"Exit code: {report.exit_code()}",
+    ]
+    if report.error_count() > 0:
+        print_error_panel("Doctor Summary", lines)
+        return
+    print_warning_panel("Doctor Summary", lines)

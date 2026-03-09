@@ -81,3 +81,32 @@ def test_doctor_analyzer_accepts_host_and_supported_security_schemes() -> None:
     assert "missing_base_url" not in codes
     assert "unsupported_http_auth" not in codes
     assert "unsupported_security_scheme" not in codes
+
+
+def test_doctor_analyzer_reports_global_security_issue_once() -> None:
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Doctor Global Security", "version": "1.0.0"},
+        "servers": [{"url": "https://example.com"}],
+        "paths": {
+            "/pets": {
+                "get": {
+                    "operationId": "listPets",
+                    "responses": {"200": {"description": "OK"}},
+                },
+                "post": {
+                    "operationId": "createPet",
+                    "responses": {"200": {"description": "OK"}},
+                },
+            },
+        },
+        "security": [{"missingScheme": []}],
+    }
+
+    report = DoctorAnalyzer(spec).analyze("inline")
+    issues = [
+        issue for issue in report.issues if issue.code == "undefined_security_scheme"
+    ]
+
+    assert len(issues) == 1
+    assert issues[0].location == "security"

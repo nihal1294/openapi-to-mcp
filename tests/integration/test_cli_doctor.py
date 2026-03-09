@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+import re
+from typing import TYPE_CHECKING, Any
 
 from openapi_to_mcp.cli import cli
 
@@ -11,9 +12,27 @@ if TYPE_CHECKING:
     from click.testing import CliRunner
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
 def _write_json(path: Path, payload: dict) -> Path:
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
+
+
+def _extract_json(output: str) -> dict[str, Any]:
+    cleaned = _ANSI_RE.sub("", output).strip()
+    if cleaned.startswith("{") and cleaned.endswith("}"):
+        return json.loads(cleaned)
+    lines: list[str] = []
+    for raw_line in cleaned.splitlines():
+        line = raw_line.strip()
+        if not (line.startswith("│") and line.endswith("│")):
+            continue
+        inner = line[1:-1].strip()
+        if inner.startswith(("{", "}", "[", "]", '"')):
+            lines.append(inner)
+    return json.loads("\n".join(lines))
 
 
 def test_doctor_clean_spec_exits_zero(runner: CliRunner, tmp_path: Path) -> None:
@@ -125,9 +144,13 @@ def test_doctor_json_output_is_structured(runner: CliRunner, tmp_path: Path) -> 
     )
 
     assert result.exit_code == 3
-    assert '"exit_code": 3' in result.output
-    assert '"code": "missing_base_url"' in result.output
-    assert '"code": "no_http_operations"' in result.output
+    payload = _extract_json(result.stdout)
+
+    assert payload["exit_code"] == 3
+    assert {issue["code"] for issue in payload["issues"]} == {
+        "missing_base_url",
+        "no_http_operations",
+    }
 
 
 def test_doctor_invalid_source_reports_spec_load_failure(
@@ -141,5 +164,30 @@ def test_doctor_invalid_source_reports_spec_load_failure(
     )
 
     assert result.exit_code == 3
-    assert '"code": "spec_load_failed"' in result.output
-    assert '"location": "' in result.output
+    payload = _extract_json(result.stdout)
+
+    assert payload["exit_code"] == 3
+    assert payload["issues"][0]["code"] == "spec_load_failed"
+    assert payload["issues"][0]["location"] == str(missing_path)
+
+
+def test_doctor_explicit_text_format_matches_default(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Doctor Text", "version": "1.0.0"},
+        "paths": {
+            "/pets": {"get": {"responses": {"200": {"description": "OK"}}}},
+        },
+    }
+    spec_path = _write_json(tmp_path / "text.json", spec)
+
+    result = runner.invoke(
+        cli,
+        ["doctor", "--openapi-json", str(spec_path), "--format", "text"],
+    )
+
+    assert result.exit_code == 2
+    assert "Doctor Summary" in result.output
+    assert "missing_base_url" in result.output

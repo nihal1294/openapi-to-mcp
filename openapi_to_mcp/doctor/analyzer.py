@@ -5,10 +5,15 @@ from __future__ import annotations
 from typing import Any
 
 from openapi_to_mcp.doctor.models import DoctorReport
+from openapi_to_mcp.doctor.security import (
+    check_security_scheme,
+    referenced_scheme_names,
+    security_schemes,
+)
 from openapi_to_mcp.mapping.utils import generate_tool_name
 
 _HTTP_METHODS = {"get", "post", "put", "delete", "patch", "options", "head", "trace"}
-_SUPPORTED_SECURITY_TYPES = {"apiKey", "oauth2", "openIdConnect"}
+_MAX_UNION_DEPTH = 20
 
 
 class DoctorAnalyzer:
@@ -47,6 +52,8 @@ class DoctorAnalyzer:
         host = self.spec.get("host")
         if isinstance(host, str) and host:
             return
+        # `basePath` without a host is still not enough for this tool to derive
+        # a runnable absolute TARGET_API_BASE_URL, so it remains a warning.
         report.add_warning(
             "missing_base_url",
             "No default base URL was found in `servers[0].url` or Swagger 2 host fields.",
@@ -58,7 +65,7 @@ class DoctorAnalyzer:
         paths = self.spec.get("paths", {})
         if not isinstance(paths, dict):
             return []
-        operations: list[tuple[str, str, dict[str, Any]]] = []
+        operations = []
         for path, path_item in paths.items():
             if not isinstance(path_item, dict):
                 continue
@@ -115,62 +122,39 @@ class DoctorAnalyzer:
         report: DoctorReport,
         operations: list[tuple[str, str, dict[str, Any]]],
     ) -> None:
-        schemes = self._security_schemes()
-        for method, path, operation in operations:
-            for scheme_name in self._referenced_security_scheme_names(operation):
-                scheme = schemes.get(scheme_name)
-                location = f"paths.{path}.{method}.security"
-                if not isinstance(scheme, dict):
-                    report.add_error(
-                        "undefined_security_scheme",
-                        f"Security requirement references undefined scheme `{scheme_name}`.",
-                        location,
-                        "Define the scheme under `components.securitySchemes`.",
-                    )
-                    continue
-                self._check_security_scheme(report, scheme_name, scheme, location)
-
-    def _security_schemes(self) -> dict[str, Any]:
-        components = self.spec.get("components", {})
-        if not isinstance(components, dict):
-            return {}
-        schemes = components.get("securitySchemes", {})
-        return schemes if isinstance(schemes, dict) else {}
-
-    def _referenced_security_scheme_names(self, operation: dict[str, Any]) -> list[str]:
-        source = operation.get("security", self.spec.get("security", []))
-        if not isinstance(source, list):
-            return []
-        names: list[str] = []
-        for requirement in source:
-            if not isinstance(requirement, dict):
-                continue
-            names.extend(name for name in requirement if isinstance(name, str))
-        return names
-
-    def _check_security_scheme(
-        self, report: DoctorReport, name: str, scheme: dict[str, Any], location: str
-    ) -> None:
-        scheme_type = scheme.get("type")
-        if scheme_type in _SUPPORTED_SECURITY_TYPES:
-            return
-        if scheme_type == "http":
-            http_scheme = scheme.get("scheme")
-            if isinstance(http_scheme, str) and http_scheme.lower() == "bearer":
-                return
-            report.add_error(
-                "unsupported_http_auth",
-                f"Security scheme `{name}` uses unsupported HTTP scheme `{http_scheme}`.",
-                location,
-                "Use bearer, apiKey, oauth2, or openIdConnect for generated runtime auth.",
-            )
-            return
-        report.add_error(
-            "unsupported_security_scheme",
-            f"Security scheme `{name}` uses unsupported type `{scheme_type}`.",
-            location,
-            "Use bearer, apiKey, oauth2, or openIdConnect for generated runtime auth.",
+        schemes = security_schemes(self.spec)
+        self._check_security_requirements(
+            report,
+            source=self.spec.get("security", []),
+            schemes=schemes,
+            location="security",
         )
+        for method, path, operation in operations:
+            security = operation.get("security")
+            if security is None:
+                continue
+            self._check_security_requirements(
+                report,
+                source=security,
+                schemes=schemes,
+                location=f"paths.{path}.{method}.security",
+            )
+
+    def _check_security_requirements(
+        self,
+        report: DoctorReport,
+        *,
+        source: object,
+        schemes: dict[str, Any],
+        location: str,
+    ) -> None:
+        for scheme_name in referenced_scheme_names(source):
+            check_security_scheme(
+                report,
+                name=scheme_name,
+                scheme=schemes.get(scheme_name),
+                location=location,
+            )
 
     def _check_schema_unions(
         self,
@@ -194,11 +178,15 @@ class DoctorAnalyzer:
         responses = operation.get("responses")
         return isinstance(responses, dict) and self._contains_union(responses)
 
-    def _contains_union(self, value: object) -> bool:
+    def _contains_union(self, value: object, *, depth: int = 0) -> bool:
+        if depth >= _MAX_UNION_DEPTH:
+            return False
         if isinstance(value, dict):
             if "oneOf" in value or "anyOf" in value:
                 return True
-            return any(self._contains_union(item) for item in value.values())
+            return any(
+                self._contains_union(item, depth=depth + 1) for item in value.values()
+            )
         if isinstance(value, list):
-            return any(self._contains_union(item) for item in value)
+            return any(self._contains_union(item, depth=depth + 1) for item in value)
         return False
