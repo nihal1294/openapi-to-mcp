@@ -13,7 +13,7 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/nihal1294/openapi-to-mcp"></a>
 </p>
 
-Standalone CLI for diagnosing, generating, running, and testing Node.js/TypeScript MCP servers from OpenAPI specifications.
+Standalone CLI for diagnosing, diffing, generating, running, and testing Node.js/TypeScript MCP servers from OpenAPI specifications.
 
 ## Install
 
@@ -66,6 +66,8 @@ Public product documentation lives on GitHub Pages:
 ## Current capabilities
 
 - `stdio` and `streamable-http` generation targets
+- spec-readiness diagnostics with `doctor`
+- MCP-surface comparison with `diff`
 - strict mode by default with `generation_report.json`
 - generated auth env mapping for `apiKey`, bearer, OAuth2, and OpenID Connect
 - generated runtime controls for concurrency, queueing, and timeout

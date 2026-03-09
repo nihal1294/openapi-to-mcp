@@ -13,6 +13,7 @@ def test_root_help_lists_commands() -> None:
     assert "run" in result.output
     assert "test-server" in result.output
     assert "doctor" in result.output
+    assert "diff" in result.output
 
 
 def test_generate_help_lists_required_options() -> None:
@@ -45,3 +46,15 @@ def test_doctor_help_lists_output_options() -> None:
     assert result.exit_code == 0
     assert "--openapi-json" in result.output
     assert "--format" in result.output
+
+
+def test_diff_help_lists_required_options() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["diff", "--help"])
+
+    assert result.exit_code == 0
+    assert "--before-openapi-json" in result.output
+    assert "--after-openapi-json" in result.output
+    assert "--format" in result.output
+    assert "--fail-on" in result.output

@@ -1,6 +1,6 @@
 # OpenAPI to MCP
 
-Standalone CLI for diagnosing, generating, running, and testing Node.js/TypeScript MCP servers from OpenAPI specifications.
+Standalone CLI for diagnosing, diffing, generating, running, and testing Node.js/TypeScript MCP servers from OpenAPI specifications.
 
 ## Install first
 
@@ -18,6 +18,7 @@ openapi-to-mcp --help
 | `run` | You want one command to generate, build, and start a server locally | A running MCP server |
 | `test-server` | You want to smoke-test a running server | `tools/list` or `tools/call` output |
 | `doctor` | You want to assess spec readiness before generation | A readiness report with warnings and errors |
+| `diff` | You want to compare MCP-surface changes between two specs | A breaking/non-breaking change report |
 
 ## First commands to try
 
@@ -56,12 +57,13 @@ openapi-to-mcp test-server \
 4. [run](commands/run.md)
 5. [test-server](commands/test-server.md)
 6. [doctor](commands/doctor.md)
-7. [Auth and Environment](guides/auth-and-env.md)
-8. [Generated Project](guides/generated-project.md)
-9. [Examples](examples.md)
-10. [MCP Inspector](guides/mcp-inspector.md)
-11. [Troubleshooting](troubleshooting.md)
-12. [Local Workflows](guides/local-workflows.md)
+7. [diff](commands/diff.md)
+8. [Auth and Environment](guides/auth-and-env.md)
+9. [Generated Project](guides/generated-project.md)
+10. [Examples](examples.md)
+11. [MCP Inspector](guides/mcp-inspector.md)
+12. [Troubleshooting](troubleshooting.md)
+13. [Local Workflows](guides/local-workflows.md)
 
 ## Current capabilities
 

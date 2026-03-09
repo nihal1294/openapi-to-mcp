@@ -24,6 +24,7 @@ nav:
       - run: commands/run.md
       - test-server: commands/test-server.md
       - doctor: commands/doctor.md
+      - diff: commands/diff.md
   - Guides:
       - Auth and Environment: guides/auth-and-env.md
       - Generated Project: guides/generated-project.md
