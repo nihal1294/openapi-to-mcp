@@ -3,7 +3,7 @@ import axios, { type AxiosInstance } from 'axios';
 import * as http from 'http';
 import * as https from 'https';
 import { MAX_CONCURRENCY, MAX_QUEUE_SIZE, PER_TOOL_MAX_CONCURRENCY, QUEUE_TIMEOUT_MS, TARGET_API_AUTH_HEADER, TARGET_API_BASE_URL, TOOL_TIMEOUT_MS } from './config.js';
-import { buildToolErrorResult, createToolExecutionError, mapApiErrorToToolError, type ToolExecutionError } from './errors.js';
+import { buildToolErrorResult, createToolExecutionError, mapApiErrorToToolError, ToolExecutionError } from './errors.js';
 import type { ToolRuntimeMetadata } from './generated.js';
 import { ConcurrencyLimiter } from './limiter.js';
 import { createRequestId, logEvent } from './observability.js';
@@ -11,6 +11,7 @@ import { buildToolSuccessResult } from './response.js';
 import { applyCookieParam, applyQueryParam, serializeHeaderValue, serializePathValue } from './serialization.js';
 import { resolveAuthForTool } from './auth.js';
 import { validateToolArguments } from './validation.js';
+
 interface RequestContext {
   headers: Record<string, string>;
   queryParams: Record<string, unknown>;
@@ -127,7 +128,6 @@ async function executeHttpRequest(
 export class ToolExecutor {
   private readonly axiosInstance = axios.create({
     baseURL: TARGET_API_BASE_URL,
-    timeout: TOOL_TIMEOUT_MS,
     httpAgent: new http.Agent({ keepAlive: true }),
     httpsAgent: new https.Agent({ keepAlive: true }),
   });
@@ -168,10 +168,7 @@ export class ToolExecutor {
       logEvent('info', 'tool_execution_succeeded', { requestId, toolName, durationMs: Date.now() - startedAt });
       return result;
     } catch (error) {
-      const toolError =
-        error instanceof Error && error.name === 'ToolExecutionError'
-          ? (error as ToolExecutionError)
-          : mapApiErrorToToolError(error);
+      const toolError = error instanceof ToolExecutionError ? error : mapApiErrorToToolError(error);
       logEvent('error', 'tool_execution_failed', { requestId, toolName, durationMs: Date.now() - startedAt, errorCode: toolError.meta.code, errorSource: toolError.meta.source, retryable: toolError.meta.retryable, httpStatus: toolError.meta.httpStatus });
       return buildToolErrorResult(toolError, requestId);
     } finally {

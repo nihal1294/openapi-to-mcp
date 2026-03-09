@@ -12,6 +12,7 @@ export function logEvent(
   event: string,
   fields: Record<string, unknown>
 ): void {
+  // Always use stderr so stdio transport stdout stays reserved for MCP messages.
   console.error(
     JSON.stringify({
       level,

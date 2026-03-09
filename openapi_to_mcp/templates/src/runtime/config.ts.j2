@@ -1,4 +1,5 @@
 export const PLACEHOLDER_BASE_URL = 'YOUR_API_BASE_URL_HERE';
+// Validate critical runtime config at import time so invalid deployments fail fast.
 export const TARGET_API_BASE_URL = parseBaseUrlEnv();
 export const TARGET_API_AUTH_HEADER = process.env.TARGET_API_AUTH_HEADER;
 

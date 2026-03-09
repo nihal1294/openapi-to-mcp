@@ -49,6 +49,9 @@ def test_generator_generate_files_success(mocker: MagicMock) -> None:
         ("package.json.j2", output_files["package.json"]),
         ("tsconfig.json.j2", output_files["tsconfig.json"]),
         ("src/server.ts.j2", output_files["src/server.ts"]),
+        ("README.md.j2", output_files["README.md"]),
+        (".env.example.j2", output_files[".env.example"]),
+        ("src/index.ts.j2", output_files["src/index.ts"]),
         ("src/runtime/auth.ts.j2", output_files["src/runtime/auth.ts"]),
         ("src/runtime/config.ts.j2", output_files["src/runtime/config.ts"]),
         ("src/runtime/errors.ts.j2", output_files["src/runtime/errors.ts"]),
@@ -65,9 +68,6 @@ def test_generator_generate_files_success(mocker: MagicMock) -> None:
             output_files["src/runtime/serialization.ts"],
         ),
         ("src/runtime/validation.ts.j2", output_files["src/runtime/validation.ts"]),
-        ("README.md.j2", output_files["README.md"]),
-        (".env.example.j2", output_files[".env.example"]),
-        ("src/index.ts.j2", output_files["src/index.ts"]),
         ("src/transport_stdio.ts.j2", output_files["src/transport.ts"]),
     ]
     assert mock_render.call_count == len(expected_calls)
