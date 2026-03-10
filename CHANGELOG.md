@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-03-11
+
+### Added
+
+- Added `openapi-to-mcp doctor` for pre-generation readiness diagnostics with clean warning and error exit codes.
+- Added `openapi-to-mcp diff` for MCP-surface change analysis between two OpenAPI specs.
+- Added `mcpgen.yaml` / `mcpgen.yml` support for repeatable generation policy, including defaults, tool filtering, renames, auth overrides, and per-tool execution overrides.
+
+### Changed
+
+- Improved CLI and generated-project docs to cover diagnostics, diffing, and policy-driven generation workflows.
+- Hardened config validation and policy failure handling for repeatable generation workflows.
+
 ## [0.4.0] - 2026-03-09
 
 ### Added
