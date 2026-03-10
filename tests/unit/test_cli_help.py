@@ -23,6 +23,7 @@ def test_generate_help_lists_required_options() -> None:
 
     assert result.exit_code == 0
     assert "--openapi-json" in result.output
+    assert "--config" in result.output
     assert "--output-dir" in result.output
     assert "--runtime-validation" in result.output
 
@@ -33,6 +34,7 @@ def test_run_help_lists_runtime_options() -> None:
     result = runner.invoke(cli, ["run", "--help"])
 
     assert result.exit_code == 0
+    assert "--config" in result.output
     assert "--runtime-validation" in result.output
     assert "--origin-allowlist" in result.output
     assert "--max-concurrency" in result.output
