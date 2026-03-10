@@ -50,11 +50,13 @@ def _apply_tool_overrides(tool: dict[str, Any], policy: PolicyConfig) -> dict[st
 
 
 def _resolve_rename(operation: str, original_name: str, policy: PolicyConfig) -> str:
-    return (
-        policy.rename_operations.get(operation)
-        or policy.rename_names.get(original_name)
-        or original_name
-    )
+    operation_rename = policy.rename_operations.get(operation)
+    if operation_rename is not None:
+        return operation_rename
+    name_rename = policy.rename_names.get(original_name)
+    if name_rename is not None:
+        return name_rename
+    return original_name
 
 
 def _apply_auth_override(
@@ -111,11 +113,15 @@ def _lookup_override[T](
     operation_overrides: dict[str, T],
     name_overrides: dict[str, T],
 ) -> T | None:
-    return (
-        operation_overrides.get(operation)
-        or name_overrides.get(original_name)
-        or name_overrides.get(renamed_name)
-    )
+    operation_override = operation_overrides.get(operation)
+    if operation_override is not None:
+        return operation_override
+    original_override = name_overrides.get(original_name)
+    if original_override is not None:
+        return original_override
+    if renamed_name == original_name:
+        return None
+    return name_overrides.get(renamed_name)
 
 
 def _ensure_unique_names(mcp_tools: list[dict[str, Any]]) -> None:

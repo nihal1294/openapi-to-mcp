@@ -49,7 +49,7 @@ def optional_int(value: object, field_name: str, *, minimum: int) -> int | None:
     """Validate an optional integer field with a lower bound."""
     if value is None:
         return None
-    if isinstance(value, int) and value >= minimum:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= minimum:
         return value
     raise PolicyConfigError(f"`{field_name}` must be an integer >= {minimum}.")
 

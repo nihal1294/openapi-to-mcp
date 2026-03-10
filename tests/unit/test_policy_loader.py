@@ -69,6 +69,10 @@ def test_load_policy_config_autodiscovers_default_file(
         ("tools:\n  include:\n    operations: broken\n", "tools.include.operations"),
         ("generate:\n  transport: http\n", "generate.transport"),
         ("execution:\n  names:\n    listPets:\n      timeout_ms: 0\n", "timeout_ms"),
+        (
+            "execution:\n  names:\n    listPets:\n      max_concurrency: true\n",
+            "max_concurrency",
+        ),
     ],
 )
 def test_load_policy_config_rejects_invalid_values(

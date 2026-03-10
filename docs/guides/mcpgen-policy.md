@@ -113,6 +113,12 @@ Useful cases:
 - replacing incomplete OpenAPI auth definitions
 - defining the security scheme metadata required by the generated runtime
 
+Resolution order is:
+
+1. operation key
+2. original mapped tool name
+3. renamed tool name
+
 ### `execution`
 
 Attach per-tool runtime limits to generated metadata.
@@ -124,6 +130,12 @@ Current per-tool overrides:
 
 These become generated runtime metadata and override the generated runtime defaults for
 that tool only.
+
+Resolution order matches `auth`:
+
+1. operation key
+2. original mapped tool name
+3. renamed tool name
 
 ## Precedence
 

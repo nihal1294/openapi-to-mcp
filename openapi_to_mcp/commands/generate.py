@@ -175,8 +175,8 @@ def _raise_if_no_tools_mapped(
         return
     if policy_config is not None:
         err_msg = "No tools remain after applying the configured mcpgen policy."
-    else:
-        err_msg = "No tools were mapped from the OpenAPI spec."
+        raise NoToolsMappedError(err_msg, is_error=True)
+    err_msg = "No tools were mapped from the OpenAPI spec."
     logger.warning("%s Aborting generation.", err_msg)
     raise NoToolsMappedError(err_msg)
 
@@ -334,6 +334,8 @@ def generate(  # noqa: PLR0913
             ],
         )
     except NoToolsMappedError as exc:
+        if exc.is_error:
+            raise click.ClickException(str(exc)) from exc
         click.echo(str(exc))
         return
     except click.ClickException:
