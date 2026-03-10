@@ -6,6 +6,7 @@ import rich_click as click
 
 from openapi_to_mcp.commands.generate import generate_project
 from openapi_to_mcp.commands.options import add_options, run_options
+from openapi_to_mcp.commands.policy_support import load_policy_and_settings
 from openapi_to_mcp.commands.run_support import (
     ensure_runtime_tools,
     prepare_output_dir,
@@ -17,6 +18,7 @@ from openapi_to_mcp.common.exceptions import (
     GenerationError,
     MappingError,
     NoToolsMappedError,
+    PolicyConfigError,
     SchemaError,
     SpecLoaderError,
 )
@@ -31,6 +33,7 @@ if TYPE_CHECKING:
 def run_server(  # noqa: PLR0913
     openapi_json: str,
     output_dir: str | None,
+    config: str | None,
     mcp_server_name: str | None,
     mcp_server_version: str | None,
     transport: str,
@@ -58,20 +61,36 @@ def run_server(  # noqa: PLR0913
     try:
         ensure_runtime_tools()
         output_path, temp_dir = prepare_output_dir(output_dir)
+        policy_config, resolved_settings = load_policy_and_settings(
+            {
+                "mcp_server_name": mcp_server_name,
+                "mcp_server_version": mcp_server_version,
+                "transport": transport,
+                "host": host,
+                "port": port,
+                "mcp_endpoint": mcp_endpoint,
+                "strict": strict,
+                "runtime_validation": runtime_validation,
+                "on_mapping_error": on_mapping_error,
+                "on_schema_error": on_schema_error,
+            },
+            config,
+        )
         print_section(f"Generating MCP server in {output_path}")
         generate_project(
             openapi_json=openapi_json,
             output_dir=str(output_path),
-            mcp_server_name=mcp_server_name,
-            mcp_server_version=mcp_server_version,
-            transport=transport,
-            host=host,
-            port=port,
-            mcp_endpoint=mcp_endpoint,
-            strict=strict,
-            runtime_validation=runtime_validation,
-            on_mapping_error=on_mapping_error,
-            on_schema_error=on_schema_error,
+            mcp_server_name=resolved_settings["mcp_server_name"],
+            mcp_server_version=resolved_settings["mcp_server_version"],
+            transport=resolved_settings["transport"],
+            host=resolved_settings["host"],
+            port=resolved_settings["port"],
+            mcp_endpoint=resolved_settings["mcp_endpoint"],
+            strict=resolved_settings["strict"],
+            runtime_validation=resolved_settings["runtime_validation"],
+            on_mapping_error=resolved_settings["on_mapping_error"],
+            on_schema_error=resolved_settings["on_schema_error"],
+            policy_config=policy_config,
         )
         runtime_env = prepare_runtime_env(
             output_path,
@@ -109,6 +128,7 @@ def run_server(  # noqa: PLR0913
         GenerationError,
         MappingError,
         NoToolsMappedError,
+        PolicyConfigError,
         SchemaError,
         SpecLoaderError,
         ValueError,

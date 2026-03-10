@@ -13,6 +13,7 @@ openapi-to-mcp generate [OPTIONS]
 | Option | Required | Default | Meaning |
 | --- | --- | --- | --- |
 | `--openapi-json`, `-o` | Yes | None | Local path or URL to a JSON or YAML OpenAPI spec |
+| `--config` | No | Auto-discover `mcpgen.yaml` / `mcpgen.yml` | Policy file path for generation defaults and tool policy |
 | `--output-dir`, `-d` | Yes | None | Output directory for generated files |
 | `--mcp-server-name`, `-n` | No | Spec title or fallback | Generated MCP server name |
 | `--mcp-server-version`, `-v` | No | Spec version or fallback | Generated MCP server version |
@@ -47,6 +48,17 @@ openapi-to-mcp generate \
   --port 8080 \
   --mcp-endpoint /mcp
 ```
+
+### Generate with `mcpgen.yaml` policy
+
+```bash
+openapi-to-mcp generate \
+  --openapi-json ./openapi.yaml \
+  --config ./mcpgen.yaml \
+  --output-dir ./generated-policy
+```
+
+See [mcpgen.yaml](../guides/mcpgen-policy.md) for policy shape and precedence.
 
 ### Non-strict generation
 
@@ -95,6 +107,7 @@ openapi-to-mcp generate \
 - `.env.example`
 - generated project `README.md`
 - `generation_report.json`
+- optional policy application from `mcpgen.yaml`
 - `package.json`, `tsconfig.json`, and related build files
 
 ## `generation_report.json`
@@ -103,6 +116,7 @@ The report captures:
 
 - `strict_mode`
 - selected `transport`
+- applied `policy_file` when config was used
 - mapped tool count
 - resolved `on_mapping_error` and `on_schema_error` modes
 - skipped operations

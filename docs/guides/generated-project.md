@@ -23,7 +23,7 @@ A generated project is a standalone Node.js/TypeScript MCP server.
 - `src/runtime/*.ts`: focused generated runtime helpers for config, validation, auth, errors, and serialization
 - `src/transport.ts`: selected transport implementation
 - `.env.example`: generated runtime and auth placeholders
-- `generation_report.json`: warnings, skipped operations, mapped tool count
+- `generation_report.json`: warnings, skipped operations, mapped tool count, and applied policy file
 - generated `README.md`: build/run instructions for the emitted project
 
 ## Transport model
@@ -49,6 +49,7 @@ SSE generation is intentionally gone.
 - structured tool-error results with machine-readable metadata under `meta.error`
 - per-tool request IDs exposed under `meta.requestId` and forwarded upstream as `X-Request-Id`
 - structured JSON runtime logs for tool start, success, and failure events
+- optional per-tool execution overrides for concurrency and timeout
 
 `meta.error.retryable` is advisory only. It tells callers whether an immediate retry is
 reasonable, but it does not guarantee success on retry and does not imply any backoff policy.

@@ -106,10 +106,11 @@ async function executeHttpRequest(
   requestContext: RequestContext,
   requestId: string
 ): Promise<CallToolResult> {
+  const timeoutMs = tool.execution?.timeoutMs ?? TOOL_TIMEOUT_MS;
   const abortController = new AbortController();
   const timeoutHandle = setTimeout(() => {
     abortController.abort(new Error('Tool execution timeout exceeded'));
-  }, TOOL_TIMEOUT_MS);
+  }, timeoutMs);
   try {
     const response = await axiosInstance.request({
       method: tool.method,
@@ -133,12 +134,13 @@ export class ToolExecutor {
   });
   private readonly globalLimiter = new ConcurrencyLimiter(MAX_CONCURRENCY, MAX_QUEUE_SIZE, QUEUE_TIMEOUT_MS);
   private readonly perToolLimiters = new Map<string, ConcurrencyLimiter>();
-  private getPerToolLimiter(toolName: string): ConcurrencyLimiter {
+  private getPerToolLimiter(toolName: string, tool: ToolRuntimeMetadata): ConcurrencyLimiter {
     const existing = this.perToolLimiters.get(toolName);
     if (existing) {
       return existing;
     }
-    const created = new ConcurrencyLimiter(PER_TOOL_MAX_CONCURRENCY, MAX_QUEUE_SIZE, QUEUE_TIMEOUT_MS);
+    const maxConcurrency = tool.execution?.maxConcurrency ?? PER_TOOL_MAX_CONCURRENCY;
+    const created = new ConcurrencyLimiter(maxConcurrency, MAX_QUEUE_SIZE, QUEUE_TIMEOUT_MS);
     this.perToolLimiters.set(toolName, created);
     return created;
   }
@@ -149,7 +151,7 @@ export class ToolExecutor {
   ): Promise<CallToolResult> {
     const requestId = createRequestId();
     const startedAt = Date.now();
-    const perToolLimiter = this.getPerToolLimiter(toolName);
+    const perToolLimiter = this.getPerToolLimiter(toolName, tool);
     let acquiredGlobal = false;
     let acquiredPerTool = false;
     try {

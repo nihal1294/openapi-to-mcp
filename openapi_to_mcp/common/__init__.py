@@ -5,6 +5,7 @@ from openapi_to_mcp.common.exceptions import (
     GenerationError,
     MappingError,
     OpenApiMcpError,
+    PolicyConfigError,
     SchemaError,
     SpecLoaderError,
 )
@@ -15,6 +16,7 @@ __all__ = [
     "GenerationError",
     "MappingError",
     "OpenApiMcpError",
+    "PolicyConfigError",
     "SchemaError",
     "SpecLoaderError",
     "configure_logger",

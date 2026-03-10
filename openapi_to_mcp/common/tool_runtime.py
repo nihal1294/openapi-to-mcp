@@ -14,6 +14,7 @@ _RUNTIME_FIELD_MAP = {
     "_original_request_body": "requestBody",
     "_original_security": "security",
     "_original_security_schemes": "securitySchemes",
+    "_policy_execution": "execution",
 }
 
 

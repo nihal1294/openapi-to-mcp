@@ -21,6 +21,7 @@ openapi-to-mcp run [OPTIONS]
 | Option | Required | Default | Meaning |
 | --- | --- | --- | --- |
 | `--openapi-json`, `-o` | Yes | None | Local path or URL to a JSON or YAML OpenAPI spec |
+| `--config` | No | Auto-discover `mcpgen.yaml` / `mcpgen.yml` | Policy file path for generation defaults and tool policy |
 | `--output-dir`, `-d` | No | Temporary directory | Reuse a stable generated project directory |
 | `--mcp-server-name`, `-n` | No | Spec title or fallback | Generated MCP server name |
 | `--mcp-server-version`, `-v` | No | Spec version or fallback | Generated MCP server version |
@@ -68,6 +69,17 @@ openapi-to-mcp run \
   --openapi-json ./openapi.yaml \
   --env-source '{"TARGET_API_BASE_URL":"https://example.com/api"}'
 ```
+
+### Run with policy defaults from `mcpgen.yaml`
+
+```bash
+openapi-to-mcp run \
+  --openapi-json ./openapi.yaml \
+  --config ./mcpgen.yaml \
+  --target-api-base-url https://example.com/api
+```
+
+Explicit CLI values still override policy defaults.
 
 ### Keep going on mapping failures while staying strict elsewhere
 

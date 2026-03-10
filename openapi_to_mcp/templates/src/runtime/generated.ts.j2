@@ -24,6 +24,11 @@ export interface SecuritySchemeDefinition {
   scheme?: string;
 }
 
+export interface ToolExecutionMetadata {
+  maxConcurrency?: number;
+  timeoutMs?: number;
+}
+
 export interface ToolRuntimeMetadata {
   method: Method;
   path: string;
@@ -31,6 +36,7 @@ export interface ToolRuntimeMetadata {
   requestBody?: RequestBodyMetadata | null;
   security?: Array<Record<string, unknown>> | null;
   securitySchemes?: Record<string, SecuritySchemeDefinition>;
+  execution?: ToolExecutionMetadata;
 }
 
 export const tools = {{ tools | tojson(indent=2) }} as Tool[];
