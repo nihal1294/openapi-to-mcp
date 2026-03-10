@@ -11,10 +11,12 @@ import rich_click as click
 from openapi_to_mcp.adapters.generator import Generator
 from openapi_to_mcp.adapters.spec_loader import SpecLoader
 from openapi_to_mcp.commands.options import add_options, generate_options
+from openapi_to_mcp.commands.policy_support import load_policy_and_settings
 from openapi_to_mcp.common.exceptions import (
     GenerationError,
     MappingError,
     NoToolsMappedError,
+    PolicyConfigError,
     SchemaError,
     SpecLoaderError,
 )
@@ -25,9 +27,11 @@ from openapi_to_mcp.common.tool_runtime import (
     derive_auth_env_vars,
 )
 from openapi_to_mcp.mapping import Mapper
+from openapi_to_mcp.policy import apply_policy
 
 if TYPE_CHECKING:
     from openapi_to_mcp.common.error_policy import ErrorMode
+    from openapi_to_mcp.policy.models import PolicyConfig
 
 logger = logging.getLogger(__name__)
 
@@ -139,15 +143,19 @@ def _prepare_template_context(  # noqa: PLR0913
 def _build_generation_report(
     mapper: Mapper,
     *,
+    mapped_tools: int,
     strict: bool,
     transport: str,
+    policy: PolicyConfig | None,
 ) -> dict[str, Any]:
     """Build generation diagnostics report."""
     mapper_report = mapper.get_report()
     return {
         "strict_mode": strict,
         "transport": transport,
+        "policy_file": str(policy.source_path) if policy is not None else None,
         **mapper_report,
+        "mapped_tools": mapped_tools,
     }
 
 
@@ -159,12 +167,18 @@ def _write_generation_report(output_dir: str, report: dict[str, Any]) -> None:
         report_file.write("\n")
 
 
-def _raise_if_no_tools_mapped(mcp_tools: list[dict[str, Any]]) -> None:
+def _raise_if_no_tools_mapped(
+    mcp_tools: list[dict[str, Any]], *, policy_config: PolicyConfig | None
+) -> None:
     """Abort generation when the spec does not map to any MCP tools."""
     if mcp_tools:
         return
-    logger.warning("No tools were mapped from the OpenAPI spec. Aborting generation.")
-    raise NoToolsMappedError("No tools were mapped from the OpenAPI spec.")
+    if policy_config is not None:
+        err_msg = "No tools remain after applying the configured mcpgen policy."
+    else:
+        err_msg = "No tools were mapped from the OpenAPI spec."
+    logger.warning("%s Aborting generation.", err_msg)
+    raise NoToolsMappedError(err_msg)
 
 
 def generate_project(  # noqa: PLR0913
@@ -181,6 +195,7 @@ def generate_project(  # noqa: PLR0913
     runtime_validation: str,
     on_mapping_error: ErrorMode | None = None,
     on_schema_error: ErrorMode | None = None,
+    policy_config: PolicyConfig | None = None,
 ) -> None:
     logger.info(
         "Starting MCP server generation...",
@@ -223,8 +238,9 @@ def generate_project(  # noqa: PLR0913
         on_schema_error=on_schema_error,
     )
     mcp_tools = mapper.map_tools()
+    mcp_tools = apply_policy(mcp_tools, policy_config)
     logger.info("Mapped %d tools.", len(mcp_tools))
-    _raise_if_no_tools_mapped(mcp_tools)
+    _raise_if_no_tools_mapped(mcp_tools, policy_config=policy_config)
     public_tools = build_public_tools(mcp_tools)
     runtime_tools = build_runtime_tool_registry(mcp_tools)
 
@@ -250,8 +266,10 @@ def generate_project(  # noqa: PLR0913
     generator.generate_files()
     generation_report = _build_generation_report(
         mapper=mapper,
+        mapped_tools=len(mcp_tools),
         strict=strict,
         transport=transport,
+        policy=policy_config,
     )
     _write_generation_report(output_dir=output_dir, report=generation_report)
     logger.info("File generation complete.")
@@ -261,6 +279,7 @@ def generate_project(  # noqa: PLR0913
 @add_options(generate_options)
 def generate(  # noqa: PLR0913
     openapi_json: str,
+    config: str | None,
     output_dir: str,
     mcp_server_name: str | None,
     mcp_server_version: str | None,
@@ -276,19 +295,35 @@ def generate(  # noqa: PLR0913
 ) -> None:
     """Generates a Node.js/TypeScript MCP server from an OpenAPI specification."""
     try:
+        policy_config, resolved_settings = load_policy_and_settings(
+            {
+                "mcp_server_name": mcp_server_name,
+                "mcp_server_version": mcp_server_version,
+                "transport": transport,
+                "host": host,
+                "port": port,
+                "mcp_endpoint": mcp_endpoint,
+                "strict": strict,
+                "runtime_validation": runtime_validation,
+                "on_mapping_error": on_mapping_error,
+                "on_schema_error": on_schema_error,
+            },
+            config,
+        )
         generate_project(
             openapi_json=openapi_json,
             output_dir=output_dir,
-            mcp_server_name=mcp_server_name,
-            mcp_server_version=mcp_server_version,
-            transport=transport,
-            host=host,
-            port=port,
-            mcp_endpoint=mcp_endpoint,
-            strict=strict,
-            runtime_validation=runtime_validation,
-            on_mapping_error=on_mapping_error,
-            on_schema_error=on_schema_error,
+            mcp_server_name=resolved_settings["mcp_server_name"],
+            mcp_server_version=resolved_settings["mcp_server_version"],
+            transport=resolved_settings["transport"],
+            host=resolved_settings["host"],
+            port=resolved_settings["port"],
+            mcp_endpoint=resolved_settings["mcp_endpoint"],
+            strict=resolved_settings["strict"],
+            runtime_validation=resolved_settings["runtime_validation"],
+            on_mapping_error=resolved_settings["on_mapping_error"],
+            on_schema_error=resolved_settings["on_schema_error"],
+            policy_config=policy_config,
         )
         logger.info("MCP server generation successful.")
         print_success_panel(
@@ -303,7 +338,13 @@ def generate(  # noqa: PLR0913
         return
     except click.ClickException:
         raise
-    except (SpecLoaderError, MappingError, GenerationError, SchemaError) as exc:
+    except (
+        SpecLoaderError,
+        MappingError,
+        GenerationError,
+        PolicyConfigError,
+        SchemaError,
+    ) as exc:
         raise click.ClickException(str(exc)) from exc
     except Exception as e:
         logger.critical("An unexpected critical error occurred: %s", e, exc_info=True)

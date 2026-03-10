@@ -23,3 +23,7 @@ class SpecLoaderError(OpenApiMcpError):
 
 class NoToolsMappedError(OpenApiMcpError):
     """Raised when an OpenAPI spec produces no MCP tools."""
+
+
+class PolicyConfigError(OpenApiMcpError):
+    """Errors related to loading or applying `mcpgen.yaml`."""

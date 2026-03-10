@@ -26,7 +26,7 @@ def add_options(options: list[click.Option]) -> Callable:
     return _add_options
 
 
-generate_options = [
+openapi_source_options = [
     click.option(
         "--openapi-json",
         "-o",
@@ -34,12 +34,13 @@ generate_options = [
         help="Path or URL to OpenAPI specification JSON or YAML file.",
     ),
     click.option(
-        "--output-dir",
-        "-d",
-        required=True,
-        type=click.Path(file_okay=False, writable=True),
-        help="Output directory for generated files.",
+        "--config",
+        type=click.Path(dir_okay=False, exists=True),
+        help="Optional path to an mcpgen.yaml/mcpgen.yml policy file.",
     ),
+]
+
+generation_identity_options = [
     click.option(
         "--mcp-server-name",
         "-n",
@@ -50,6 +51,9 @@ generate_options = [
         "-v",
         help="Version for the generated MCP server (uses OpenAPI Spec version if not provided).",
     ),
+]
+
+generation_runtime_options = [
     click.option(
         "--transport",
         "-t",
@@ -105,7 +109,18 @@ generate_options = [
     ),
 ]
 
-shared_generation_options = generate_options[:1] + generate_options[2:]
+generate_options = [
+    *openapi_source_options,
+    click.option(
+        "--output-dir",
+        "-d",
+        required=True,
+        type=click.Path(file_okay=False, writable=True),
+        help="Output directory for generated files.",
+    ),
+    *generation_identity_options,
+    *generation_runtime_options,
+]
 
 run_options = [
     click.option(
@@ -114,7 +129,9 @@ run_options = [
         type=click.Path(file_okay=False, writable=True),
         help="Optional output directory to reuse instead of a temporary workspace.",
     ),
-    *shared_generation_options,
+    *openapi_source_options,
+    *generation_identity_options,
+    *generation_runtime_options,
     click.option(
         "--target-api-base-url",
         help="Override TARGET_API_BASE_URL for the generated runtime.",
