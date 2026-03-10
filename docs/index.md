@@ -59,11 +59,12 @@ openapi-to-mcp test-server \
 6. [doctor](commands/doctor.md)
 7. [diff](commands/diff.md)
 8. [Auth and Environment](guides/auth-and-env.md)
-9. [Generated Project](guides/generated-project.md)
-10. [Examples](examples.md)
-11. [MCP Inspector](guides/mcp-inspector.md)
-12. [Troubleshooting](troubleshooting.md)
-13. [Local Workflows](guides/local-workflows.md)
+9. [mcpgen.yaml](guides/mcpgen-policy.md)
+10. [Generated Project](guides/generated-project.md)
+11. [Examples](examples.md)
+12. [MCP Inspector](guides/mcp-inspector.md)
+13. [Troubleshooting](troubleshooting.md)
+14. [Local Workflows](guides/local-workflows.md)
 
 ## Current capabilities
 
@@ -74,3 +75,4 @@ openapi-to-mcp test-server \
 - generated-server E2E coverage against a local mock API
 - CLI E2E coverage for `generate`, `run`, and `test-server`
 - version-aware GitHub Releases automation on `master`
+- repeatable generation policy with `mcpgen.yaml`
