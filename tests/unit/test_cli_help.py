@@ -40,6 +40,9 @@ def test_run_help_lists_runtime_options() -> None:
     assert "--tool-grouping" in result.output
     assert "--origin-allowlist" in result.output
     assert "--max-concurrency" in result.output
+    assert "--cache-ttl-ms" in result.output
+    assert "--cache-max-entries" in result.output
+    assert "--rate-limit-per-min" in result.output
 
 
 def test_doctor_help_lists_output_options() -> None:

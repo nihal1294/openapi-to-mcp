@@ -53,6 +53,8 @@ class ExecutionOverride:
 
     max_concurrency: int | None = None
     timeout_ms: int | None = None
+    cache_ttl_ms: int | None = None
+    rate_limit_per_minute: int | None = None
 
 
 @dataclass(frozen=True)

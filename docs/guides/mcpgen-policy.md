@@ -65,6 +65,8 @@ execution:
     GET /pets:
       max_concurrency: 4
       timeout_ms: 15000
+      cache_ttl_ms: 60000
+      rate_limit_per_minute: 30
 ```
 
 ## What each section does
@@ -139,9 +141,22 @@ Current per-tool overrides:
 
 - `max_concurrency`
 - `timeout_ms`
+- `cache_ttl_ms`
+- `rate_limit_per_minute`
 
 These become generated runtime metadata and override the generated runtime defaults for
 that tool only.
+Caching and rate limiting are only valid for safe HTTP methods:
+
+- `GET`
+- `HEAD`
+- `OPTIONS`
+
+Generation fails if policy tries to enable `cache_ttl_ms` or `rate_limit_per_minute`
+for an unsafe operation.
+Use `cache_ttl_ms: 0` or `rate_limit_per_minute: 0` to disable that control for a
+specific tool even when a global runtime default is enabled.
+Rate limiting uses a fixed one-minute window, so quota resets at minute boundaries.
 
 Resolution order matches `auth`:
 

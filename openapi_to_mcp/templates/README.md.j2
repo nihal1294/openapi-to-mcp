@@ -29,7 +29,12 @@ This MCP server was automatically generated from an OpenAPI specification by the
         *   Provide the full authorization header string if required by the target API (e.g., `Authorization: Bearer your_token` or `X-API-Key: your_key`). Leave it commented out or blank if no auth header is needed.
     *   **MCP Runtime Controls (Optional but Recommended):**
         *   `MCP_MAX_CONCURRENCY`, `MCP_PER_TOOL_MAX_CONCURRENCY`, `MCP_MAX_QUEUE_SIZE`, `MCP_QUEUE_TIMEOUT_MS`, `MCP_TOOL_TIMEOUT_MS`
-        *   These control parallel tool execution, queueing behavior, and timeouts.
+        *   `MCP_CACHE_TTL_MS`, `MCP_CACHE_MAX_ENTRIES`, `MCP_RATE_LIMIT_PER_MINUTE`
+        *   These control parallel tool execution, queueing behavior, timeouts, and optional performance controls for safe tools.
+        *   Set `MCP_CACHE_TTL_MS=0` or `MCP_RATE_LIMIT_PER_MINUTE=0` to disable that control globally.
+        *   `MCP_CACHE_MAX_ENTRIES` bounds the in-memory cache size when caching is enabled.
+        *   Caching and rate limiting only apply to safe HTTP methods (`GET`, `HEAD`, `OPTIONS`).
+        *   Rate limiting uses a fixed one-minute window, so quota resets at window boundaries.
         *   Invalid values fail fast at startup instead of silently falling back.
     *   **Runtime Validation:**
         *   Generated tool input validation is set to `{{ runtime_validation }}`.

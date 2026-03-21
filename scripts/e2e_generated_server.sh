@@ -297,6 +297,19 @@ run_suite_assertions() {
   )
 }
 
+run_performance_suite_assertions() {
+  local suite="$1"
+  local tool_name="${2:-testConversionTool}"
+
+  (
+    cd "$REPO_ROOT"
+    run_uv run python scripts/assert_generated_server_performance.py \
+      --suite "$suite" \
+      --tool-name "$tool_name" \
+      --endpoint-url "http://${HTTP_HOST}:${CURRENT_HTTP_PORT}${MCP_ENDPOINT}"
+  )
+}
+
 run_observability_assertion() {
   local transport="$1"
   local output_dir="$2"
@@ -396,6 +409,12 @@ main() {
   assert_startup_failure \
     "$STDIO_OUTPUT_DIR" "MCP_MAX_CONCURRENCY" "0" \
     "MCP_MAX_CONCURRENCY must be an integer >= 1."
+  assert_startup_failure \
+    "$STDIO_OUTPUT_DIR" "MCP_CACHE_TTL_MS" "-1" \
+    "MCP_CACHE_TTL_MS must be an integer >= 0."
+  assert_startup_failure \
+    "$STDIO_OUTPUT_DIR" "MCP_CACHE_MAX_ENTRIES" "0" \
+    "MCP_CACHE_MAX_ENTRIES must be an integer >= 1."
 
   echo "Generating and validating streamable-http server"
   generate_server \
@@ -407,6 +426,21 @@ main() {
   run_suite_assertions "upstream-server-error" "streamable-http" "$HTTP_OUTPUT_DIR"
   run_observability_assertion "streamable-http" "$HTTP_OUTPUT_DIR" '{"status":"available"}'
   run_observability_assertion "streamable-http" "$HTTP_OUTPUT_DIR" '{"status":"server_error"}' 1
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_TTL_MS" "60000"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_MAX_ENTRIES" "1000"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RATE_LIMIT_PER_MINUTE" "0"
+  start_streamable_http_server "$HTTP_OUTPUT_DIR"
+  run_performance_suite_assertions "cached"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_TTL_MS" "60000"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_MAX_ENTRIES" "1000"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RATE_LIMIT_PER_MINUTE" "1"
+  start_streamable_http_server "$HTTP_OUTPUT_DIR"
+  run_performance_suite_assertions "cached-rate-limited"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_TTL_MS" "0"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_MAX_ENTRIES" "1000"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RATE_LIMIT_PER_MINUTE" "1"
+  start_streamable_http_server "$HTTP_OUTPUT_DIR"
+  run_performance_suite_assertions "rate-limited"
 
   echo "Generating and validating stdio server without runtime validation"
   generate_server \

@@ -12,12 +12,15 @@ logger = logging.getLogger(__name__)
 
 RUNTIME_TEMPLATE_NAMES = (
     "auth",
+    "cache",
     "config",
     "errors",
     "executor",
     "generated",
     "limiter",
     "observability",
+    "rate_limit",
+    "request",
     "response",
     "serialization",
     "validation",

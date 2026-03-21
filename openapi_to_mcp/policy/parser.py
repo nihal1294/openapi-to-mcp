@@ -159,4 +159,14 @@ def _parse_execution_override(value: object, field_name: str) -> ExecutionOverri
             f"{field_name}.timeout_ms",
             minimum=1,
         ),
+        cache_ttl_ms=optional_int(
+            entry.get("cache_ttl_ms"),
+            f"{field_name}.cache_ttl_ms",
+            minimum=0,
+        ),
+        rate_limit_per_minute=optional_int(
+            entry.get("rate_limit_per_minute"),
+            f"{field_name}.rate_limit_per_minute",
+            minimum=0,
+        ),
     )

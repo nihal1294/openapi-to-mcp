@@ -1,0 +1,158 @@
+import type { AxiosInstance } from 'axios';
+
+import { resolveAuthForTool } from './auth.js';
+import { TARGET_API_AUTH_HEADER, TOOL_TIMEOUT_MS } from './config.js';
+import { createToolExecutionError } from './errors.js';
+import type { ToolRuntimeMetadata } from './generated.js';
+import { applyCookieParam, applyQueryParam, serializeHeaderValue, serializePathValue } from './serialization.js';
+
+export interface RequestContext {
+  headers: Record<string, string>;
+  queryParams: Record<string, unknown>;
+  requestData: unknown;
+  targetPath: string;
+}
+
+export interface UpstreamResponse {
+  contentType: unknown;
+  responseData: unknown;
+}
+
+export function isSafeMethod(method: string): boolean {
+  return method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+}
+
+export function buildRequestContext(
+  tool: ToolRuntimeMetadata,
+  args: Record<string, unknown>,
+  requestId: string
+): RequestContext {
+  const requestContext = applyParameterValues(tool, args);
+  requestContext.headers['X-Request-Id'] = requestId;
+  applyAuthContext(tool, requestContext.headers, requestContext.queryParams);
+  applyDefaultAuthHeader(requestContext.headers);
+  requestContext.requestData = applyRequestBody(tool, args, requestContext.headers);
+  return requestContext;
+}
+
+export async function executeHttpRequest(
+  axiosInstance: AxiosInstance,
+  tool: ToolRuntimeMetadata,
+  requestContext: RequestContext
+): Promise<UpstreamResponse> {
+  const timeoutMs = tool.execution?.timeoutMs ?? TOOL_TIMEOUT_MS;
+  const abortController = new AbortController();
+  const timeoutHandle = setTimeout(() => {
+    abortController.abort(new Error('Tool execution timeout exceeded'));
+  }, timeoutMs);
+
+  try {
+    const response = await axiosInstance.request({
+      method: tool.method,
+      url: requestContext.targetPath,
+      params: requestContext.queryParams,
+      headers: requestContext.headers,
+      data: requestContext.requestData,
+      signal: abortController.signal,
+      validateStatus: (status) => status >= 200 && status < 300,
+    });
+    return {
+      responseData: response.data,
+      contentType: response.headers['content-type'],
+    };
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+}
+
+function applyParameterValues(
+  tool: ToolRuntimeMetadata,
+  args: Record<string, unknown>
+): RequestContext {
+  let targetPath = tool.path;
+  const queryParams: Record<string, unknown> = {};
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  const cookieValues: Record<string, string> = {};
+
+  for (const parameter of tool.parameters || []) {
+    const paramValue = args[parameter.name];
+    if (paramValue === undefined || paramValue === null) {
+      if (parameter.required) {
+        throw createToolExecutionError('missing_required_parameter', 'validation', false, `Missing required parameter: ${parameter.name}`);
+      }
+      continue;
+    }
+    if (parameter.in === 'path') {
+      targetPath = targetPath.split(`{${parameter.name}}`).join(serializePathValue(parameter, paramValue));
+      continue;
+    }
+    if (parameter.in === 'query') {
+      applyQueryParam(queryParams, parameter, paramValue);
+      continue;
+    }
+    if (parameter.in === 'header') {
+      headers[parameter.name] = serializeHeaderValue(parameter, paramValue);
+      continue;
+    }
+    if (parameter.in === 'cookie') {
+      applyCookieParam(cookieValues, parameter, paramValue);
+    }
+  }
+  if (Object.keys(cookieValues).length > 0) {
+    headers.Cookie = Object.entries(cookieValues).map(([key, value]) => `${key}=${value}`).join('; ');
+  }
+  return { headers, queryParams, requestData: undefined, targetPath };
+}
+
+function applyAuthContext(
+  tool: ToolRuntimeMetadata,
+  headers: Record<string, string>,
+  queryParams: Record<string, unknown>
+): void {
+  const resolvedAuth = resolveAuthForTool(tool);
+  if (!resolvedAuth.ok) {
+    throw createToolExecutionError(
+      'missing_credentials',
+      'auth',
+      false,
+      `Missing credentials for required security scheme(s): ${resolvedAuth.missing.join(', ')}`
+    );
+  }
+  Object.assign(headers, resolvedAuth.headers);
+  Object.assign(queryParams, resolvedAuth.query);
+  if (Object.keys(resolvedAuth.cookies).length > 0) {
+    const cookieHeader = Object.entries(resolvedAuth.cookies)
+      .map(([key, value]) => `${key}=${value}`)
+      .join('; ');
+    headers.Cookie = headers.Cookie ? `${headers.Cookie}; ${cookieHeader}` : cookieHeader;
+  }
+}
+
+function applyDefaultAuthHeader(headers: Record<string, string>): void {
+  if (!TARGET_API_AUTH_HEADER || headers.Authorization) {
+    return;
+  }
+  const separatorIndex = TARGET_API_AUTH_HEADER.indexOf(':');
+  if (separatorIndex <= 0) {
+    return;
+  }
+  const headerName = TARGET_API_AUTH_HEADER.substring(0, separatorIndex).trim();
+  const headerValue = TARGET_API_AUTH_HEADER.substring(separatorIndex + 1).trim();
+  headers[headerName] = headerValue;
+}
+
+function applyRequestBody(
+  tool: ToolRuntimeMetadata,
+  args: Record<string, unknown>,
+  headers: Record<string, string>
+): unknown {
+  const requestBodyInfo = tool.requestBody;
+  if (requestBodyInfo && args.requestBody !== undefined && args.requestBody !== null) {
+    headers['Content-Type'] = requestBodyInfo.content_type || 'application/json';
+    return args.requestBody;
+  }
+  if (requestBodyInfo?.required) {
+    throw createToolExecutionError('missing_required_request_body', 'validation', false, 'Missing required requestBody');
+  }
+  return undefined;
+}

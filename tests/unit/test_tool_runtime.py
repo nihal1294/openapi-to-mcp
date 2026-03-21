@@ -43,7 +43,12 @@ def test_build_runtime_tool_registry_renames_all_runtime_fields() -> None:
             "_original_security_schemes": {
                 "BearerAuth": {"type": "http", "scheme": "bearer"}
             },
-            "_policy_execution": {"maxConcurrency": 4, "timeoutMs": 9000},
+            "_policy_execution": {
+                "maxConcurrency": 4,
+                "timeoutMs": 9000,
+                "cacheTtlMs": 60000,
+                "rateLimitPerMinute": 30,
+            },
         }
     ]
 
@@ -55,7 +60,12 @@ def test_build_runtime_tool_registry_renames_all_runtime_fields() -> None:
             "requestBody": {"required": True, "content_type": "application/json"},
             "security": [{"BearerAuth": []}],
             "securitySchemes": {"BearerAuth": {"type": "http", "scheme": "bearer"}},
-            "execution": {"maxConcurrency": 4, "timeoutMs": 9000},
+            "execution": {
+                "maxConcurrency": 4,
+                "timeoutMs": 9000,
+                "cacheTtlMs": 60000,
+                "rateLimitPerMinute": 30,
+            },
         }
     }
 

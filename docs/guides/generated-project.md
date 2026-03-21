@@ -48,12 +48,15 @@ SSE generation is intentionally gone.
 - shaped tool descriptions from operation summaries, descriptions, and fallbacks
 - generated input examples from parameter, request-body, default, and enum metadata when available
 - optional grouped tool names via first-tag prefixes when generation enables `tool_grouping=tag-prefix`
+- optional in-memory response caching for safe methods (`GET`, `HEAD`, `OPTIONS`)
+- optional per-tool fixed-window rate limiting for safe methods
+- bounded cache size via `MCP_CACHE_MAX_ENTRIES`
 - object-shaped response schemas emitted as MCP `outputSchema`
 - structured JSON object results returned as `structuredContent`
 - structured tool-error results with machine-readable metadata under `meta.error`
 - per-tool request IDs exposed under `meta.requestId` and forwarded upstream as `X-Request-Id`
 - structured JSON runtime logs for tool start, success, and failure events
-- optional per-tool execution overrides for concurrency and timeout
+- optional per-tool execution overrides for concurrency, timeout, cache TTL, and rate limit
 
 `meta.error.retryable` is advisory only. It tells callers whether an immediate retry is
 reasonable, but it does not guarantee success on retry and does not imply any backoff policy.

@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Lock
 from urllib.parse import ParseResult, parse_qs, urlparse
 
 AUTH_CREDENTIALS = {
@@ -16,6 +18,8 @@ AUTH_CREDENTIALS = {
     "/auth/cookie": ("cookie", "session_token", "cookie-secret"),
     "/auth/bearer": ("bearer", "Authorization", "bearer-secret"),
 }
+REQUEST_COUNTS: Counter[str] = Counter()
+REQUEST_COUNT_LOCK = Lock()
 
 
 class MockTargetApiHandler(BaseHTTPRequestHandler):
@@ -32,10 +36,12 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/test":
             query = self._query_params(parsed.query)
+            call_count = self._increment_call_count(parsed.path, parsed.query)
             if query.get("status") == "server_error":
                 self._send_json(
                     HTTPStatus.SERVICE_UNAVAILABLE,
                     {
+                        "call_count": call_count,
                         "ok": False,
                         "error": "temporary upstream issue",
                         "request_id": self.headers.get("X-Request-Id"),
@@ -45,6 +51,7 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
             self._send_json(
                 HTTPStatus.OK,
                 {
+                    "call_count": call_count,
                     "ok": True,
                     "path": parsed.path,
                     "query": query,
@@ -66,6 +73,12 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
     def log_message(self, log_format: str, *args: object) -> None:
         """Keep default logging concise but still available in CI logs."""
         print(log_format % args)  # noqa: T201
+
+    def _increment_call_count(self, path: str, query_string: str) -> int:
+        request_key = f"{path}?{query_string}" if query_string else path
+        with REQUEST_COUNT_LOCK:
+            REQUEST_COUNTS[request_key] += 1
+            return REQUEST_COUNTS[request_key]
 
     def _send_json(self, status: HTTPStatus, payload: dict[str, object]) -> None:
         body = json.dumps(payload).encode("utf-8")

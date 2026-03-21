@@ -17,6 +17,9 @@ RUNTIME_ENV_MAP = {
     "max_queue_size": "MCP_MAX_QUEUE_SIZE",
     "queue_timeout_ms": "MCP_QUEUE_TIMEOUT_MS",
     "tool_timeout_ms": "MCP_TOOL_TIMEOUT_MS",
+    "cache_ttl_ms": "MCP_CACHE_TTL_MS",
+    "cache_max_entries": "MCP_CACHE_MAX_ENTRIES",
+    "rate_limit_per_minute": "MCP_RATE_LIMIT_PER_MINUTE",
 }
 
 run_runtime_override_options = [
@@ -44,6 +47,21 @@ run_runtime_override_options = [
         "--tool-timeout-ms",
         type=int,
         help="Maximum tool execution time in milliseconds.",
+    ),
+    click.option(
+        "--cache-ttl-ms",
+        type=int,
+        help="Default cache TTL in milliseconds for safe tools. Use 0 to disable.",
+    ),
+    click.option(
+        "--cache-max-entries",
+        type=int,
+        help="Maximum in-memory cache entries retained when caching is enabled.",
+    ),
+    click.option(
+        "--rate-limit-per-minute",
+        type=int,
+        help="Default per-tool rate limit for safe tools. Use 0 to disable.",
     ),
 ]
 

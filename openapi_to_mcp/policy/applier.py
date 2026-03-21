@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING, Any
 from openapi_to_mcp.common.exceptions import PolicyConfigError
 
 if TYPE_CHECKING:
-    from openapi_to_mcp.policy.models import PolicyConfig, SelectorSet
+    from openapi_to_mcp.policy.models import (
+        ExecutionOverride,
+        PolicyConfig,
+        SelectorSet,
+    )
 
 
 def apply_policy(
@@ -97,13 +101,32 @@ def _apply_execution_override(
     )
     if override is None:
         return
+    _validate_response_control_override(tool, override)
     metadata: dict[str, int] = {}
     if override.max_concurrency is not None:
         metadata["maxConcurrency"] = override.max_concurrency
     if override.timeout_ms is not None:
         metadata["timeoutMs"] = override.timeout_ms
+    if override.cache_ttl_ms is not None:
+        metadata["cacheTtlMs"] = override.cache_ttl_ms
+    if override.rate_limit_per_minute is not None:
+        metadata["rateLimitPerMinute"] = override.rate_limit_per_minute
     if metadata:
         tool["_policy_execution"] = metadata
+
+
+def _validate_response_control_override(
+    tool: dict[str, Any],
+    override: ExecutionOverride,
+) -> None:
+    if override.cache_ttl_ms is None and override.rate_limit_per_minute is None:
+        return
+    method = _tool_method(tool)
+    if method in {"GET", "HEAD", "OPTIONS"}:
+        return
+    raise PolicyConfigError(
+        "cache_ttl_ms and rate_limit_per_minute require a safe HTTP method (GET, HEAD, or OPTIONS)."
+    )
 
 
 def _lookup_override[T](
@@ -148,3 +171,10 @@ def _tool_operation_key(tool: dict[str, Any]) -> str:
     if isinstance(method, str) and method and isinstance(path, str) and path:
         return f"{method.upper()} {path}"
     raise PolicyConfigError(f"Mapped tool is missing operation metadata: {tool!r}")
+
+
+def _tool_method(tool: dict[str, Any]) -> str:
+    method = tool.get("_original_method")
+    if isinstance(method, str) and method:
+        return method.upper()
+    raise PolicyConfigError(f"Mapped tool is missing HTTP method metadata: {tool!r}")

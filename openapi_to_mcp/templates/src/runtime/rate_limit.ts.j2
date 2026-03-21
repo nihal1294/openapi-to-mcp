@@ -1,0 +1,47 @@
+import { RATE_LIMIT_PER_MINUTE } from './config.js';
+import type { ToolRuntimeMetadata } from './generated.js';
+import { isSafeMethod } from './request.js';
+
+export class ToolRateLimitError extends Error {
+  constructor() {
+    super('Tool rate limit exceeded');
+    this.name = 'ToolRateLimitError';
+  }
+}
+
+interface RateLimitWindow {
+  count: number;
+  windowStartedAt: number;
+}
+
+export function resolveRateLimitPerMinute(tool: ToolRuntimeMetadata): number {
+  if (!isSafeMethod(tool.method)) {
+    return 0;
+  }
+  return tool.execution?.rateLimitPerMinute ?? RATE_LIMIT_PER_MINUTE;
+}
+
+export class ToolRateLimiter {
+  private readonly windows = new Map<string, RateLimitWindow>();
+
+  public assertAllowed(toolName: string, rateLimitPerMinute: number): void {
+    if (rateLimitPerMinute <= 0) {
+      return;
+    }
+    const current = this.currentWindow(toolName);
+    if (current.count >= rateLimitPerMinute) {
+      throw new ToolRateLimitError();
+    }
+    current.count += 1;
+    this.windows.set(toolName, current);
+  }
+
+  private currentWindow(toolName: string): RateLimitWindow {
+    const existing = this.windows.get(toolName);
+    const now = Date.now();
+    if (!existing || now - existing.windowStartedAt >= 60000) {
+      return { count: 0, windowStartedAt: now };
+    }
+    return existing;
+  }
+}
