@@ -94,9 +94,10 @@ def test_generator_ensure_output_directories_success(mocker: Any) -> None:
     path_mocks = setup_path_mocks(mocker, output_dir)
     mock_src_path = MagicMock(spec=Path, name="src_path")
     mock_runtime_path = MagicMock(spec=Path, name="runtime_path")
+    mock_custom_path = MagicMock(spec=Path, name="custom_path")
 
     path_mocks["output_path"].__truediv__.return_value = mock_src_path
-    mock_src_path.__truediv__.return_value = mock_runtime_path
+    mock_src_path.__truediv__.side_effect = [mock_runtime_path, mock_custom_path]
 
     gen = Generator(output_dir=output_dir, context=context)
 
@@ -105,8 +106,12 @@ def test_generator_ensure_output_directories_success(mocker: Any) -> None:
     path_mocks["output_path"].mkdir.assert_called_once_with(parents=True, exist_ok=True)
     path_mocks["output_path"].__truediv__.assert_called_once_with("src")
     mock_src_path.mkdir.assert_called_once_with(exist_ok=True)
-    mock_src_path.__truediv__.assert_called_once_with("runtime")
+    assert mock_src_path.__truediv__.call_args_list == [
+        mocker.call("runtime"),
+        mocker.call("custom"),
+    ]
     mock_runtime_path.mkdir.assert_called_once_with(exist_ok=True)
+    mock_custom_path.mkdir.assert_called_once_with(exist_ok=True)
 
 
 def test_generator_ensure_output_directories_os_error(mocker: Any) -> None:

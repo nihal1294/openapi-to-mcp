@@ -31,6 +31,7 @@ def test_generator_generate_files_success(mocker: MagicMock) -> None:
     )
     mocker.patch.object(gen, "_ensure_output_directories")
     mock_render = mocker.patch.object(gen, "_render_and_write")
+    mock_render_if_missing = mocker.patch.object(gen, "_render_if_missing")
 
     output_files = _output_files()
     path_mocks["output_path"].__truediv__.side_effect = lambda arg: output_files.get(
@@ -41,6 +42,9 @@ def test_generator_generate_files_success(mocker: MagicMock) -> None:
     )
     output_files["src/runtime"].__truediv__.side_effect = lambda arg: output_files.get(
         f"src/runtime/{arg}", MagicMock(spec=Path)
+    )
+    output_files["src/custom"].__truediv__.side_effect = lambda arg: output_files.get(
+        f"src/custom/{arg}", MagicMock(spec=Path)
     )
 
     gen.generate_files()
@@ -74,18 +78,23 @@ def test_generator_generate_files_success(mocker: MagicMock) -> None:
     mock_render.assert_has_calls(
         [mocker.call(name, path) for name, path in expected_calls]
     )
+    mock_render_if_missing.assert_called_once_with(
+        "src/custom/tools.ts.j2", output_files["src/custom/tools.ts"]
+    )
 
 
 def _output_files() -> dict[str, MagicMock]:
     return {
         "src": MagicMock(spec=Path, name="src"),
         "src/runtime": MagicMock(spec=Path, name="runtime_dir"),
+        "src/custom": MagicMock(spec=Path, name="custom_dir"),
         "package.json": MagicMock(spec=Path, name="package_json"),
         "tsconfig.json": MagicMock(spec=Path, name="tsconfig"),
         "README.md": MagicMock(spec=Path, name="readme"),
         ".env.example": MagicMock(spec=Path, name="env_example"),
         "src/index.ts": MagicMock(spec=Path, name="index_ts"),
         "src/server.ts": MagicMock(spec=Path, name="server_ts"),
+        "src/custom/tools.ts": MagicMock(spec=Path, name="custom_tools"),
         "src/runtime/auth.ts": MagicMock(spec=Path, name="runtime_auth"),
         "src/runtime/config.ts": MagicMock(spec=Path, name="runtime_config"),
         "src/runtime/errors.ts": MagicMock(spec=Path, name="runtime_errors"),
