@@ -6,6 +6,12 @@ from typing import Any
 from openapi_to_mcp.common import MappingError, SchemaError
 from openapi_to_mcp.common.error_policy import ErrorMode, resolve_error_mode
 from openapi_to_mcp.mapping.output_schema import extract_output_schema
+from openapi_to_mcp.mapping.tool_description import build_tool_description
+from openapi_to_mcp.mapping.tool_examples import (
+    add_media_example,
+    add_parameter_example,
+    build_input_examples,
+)
 from openapi_to_mcp.mapping.utils import generate_tool_name
 from openapi_to_mcp.schema.converter import (
     SchemaConverter,
@@ -345,6 +351,7 @@ class Mapper:
 
             if "description" in param:
                 param_schema_json["description"] = param["description"]
+            add_parameter_example(param, param_schema_json, self._resolve_ref)
 
             input_schema["properties"][param_name] = param_schema_json
             if param.get("required", False):
@@ -393,17 +400,20 @@ class Mapper:
 
         primary_content_type: str | None = None
         body_schema_openapi: dict[str, Any] | None = None
+        primary_media: dict[str, Any] | None = None
 
         if "application/json" in content and isinstance(
             content["application/json"], dict
         ):
             primary_content_type = "application/json"
-            body_schema_openapi = content["application/json"].get("schema")
+            primary_media = content["application/json"]
+            body_schema_openapi = primary_media.get("schema")
         elif content:
             first_type = next(iter(content))
             if isinstance(content[first_type], dict):
                 primary_content_type = first_type
-                body_schema_openapi = content[first_type].get("schema")
+                primary_media = content[first_type]
+                body_schema_openapi = primary_media.get("schema")
                 logger.info(
                     "Using '%s' as primary content type for request body (application/json not found).",
                     primary_content_type,
@@ -413,6 +423,8 @@ class Mapper:
             body_schema_json = openapi_schema_to_json_schema(
                 body_schema_openapi, self.spec, raise_on_error=True
             )
+            if isinstance(primary_media, dict):
+                add_media_example(primary_media, body_schema_json, self._resolve_ref)
             input_schema["properties"]["requestBody"] = body_schema_json
             if request_body.get("required", False):
                 input_schema["required"].append("requestBody")
@@ -451,9 +463,7 @@ class Mapper:
             method, path
         )
         tool_name = self._ensure_unique_tool_name(candidate_name)
-        description = operation.get("summary") or operation.get(
-            "description", f"{method.upper()} operation for {path}"
-        )
+        description = build_tool_description(method, path, operation)
 
         input_schema: dict[str, Any] = {
             "type": "object",
@@ -475,6 +485,9 @@ class Mapper:
 
         if "required" in input_schema:
             input_schema["required"] = sorted(set(input_schema["required"]))
+        input_examples = build_input_examples(input_schema)
+        if input_examples:
+            input_schema["examples"] = input_examples
 
         tool_definition = {
             "name": tool_name,
