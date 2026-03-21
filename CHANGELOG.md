@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2026-03-22
+
+### Added
+
+- Added opt-in caching and rate limiting for safe generated tools using global runtime controls and per-tool policy overrides.
+- Added bounded in-memory caching controls for generated runtimes, including `MCP_CACHE_MAX_ENTRIES`.
+- Added generated-server end-to-end coverage for cache hits, rate limiting, and startup validation of performance controls.
+
+### Changed
+
+- Enforced rate limiting before cache lookup so cache hits do not bypass per-tool rate limits.
+- Improved generated runtime docs and `run` CLI docs for performance controls, disable semantics, and fixed-window rate-limit behavior.
+- Hardened runtime cache eviction and policy validation for performance-control configuration.
+
 ## [0.6.0] - 2026-03-21
 
 ### Added

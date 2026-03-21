@@ -1,6 +1,6 @@
 [project]
 name = "openapi-to-mcp"
-version = "0.6.0"
+version = "0.7.0"
 description = "Generate, run, and test Node.js/TypeScript MCP servers from OpenAPI specifications."
 readme = "README.md"
 requires-python = ">=3.14"
