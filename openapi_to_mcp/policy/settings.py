@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 _GENERATION_DEFAULT_FIELDS = (
     "mcp_server_name",
     "mcp_server_version",
+    "tool_grouping",
     "transport",
     "host",
     "port",

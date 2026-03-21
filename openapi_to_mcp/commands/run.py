@@ -36,6 +36,7 @@ def run_server(  # noqa: PLR0913
     config: str | None,
     mcp_server_name: str | None,
     mcp_server_version: str | None,
+    tool_grouping: str,
     transport: str,
     host: str,
     port: int | None,
@@ -65,6 +66,7 @@ def run_server(  # noqa: PLR0913
             {
                 "mcp_server_name": mcp_server_name,
                 "mcp_server_version": mcp_server_version,
+                "tool_grouping": tool_grouping,
                 "transport": transport,
                 "host": host,
                 "port": port,
@@ -82,6 +84,7 @@ def run_server(  # noqa: PLR0913
             output_dir=str(output_path),
             mcp_server_name=resolved_settings["mcp_server_name"],
             mcp_server_version=resolved_settings["mcp_server_version"],
+            tool_grouping=resolved_settings["tool_grouping"],
             transport=resolved_settings["transport"],
             host=resolved_settings["host"],
             port=resolved_settings["port"],

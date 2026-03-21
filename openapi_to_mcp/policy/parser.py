@@ -26,6 +26,8 @@ from openapi_to_mcp.policy.validators import (
 if TYPE_CHECKING:
     from pathlib import Path
 
+from openapi_to_mcp.mapping.tool_grouping import TOOL_GROUPING_MODES
+
 _ALLOWED_TRANSPORTS = {"stdio", "streamable-http"}
 _ALLOWED_ERROR_MODES = {"fail", "skip"}
 _ALLOWED_RUNTIME_VALIDATION = {"none", "input"}
@@ -68,6 +70,11 @@ def _parse_generation_defaults(value: object) -> GenerationDefaults:
         ),
         mcp_server_version=optional_string(
             config.get("mcp_server_version"), "generate.mcp_server_version"
+        ),
+        tool_grouping=optional_choice(
+            config.get("tool_grouping"),
+            "generate.tool_grouping",
+            TOOL_GROUPING_MODES,
         ),
         transport=optional_choice(
             config.get("transport"),

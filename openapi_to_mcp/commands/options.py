@@ -7,12 +7,14 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from openapi_to_mcp.commands.runtime_overrides import run_runtime_override_options
+from openapi_to_mcp.mapping.tool_grouping import TOOL_GROUPING_MODES
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 ERROR_MODE_CHOICE = click.Choice(["fail", "skip"], case_sensitive=False)
 RUNTIME_VALIDATION_CHOICE = click.Choice(["none", "input"], case_sensitive=False)
+TOOL_GROUPING_CHOICE = click.Choice(sorted(TOOL_GROUPING_MODES), case_sensitive=False)
 
 
 def add_options(options: list[click.Option]) -> Callable:
@@ -106,6 +108,13 @@ generation_runtime_options = [
         show_default=True,
         type=RUNTIME_VALIDATION_CHOICE,
         help="Runtime validation applied by the generated server.",
+    ),
+    click.option(
+        "--tool-grouping",
+        default="none",
+        show_default=True,
+        type=TOOL_GROUPING_CHOICE,
+        help="Optional grouped tool naming strategy for generated tools.",
     ),
 ]
 
