@@ -100,7 +100,7 @@ class Generator:
 
     def _generate_static_files(self) -> None:
         """
-        Generate static files from templates.
+        Generate overwriteable templates and preserved customization templates.
 
         Raises:
             GenerationError: If template rendering or file writing fails.

@@ -1,12 +1,4 @@
-import type {
-  CallToolResult,
-  Tool,
-} from '@modelcontextprotocol/sdk/types.js';
-
-export interface CustomToolDefinition {
-  tool: Tool;
-  handler: (args: Record<string, unknown>) => Promise<CallToolResult>;
-}
+import type { CustomToolDefinition } from '../runtime/generated.js';
 
 export function getCustomTools(): CustomToolDefinition[] {
   return [];

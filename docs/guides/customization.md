@@ -41,15 +41,7 @@ Each custom tool provides:
 ## Example
 
 ```ts
-import type {
-  CallToolResult,
-  Tool,
-} from '@modelcontextprotocol/sdk/types.js';
-
-export interface CustomToolDefinition {
-  tool: Tool;
-  handler: (args: Record<string, unknown>) => Promise<CallToolResult>;
-}
+import type { CustomToolDefinition } from '../runtime/generated.js';
 
 export function getCustomTools(): CustomToolDefinition[] {
   return [
@@ -70,7 +62,7 @@ export function getCustomTools(): CustomToolDefinition[] {
 
 ## Collision rules
 
-Generation fails at runtime startup if:
+Server startup fails if:
 
 - a custom tool name matches a generated tool name
 - the same custom tool name is registered more than once

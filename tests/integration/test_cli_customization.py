@@ -35,14 +35,25 @@ def test_generate_emits_preserved_custom_boundary(
     assert result.exit_code == 0
     custom_tools = output_dir / "src" / "custom" / "tools.ts"
     server_source = (output_dir / "src" / "server.ts").read_text(encoding="utf-8")
-    assert custom_tools.exists()
-    assert "export function getCustomTools()" in custom_tools.read_text(
+    runtime_source = (output_dir / "src" / "runtime" / "generated.ts").read_text(
         encoding="utf-8"
     )
-    assert "import {" in server_source
+    custom_source = custom_tools.read_text(encoding="utf-8")
+    assert custom_tools.exists()
+    assert "export interface CustomToolDefinition" in runtime_source
+    assert "import type { CustomToolDefinition } from '../runtime/generated.js';" in (
+        custom_source
+    )
+    assert "export function getCustomTools()" in custom_source
     assert "getCustomTools" in server_source
-    assert "buildCustomToolMap" in server_source
-    assert "Custom tool '" in server_source
+    assert (
+        "type CustomToolDefinition,\n  toolRuntimeMap,\n  tools,\n} from './runtime/generated.js';"
+        in (server_source)
+    )
+    assert (
+        "type CustomToolDefinition,\n} from './custom/tools.js';" not in server_source
+    )
+    assert "from './custom/tools.js';" in server_source
 
 
 def test_generate_preserves_existing_custom_tools_file(

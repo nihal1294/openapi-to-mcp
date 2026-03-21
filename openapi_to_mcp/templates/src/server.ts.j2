@@ -5,15 +5,15 @@ import {
   ErrorCode,
   ListToolsRequestSchema,
   McpError,
-  type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import * as console from 'console';
 
+import { getCustomTools } from './custom/tools.js';
 import {
-  getCustomTools,
   type CustomToolDefinition,
-} from './custom/tools.js';
-import { toolRuntimeMap, tools } from './runtime/generated.js';
+  toolRuntimeMap,
+  tools,
+} from './runtime/generated.js';
 import { ToolExecutor } from './runtime/executor.js';
 
 function buildCustomToolMap(): Map<string, CustomToolDefinition> {
@@ -31,7 +31,7 @@ function buildCustomToolMap(): Map<string, CustomToolDefinition> {
   return customToolMap;
 }
 
-function mergeTools(customToolMap: Map<string, CustomToolDefinition>): Tool[] {
+function mergeTools(customToolMap: Map<string, CustomToolDefinition>) {
   return [...tools, ...[...customToolMap.values()].map(({ tool }) => tool)];
 }
 
