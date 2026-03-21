@@ -1,5 +1,6 @@
 import { RATE_LIMIT_PER_MINUTE } from './config.js';
 import type { ToolRuntimeMetadata } from './generated.js';
+import { isSafeMethod } from './request.js';
 
 export class ToolRateLimitError extends Error {
   constructor() {
@@ -43,8 +44,4 @@ export class ToolRateLimiter {
     }
     return existing;
   }
-}
-
-function isSafeMethod(method: string): boolean {
-  return method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
 }

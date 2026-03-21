@@ -41,6 +41,7 @@ def test_run_help_lists_runtime_options() -> None:
     assert "--origin-allowlist" in result.output
     assert "--max-concurrency" in result.output
     assert "--cache-ttl-ms" in result.output
+    assert "--cache-max-entries" in result.output
     assert "--rate-limit-per-min" in result.output
 
 

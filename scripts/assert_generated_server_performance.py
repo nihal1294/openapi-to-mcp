@@ -10,12 +10,16 @@ from typing import Any
 import requests
 
 DEFAULT_PROTOCOL_VERSION = "2025-11-25"
+DEFAULT_TOOL_NAME = "testConversionTool"
+RATE_LIMIT_ERROR_META = {
+    "code": "tool_rate_limited",
+    "source": "runtime",
+    "retryable": True,
+}
 
 
 @dataclass(frozen=True)
 class ToolStep:
-    """Expected result for one stateful performance-control call."""
-
     arguments: dict[str, Any]
     expected: dict[str, Any] | None = None
     expected_error: str | None = None
@@ -41,11 +45,18 @@ SUITES = {
         ToolStep(
             arguments={"status": "rate_limited"},
             expected_error="Tool rate limit exceeded",
-            expected_error_meta={
-                "code": "tool_rate_limited",
-                "source": "runtime",
-                "retryable": True,
-            },
+            expected_error_meta=RATE_LIMIT_ERROR_META,
+        ),
+    ],
+    "cached-rate-limited": [
+        ToolStep(
+            arguments={"status": "cached_rate_limited"},
+            expected={"status": "cached_rate_limited", "call_count": 1},
+        ),
+        ToolStep(
+            arguments={"status": "cached_rate_limited"},
+            expected_error="Tool rate limit exceeded",
+            expected_error_meta=RATE_LIMIT_ERROR_META,
         ),
     ],
 }
@@ -94,11 +105,11 @@ class StreamableHttpSession:
     def list_tools(self) -> dict[str, Any]:
         return self._post_jsonrpc("tools/list", {}, 1)
 
-    def call_tool(self, req_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    def call_tool(
+        self, req_id: int, tool_name: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
         return self._post_jsonrpc(
-            "tools/call",
-            {"name": "testConversionTool", "arguments": arguments},
-            req_id,
+            "tools/call", {"name": tool_name, "arguments": arguments}, req_id
         )
 
     def _headers(self) -> dict[str, str]:
@@ -143,11 +154,11 @@ def _extract_text(payload: dict[str, Any]) -> str:
     return text
 
 
-def _assert_list_contains(response: dict[str, Any]) -> None:
+def _assert_list_contains(response: dict[str, Any], tool_name: str) -> None:
     payload = _extract_result_payload(response)
     tools = payload.get("tools", [])
     names = [tool["name"] for tool in tools]
-    if "testConversionTool" not in names:
+    if tool_name not in names:
         raise AssertionError(f"Missing tool in list output: {names}")
 
 
@@ -185,14 +196,15 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--suite", choices=sorted(SUITES), required=True)
     parser.add_argument("--endpoint-url", required=True)
+    parser.add_argument("--tool-name", default=DEFAULT_TOOL_NAME)
     args = parser.parse_args()
 
     session = StreamableHttpSession(args.endpoint_url)
     session.initialize()
-    _assert_list_contains(session.list_tools())
+    _assert_list_contains(session.list_tools(), args.tool_name)
 
     for req_id, step in enumerate(SUITES[args.suite], start=2):
-        response = session.call_tool(req_id, step.arguments)
+        response = session.call_tool(req_id, args.tool_name, step.arguments)
         if step.expected_error:
             _assert_error(response, step.expected_error, step.expected_error_meta or {})
             continue

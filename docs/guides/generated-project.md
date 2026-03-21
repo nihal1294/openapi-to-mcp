@@ -50,6 +50,7 @@ SSE generation is intentionally gone.
 - optional grouped tool names via first-tag prefixes when generation enables `tool_grouping=tag-prefix`
 - optional in-memory response caching for safe methods (`GET`, `HEAD`, `OPTIONS`)
 - optional per-tool fixed-window rate limiting for safe methods
+- bounded cache size via `MCP_CACHE_MAX_ENTRIES`
 - object-shaped response schemas emitted as MCP `outputSchema`
 - structured JSON object results returned as `structuredContent`
 - structured tool-error results with machine-readable metadata under `meta.error`

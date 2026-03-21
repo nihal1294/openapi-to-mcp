@@ -1,5 +1,6 @@
-import { CACHE_TTL_MS } from './config.js';
+import { CACHE_MAX_ENTRIES, CACHE_TTL_MS } from './config.js';
 import type { ToolRuntimeMetadata } from './generated.js';
+import { isSafeMethod } from './request.js';
 
 interface CachedResponse {
   contentType: unknown;
@@ -49,16 +50,36 @@ export class ToolResponseCache {
     if (ttlMs <= 0) {
       return;
     }
+    this.purgeExpiredEntries();
+    if (this.entries.has(cacheKey)) {
+      this.entries.delete(cacheKey);
+    }
+    this.evictOldestEntryIfFull();
     this.entries.set(cacheKey, {
       contentType,
       expiresAt: Date.now() + ttlMs,
       responseData: structuredClone(responseData),
     });
   }
-}
 
-function isSafeMethod(method: string): boolean {
-  return method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+  private evictOldestEntryIfFull(): void {
+    if (this.entries.size < CACHE_MAX_ENTRIES) {
+      return;
+    }
+    const oldestKey = this.entries.keys().next().value;
+    if (typeof oldestKey === 'string') {
+      this.entries.delete(oldestKey);
+    }
+  }
+
+  private purgeExpiredEntries(): void {
+    const now = Date.now();
+    for (const [cacheKey, entry] of this.entries.entries()) {
+      if (entry.expiresAt <= now) {
+        this.entries.delete(cacheKey);
+      }
+    }
+  }
 }
 
 function stableSerialize(value: unknown): string {

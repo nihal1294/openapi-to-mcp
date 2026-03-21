@@ -154,6 +154,9 @@ Caching and rate limiting are only valid for safe HTTP methods:
 
 Generation fails if policy tries to enable `cache_ttl_ms` or `rate_limit_per_minute`
 for an unsafe operation.
+Use `cache_ttl_ms: 0` or `rate_limit_per_minute: 0` to disable that control for a
+specific tool even when a global runtime default is enabled.
+Rate limiting uses a fixed one-minute window, so quota resets at minute boundaries.
 
 Resolution order matches `auth`:
 

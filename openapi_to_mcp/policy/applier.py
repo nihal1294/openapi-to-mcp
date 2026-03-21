@@ -121,8 +121,8 @@ def _validate_response_control_override(
 ) -> None:
     if override.cache_ttl_ms is None and override.rate_limit_per_minute is None:
         return
-    method = tool.get("_original_method")
-    if isinstance(method, str) and method.upper() in {"GET", "HEAD", "OPTIONS"}:
+    method = _tool_method(tool)
+    if method in {"GET", "HEAD", "OPTIONS"}:
         return
     raise PolicyConfigError(
         "cache_ttl_ms and rate_limit_per_minute require a safe HTTP method (GET, HEAD, or OPTIONS)."
@@ -171,3 +171,10 @@ def _tool_operation_key(tool: dict[str, Any]) -> str:
     if isinstance(method, str) and method and isinstance(path, str) and path:
         return f"{method.upper()} {path}"
     raise PolicyConfigError(f"Mapped tool is missing operation metadata: {tool!r}")
+
+
+def _tool_method(tool: dict[str, Any]) -> str:
+    method = tool.get("_original_method")
+    if isinstance(method, str) and method:
+        return method.upper()
+    raise PolicyConfigError(f"Mapped tool is missing HTTP method metadata: {tool!r}")

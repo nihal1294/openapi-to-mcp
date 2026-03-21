@@ -18,6 +18,7 @@ RUNTIME_ENV_MAP = {
     "queue_timeout_ms": "MCP_QUEUE_TIMEOUT_MS",
     "tool_timeout_ms": "MCP_TOOL_TIMEOUT_MS",
     "cache_ttl_ms": "MCP_CACHE_TTL_MS",
+    "cache_max_entries": "MCP_CACHE_MAX_ENTRIES",
     "rate_limit_per_minute": "MCP_RATE_LIMIT_PER_MINUTE",
 }
 
@@ -51,6 +52,11 @@ run_runtime_override_options = [
         "--cache-ttl-ms",
         type=int,
         help="Default cache TTL in milliseconds for safe tools. Use 0 to disable.",
+    ),
+    click.option(
+        "--cache-max-entries",
+        type=int,
+        help="Maximum in-memory cache entries retained when caching is enabled.",
     ),
     click.option(
         "--rate-limit-per-minute",

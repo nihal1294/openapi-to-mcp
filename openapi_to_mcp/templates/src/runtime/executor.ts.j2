@@ -48,6 +48,7 @@ export class ToolExecutor {
     try {
       logEvent('info', 'tool_execution_started', { requestId, toolName });
       validateToolArguments(toolName, args);
+      this.rateLimiter.assertAllowed(toolName, resolveRateLimitPerMinute(tool));
       if (cacheKey) {
         const cached = this.responseCache.get(cacheKey);
         if (cached) {
@@ -55,7 +56,6 @@ export class ToolExecutor {
           return buildToolSuccessResult(cached.responseData, cached.contentType, requestId);
         }
       }
-      this.rateLimiter.assertAllowed(toolName, resolveRateLimitPerMinute(tool));
       await this.globalLimiter.acquire();
       acquiredGlobal = true;
       await perToolLimiter.acquire();

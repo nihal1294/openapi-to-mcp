@@ -44,6 +44,7 @@ openapi-to-mcp run [OPTIONS]
 | `--queue-timeout-ms` | No | None | Override `MCP_QUEUE_TIMEOUT_MS` |
 | `--tool-timeout-ms` | No | None | Override `MCP_TOOL_TIMEOUT_MS` |
 | `--cache-ttl-ms` | No | None | Override `MCP_CACHE_TTL_MS` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
+| `--cache-max-entries` | No | None | Override `MCP_CACHE_MAX_ENTRIES` for bounded in-memory caching |
 | `--rate-limit-per-minute` | No | None | Override `MCP_RATE_LIMIT_PER_MINUTE` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
 
 ## Examples
@@ -130,11 +131,13 @@ openapi-to-mcp run \
   --openapi-json ./openapi.yaml \
   --target-api-base-url https://example.com/api \
   --cache-ttl-ms 60000 \
+  --cache-max-entries 1000 \
   --rate-limit-per-minute 30
 ```
 
 Use `0` to disable either control. These controls are ignored for unsafe methods such
 as `POST`, `PUT`, `PATCH`, and `DELETE`.
+Rate limiting uses a fixed one-minute window, so quota resets at window boundaries.
 
 ## `--env-source` formats
 
@@ -147,6 +150,7 @@ Accepted values:
 `run` copies `.env.example` to `.env` when needed, writes overrides, and then starts the generated server with resolved runtime values.
 CLI runtime-control flags are written as the corresponding `MCP_*` env vars before startup.
 `MCP_CACHE_TTL_MS` and `MCP_RATE_LIMIT_PER_MINUTE` both default to `0` (disabled).
+`MCP_CACHE_MAX_ENTRIES` defaults to `1000`.
 
 ## Base URL resolution
 

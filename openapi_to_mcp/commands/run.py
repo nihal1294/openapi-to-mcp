@@ -56,6 +56,7 @@ def run_server(  # noqa: PLR0913
     queue_timeout_ms: int | None,
     tool_timeout_ms: int | None,
     cache_ttl_ms: int | None,
+    cache_max_entries: int | None,
     rate_limit_per_minute: int | None,
 ) -> None:
     """Generate, build, and run an MCP server directly from an OpenAPI spec."""
@@ -111,6 +112,7 @@ def run_server(  # noqa: PLR0913
                     "queue_timeout_ms": queue_timeout_ms,
                     "tool_timeout_ms": tool_timeout_ms,
                     "cache_ttl_ms": cache_ttl_ms,
+                    "cache_max_entries": cache_max_entries,
                     "rate_limit_per_minute": rate_limit_per_minute,
                 }
             ),

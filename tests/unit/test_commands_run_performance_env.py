@@ -38,6 +38,8 @@ def test_run_applies_cache_and_rate_limit_overrides(
             str(output_dir),
             "--cache-ttl-ms",
             "60000",
+            "--cache-max-entries",
+            "512",
             "--rate-limit-per-minute",
             "30",
         ],
@@ -46,8 +48,12 @@ def test_run_applies_cache_and_rate_limit_overrides(
     assert result.exit_code == 0
     env_contents = (output_dir / ".env").read_text(encoding="utf-8")
     assert "MCP_CACHE_TTL_MS=60000" in env_contents
+    assert "MCP_CACHE_MAX_ENTRIES=512" in env_contents
     assert "MCP_RATE_LIMIT_PER_MINUTE=30" in env_contents
     assert subprocess_run.call_args_list[0].kwargs["env"]["MCP_CACHE_TTL_MS"] == "60000"
+    assert (
+        subprocess_run.call_args_list[0].kwargs["env"]["MCP_CACHE_MAX_ENTRIES"] == "512"
+    )
     assert (
         subprocess_run.call_args_list[0].kwargs["env"]["MCP_RATE_LIMIT_PER_MINUTE"]
         == "30"
@@ -73,9 +79,11 @@ def test_run_explicit_zero_performance_overrides_beat_env_source(
             "--output-dir",
             str(output_dir),
             "--env-source",
-            '{"MCP_CACHE_TTL_MS":"5000","MCP_RATE_LIMIT_PER_MINUTE":"10"}',
+            '{"MCP_CACHE_TTL_MS":"5000","MCP_CACHE_MAX_ENTRIES":"250","MCP_RATE_LIMIT_PER_MINUTE":"10"}',
             "--cache-ttl-ms",
             "0",
+            "--cache-max-entries",
+            "50",
             "--rate-limit-per-minute",
             "0",
         ],
@@ -84,8 +92,12 @@ def test_run_explicit_zero_performance_overrides_beat_env_source(
     assert result.exit_code == 0
     env_contents = (output_dir / ".env").read_text(encoding="utf-8")
     assert "MCP_CACHE_TTL_MS=0" in env_contents
+    assert "MCP_CACHE_MAX_ENTRIES=50" in env_contents
     assert "MCP_RATE_LIMIT_PER_MINUTE=0" in env_contents
     assert subprocess_run.call_args_list[0].kwargs["env"]["MCP_CACHE_TTL_MS"] == "0"
+    assert (
+        subprocess_run.call_args_list[0].kwargs["env"]["MCP_CACHE_MAX_ENTRIES"] == "50"
+    )
     assert (
         subprocess_run.call_args_list[0].kwargs["env"]["MCP_RATE_LIMIT_PER_MINUTE"]
         == "0"

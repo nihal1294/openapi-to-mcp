@@ -18,6 +18,10 @@ export interface UpstreamResponse {
   responseData: unknown;
 }
 
+export function isSafeMethod(method: string): boolean {
+  return method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+}
+
 export function buildRequestContext(
   tool: ToolRuntimeMetadata,
   args: Record<string, unknown>,

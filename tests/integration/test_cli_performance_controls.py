@@ -35,4 +35,5 @@ def test_generate_emits_performance_runtime_files_and_env_defaults(
 
     env_example = (output_dir / ".env.example").read_text(encoding="utf-8")
     assert "MCP_CACHE_TTL_MS=0" in env_example
+    assert "MCP_CACHE_MAX_ENTRIES=1000" in env_example
     assert "MCP_RATE_LIMIT_PER_MINUTE=0" in env_example
