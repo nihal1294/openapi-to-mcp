@@ -56,12 +56,20 @@ def test_generator_generate_files_success(mocker: MagicMock) -> None:
         ("README.md.j2", output_files["README.md"]),
         (".env.example.j2", output_files[".env.example"]),
         ("src/index.ts.j2", output_files["src/index.ts"]),
+        (
+            "src/runtime/request_context.ts.j2",
+            output_files["src/runtime/request_context.ts"],
+        ),
         ("src/runtime/auth.ts.j2", output_files["src/runtime/auth.ts"]),
         ("src/runtime/cache.ts.j2", output_files["src/runtime/cache.ts"]),
         ("src/runtime/config.ts.j2", output_files["src/runtime/config.ts"]),
         ("src/runtime/errors.ts.j2", output_files["src/runtime/errors.ts"]),
         ("src/runtime/executor.ts.j2", output_files["src/runtime/executor.ts"]),
         ("src/runtime/generated.ts.j2", output_files["src/runtime/generated.ts"]),
+        (
+            "src/runtime/http_transport.ts.j2",
+            output_files["src/runtime/http_transport.ts"],
+        ),
         ("src/runtime/limiter.ts.j2", output_files["src/runtime/limiter.ts"]),
         (
             "src/runtime/observability.ts.j2",
@@ -74,6 +82,7 @@ def test_generator_generate_files_success(mocker: MagicMock) -> None:
             "src/runtime/serialization.ts.j2",
             output_files["src/runtime/serialization.ts"],
         ),
+        ("src/runtime/tool_access.ts.j2", output_files["src/runtime/tool_access.ts"]),
         ("src/runtime/validation.ts.j2", output_files["src/runtime/validation.ts"]),
         ("src/transport_stdio.ts.j2", output_files["src/transport.ts"]),
     ]
@@ -98,18 +107,25 @@ def _output_files() -> dict[str, MagicMock]:
         "src/index.ts": MagicMock(spec=Path, name="index_ts"),
         "src/server.ts": MagicMock(spec=Path, name="server_ts"),
         "src/custom/tools.ts": MagicMock(spec=Path, name="custom_tools"),
+        "src/runtime/request_context.ts": MagicMock(
+            spec=Path, name="runtime_request_context"
+        ),
         "src/runtime/auth.ts": MagicMock(spec=Path, name="runtime_auth"),
         "src/runtime/cache.ts": MagicMock(spec=Path, name="runtime_cache"),
         "src/runtime/config.ts": MagicMock(spec=Path, name="runtime_config"),
         "src/runtime/errors.ts": MagicMock(spec=Path, name="runtime_errors"),
         "src/runtime/executor.ts": MagicMock(spec=Path, name="runtime_executor"),
         "src/runtime/generated.ts": MagicMock(spec=Path, name="runtime_generated"),
+        "src/runtime/http_transport.ts": MagicMock(
+            spec=Path, name="runtime_http_transport"
+        ),
         "src/runtime/limiter.ts": MagicMock(spec=Path, name="runtime_limiter"),
         "src/runtime/observability.ts": MagicMock(spec=Path, name="observability"),
         "src/runtime/rate_limit.ts": MagicMock(spec=Path, name="runtime_rate_limit"),
         "src/runtime/request.ts": MagicMock(spec=Path, name="runtime_request"),
         "src/runtime/response.ts": MagicMock(spec=Path, name="runtime_response"),
         "src/runtime/serialization.ts": MagicMock(spec=Path, name="serialization"),
+        "src/runtime/tool_access.ts": MagicMock(spec=Path, name="tool_access"),
         "src/runtime/validation.ts": MagicMock(spec=Path, name="validation"),
         "src/transport.ts": MagicMock(spec=Path, name="transport"),
     }

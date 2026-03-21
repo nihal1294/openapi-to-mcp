@@ -93,6 +93,9 @@ def test_generate_streamable_http_end_to_end(runner: CliRunner, tmp_path: Path) 
     index_source = (output_dir / "src" / "index.ts").read_text(encoding="utf-8")
     transport_source = (output_dir / "src" / "transport.ts").read_text(encoding="utf-8")
     server_source = (output_dir / "src" / "server.ts").read_text(encoding="utf-8")
+    http_transport_source = (
+        output_dir / "src" / "runtime" / "http_transport.ts"
+    ).read_text(encoding="utf-8")
     generated_source = (output_dir / "src" / "runtime" / "generated.ts").read_text(
         encoding="utf-8"
     )
@@ -107,8 +110,9 @@ def test_generate_streamable_http_end_to_end(runner: CliRunner, tmp_path: Path) 
     assert "_original_" not in generated_source
     assert "const toolRuntimeData = {" in generated_source
     assert "new ToolExecutor()" in server_source
-    assert "extractHostFromHeaderValue" in transport_source
-    assert "first.split(':')[0]" not in transport_source
+    assert "./runtime/http_transport.js" in transport_source
+    assert "extractHostFromHeaderValue" in http_transport_source
+    assert "first.split(':')[0]" not in http_transport_source
     assert "process.once('SIGINT'" in server_source
     assert "process.once('SIGTERM'" in server_source
     assert "process.on('SIGINT'" not in server_source
