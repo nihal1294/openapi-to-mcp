@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-03-21
+
+### Added
+
+- Added regeneration-safe customization boundaries for generated projects via preserved `src/custom/tools.ts`.
+- Added richer generated tool descriptions and input examples derived from OpenAPI metadata.
+- Added opt-in grouped tool naming by first tag for generated tools.
+
+### Changed
+
+- Improved generated-project documentation around safe customization boundaries and grouped tool naming.
+- Refreshed generated runtime dependencies and hardened dotenv loading to keep stdio output protocol-safe.
+
 ## [0.5.0] - 2026-03-11
 
 ### Added
