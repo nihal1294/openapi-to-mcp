@@ -25,6 +25,7 @@ openapi-to-mcp generate [OPTIONS]
 | `--on-mapping-error` | No | strict=`fail`, non-strict=`skip` | How to handle non-schema operation mapping failures |
 | `--on-schema-error` | No | strict=`fail`, non-strict=`skip` | How to handle schema conversion failures while mapping operations |
 | `--runtime-validation` | No | `input` | Runtime validation mode compiled into the generated server (`none` or `input`) |
+| `--tool-grouping` | No | `none` | Optional grouped tool naming strategy (`none` or `tag-prefix`) |
 
 ## Examples
 
@@ -99,6 +100,18 @@ openapi-to-mcp generate \
   --runtime-validation none
 ```
 
+### Generate grouped tools by first tag prefix
+
+```bash
+openapi-to-mcp generate \
+  --openapi-json ./openapi.yaml \
+  --output-dir ./generated-grouped \
+  --tool-grouping tag-prefix
+```
+
+`tag-prefix` uses the first operation tag when available and prefixes the generated tool
+name with a normalized form such as `pets_listPets`.
+
 ## Generated artifacts
 
 `generate` writes:
@@ -116,6 +129,7 @@ The report captures:
 
 - `strict_mode`
 - selected `transport`
+- selected `tool_grouping`
 - applied `policy_file` when config was used
 - mapped tool count
 - resolved `on_mapping_error` and `on_schema_error` modes

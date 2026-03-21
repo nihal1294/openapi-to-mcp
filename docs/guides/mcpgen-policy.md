@@ -31,6 +31,7 @@ generate:
   mcp_endpoint: /mcp
   strict: true
   runtime_validation: input
+  tool_grouping: tag-prefix
   on_mapping_error: fail
   on_schema_error: fail
 
@@ -80,10 +81,19 @@ Sets default values for generation-related options:
 - `mcp_endpoint`
 - `strict`
 - `runtime_validation`
+- `tool_grouping`
 - `on_mapping_error`
 - `on_schema_error`
 
 These values apply only when the CLI option was not explicitly provided.
+
+Current `tool_grouping` values:
+
+- `none`
+- `tag-prefix`
+
+`tag-prefix` uses the first operation tag, when present, to prefix the generated tool
+name with a normalized tag such as `pets_listPets`.
 
 ### `tools.include` and `tools.exclude`
 
@@ -144,6 +154,9 @@ Highest to lowest precedence:
 1. explicit CLI flags
 2. `mcpgen.yaml` `generate` defaults
 3. built-in CLI defaults
+
+For grouped naming, explicit rename rules still win over automatic grouping. A tool that
+was explicitly renamed is not prefixed again.
 
 Tool policy sections (`tools`, `auth`, `execution`) are config-driven only.
 

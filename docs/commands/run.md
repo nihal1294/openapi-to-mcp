@@ -33,6 +33,7 @@ openapi-to-mcp run [OPTIONS]
 | `--on-mapping-error` | No | strict=`fail`, non-strict=`skip` | How to handle non-schema operation mapping failures during generation |
 | `--on-schema-error` | No | strict=`fail`, non-strict=`skip` | How to handle schema conversion failures during generation |
 | `--runtime-validation` | No | `input` | Runtime validation mode compiled into the generated server (`none` or `input`) |
+| `--tool-grouping` | No | `none` | Optional grouped tool naming strategy (`none` or `tag-prefix`) |
 | `--target-api-base-url` | No | None | Override `TARGET_API_BASE_URL` explicitly |
 | `--env-source` | No | None | Runtime env values as JSON string or path to `.json` or `.env` |
 | `--origin-allowlist` | No | None | Override `MCP_ALLOWED_ORIGINS` for `streamable-http` |
@@ -96,6 +97,15 @@ openapi-to-mcp run \
 openapi-to-mcp run \
   --openapi-json ./openapi.yaml \
   --runtime-validation none \
+  --target-api-base-url https://example.com/api
+```
+
+### Run with grouped tool names from first tags
+
+```bash
+openapi-to-mcp run \
+  --openapi-json ./openapi.yaml \
+  --tool-grouping tag-prefix \
   --target-api-base-url https://example.com/api
 ```
 
