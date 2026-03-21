@@ -69,6 +69,7 @@ Public product documentation lives on GitHub Pages:
 - spec-readiness diagnostics with `doctor`
 - MCP-surface comparison with `diff`
 - repeatable generation policy with `mcpgen.yaml`
+- regeneration-safe custom tools via `src/custom/tools.ts`
 - strict mode by default with `generation_report.json`
 - generated auth env mapping for `apiKey`, bearer, OAuth2, and OpenID Connect
 - generated runtime controls for concurrency, queueing, and timeout

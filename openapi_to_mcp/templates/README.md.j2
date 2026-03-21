@@ -71,6 +71,13 @@ To run the server in development mode with automatic rebuilding and restarting o
 npm run dev
 ```
 
+## Safe customization
+
+- `src/custom/tools.ts` is the preserved entry point for user-owned MCP tools.
+- Files under `src/custom/` are not overwritten on regeneration.
+- Generated files like `src/server.ts`, `src/runtime/*.ts`, and `src/transport.ts`
+  should be treated as replaceable output.
+
 ## MCP Tools
 
 This server exposes the following tools based on the OpenAPI specification:
