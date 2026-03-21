@@ -89,6 +89,8 @@ def test_generate_streamable_http_end_to_end(runner: CliRunner, tmp_path: Path) 
     assert (output_dir / "src" / "runtime" / "generated.ts").exists()
     assert (output_dir / "src" / "runtime" / "executor.ts").exists()
 
+    package_json = json.loads((output_dir / "package.json").read_text(encoding="utf-8"))
+    index_source = (output_dir / "src" / "index.ts").read_text(encoding="utf-8")
     transport_source = (output_dir / "src" / "transport.ts").read_text(encoding="utf-8")
     server_source = (output_dir / "src" / "server.ts").read_text(encoding="utf-8")
     generated_source = (output_dir / "src" / "runtime" / "generated.ts").read_text(
@@ -97,6 +99,8 @@ def test_generate_streamable_http_end_to_end(runner: CliRunner, tmp_path: Path) 
     serialization_source = (
         output_dir / "src" / "runtime" / "serialization.ts"
     ).read_text(encoding="utf-8")
+    assert package_json["engines"] == {"node": ">=18"}
+    assert "quiet: true" in index_source
     assert "StreamableHTTPServerTransport" in transport_source
     assert "SSEServerTransport" not in transport_source
     assert "encodeURIComponent" in serialization_source
@@ -139,8 +143,11 @@ def test_generate_stdio_omits_http_dependencies(
     package_json = json.loads((output_dir / "package.json").read_text(encoding="utf-8"))
     assert "express" not in package_json["dependencies"]
     assert "@types/express" not in package_json["devDependencies"]
+    assert package_json["engines"] == {"node": ">=18"}
 
+    index_source = (output_dir / "src" / "index.ts").read_text(encoding="utf-8")
     transport_source = (output_dir / "src" / "transport.ts").read_text(encoding="utf-8")
+    assert "quiet: true" in index_source
     assert "StdioServerTransport" in transport_source
 
 
