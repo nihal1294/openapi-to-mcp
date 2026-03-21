@@ -55,6 +55,8 @@ def run_server(  # noqa: PLR0913
     max_queue_size: int | None,
     queue_timeout_ms: int | None,
     tool_timeout_ms: int | None,
+    cache_ttl_ms: int | None,
+    rate_limit_per_minute: int | None,
 ) -> None:
     """Generate, build, and run an MCP server directly from an OpenAPI spec."""
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
@@ -108,6 +110,8 @@ def run_server(  # noqa: PLR0913
                     "max_queue_size": max_queue_size,
                     "queue_timeout_ms": queue_timeout_ms,
                     "tool_timeout_ms": tool_timeout_ms,
+                    "cache_ttl_ms": cache_ttl_ms,
+                    "rate_limit_per_minute": rate_limit_per_minute,
                 }
             ),
         )

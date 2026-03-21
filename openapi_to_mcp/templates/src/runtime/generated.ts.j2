@@ -27,6 +27,8 @@ export interface SecuritySchemeDefinition {
 export interface ToolExecutionMetadata {
   maxConcurrency?: number;
   timeoutMs?: number;
+  cacheTtlMs?: number;
+  rateLimitPerMinute?: number;
 }
 
 export interface CustomToolDefinition {

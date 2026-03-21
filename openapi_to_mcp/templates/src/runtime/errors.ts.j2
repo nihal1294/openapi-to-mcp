@@ -2,6 +2,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import axios from 'axios';
 
 import { QueueFullError, QueueTimeoutError } from './limiter.js';
+import { ToolRateLimitError } from './rate_limit.js';
 
 export type ToolErrorSource = 'validation' | 'auth' | 'upstream' | 'runtime';
 
@@ -93,6 +94,9 @@ export function mapApiErrorToToolError(error: unknown): ToolExecutionError {
     }
     if (error instanceof QueueTimeoutError) {
       return createToolExecutionError('execution_queue_timeout', 'runtime', true, 'Execution queue timeout exceeded');
+    }
+    if (error instanceof ToolRateLimitError) {
+      return createToolExecutionError('tool_rate_limited', 'runtime', true, 'Tool rate limit exceeded');
     }
     return createToolExecutionError('request_failed', 'runtime', false, `Request failed: ${error.message}`);
   }

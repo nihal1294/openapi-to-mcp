@@ -1,0 +1,75 @@
+import { CACHE_TTL_MS } from './config.js';
+import type { ToolRuntimeMetadata } from './generated.js';
+
+interface CachedResponse {
+  contentType: unknown;
+  expiresAt: number;
+  responseData: unknown;
+}
+
+export function resolveCacheTtlMs(tool: ToolRuntimeMetadata): number {
+  if (!isSafeMethod(tool.method)) {
+    return 0;
+  }
+  return tool.execution?.cacheTtlMs ?? CACHE_TTL_MS;
+}
+
+export function buildCacheKey(
+  toolName: string,
+  args: Record<string, unknown>
+): string {
+  return `${toolName}:${stableSerialize(args)}`;
+}
+
+export class ToolResponseCache {
+  private readonly entries = new Map<string, CachedResponse>();
+
+  public get(cacheKey: string): CachedResponse | null {
+    const entry = this.entries.get(cacheKey);
+    if (!entry) {
+      return null;
+    }
+    if (entry.expiresAt <= Date.now()) {
+      this.entries.delete(cacheKey);
+      return null;
+    }
+    return {
+      contentType: entry.contentType,
+      expiresAt: entry.expiresAt,
+      responseData: structuredClone(entry.responseData),
+    };
+  }
+
+  public set(
+    cacheKey: string,
+    responseData: unknown,
+    contentType: unknown,
+    ttlMs: number
+  ): void {
+    if (ttlMs <= 0) {
+      return;
+    }
+    this.entries.set(cacheKey, {
+      contentType,
+      expiresAt: Date.now() + ttlMs,
+      responseData: structuredClone(responseData),
+    });
+  }
+}
+
+function isSafeMethod(method: string): boolean {
+  return method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+}
+
+function stableSerialize(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableSerialize(item)).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => `${JSON.stringify(key)}:${stableSerialize(nested)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
