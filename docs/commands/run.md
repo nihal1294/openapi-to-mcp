@@ -43,6 +43,8 @@ openapi-to-mcp run [OPTIONS]
 | `--max-queue-size` | No | None | Override `MCP_MAX_QUEUE_SIZE` |
 | `--queue-timeout-ms` | No | None | Override `MCP_QUEUE_TIMEOUT_MS` |
 | `--tool-timeout-ms` | No | None | Override `MCP_TOOL_TIMEOUT_MS` |
+| `--cache-ttl-ms` | No | None | Override `MCP_CACHE_TTL_MS` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
+| `--rate-limit-per-minute` | No | None | Override `MCP_RATE_LIMIT_PER_MINUTE` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
 
 ## Examples
 
@@ -121,6 +123,19 @@ openapi-to-mcp run \
   --tool-timeout-ms 45000
 ```
 
+### Enable safe-method caching and rate limiting
+
+```bash
+openapi-to-mcp run \
+  --openapi-json ./openapi.yaml \
+  --target-api-base-url https://example.com/api \
+  --cache-ttl-ms 60000 \
+  --rate-limit-per-minute 30
+```
+
+Use `0` to disable either control. These controls are ignored for unsafe methods such
+as `POST`, `PUT`, `PATCH`, and `DELETE`.
+
 ## `--env-source` formats
 
 Accepted values:
@@ -131,6 +146,7 @@ Accepted values:
 
 `run` copies `.env.example` to `.env` when needed, writes overrides, and then starts the generated server with resolved runtime values.
 CLI runtime-control flags are written as the corresponding `MCP_*` env vars before startup.
+`MCP_CACHE_TTL_MS` and `MCP_RATE_LIMIT_PER_MINUTE` both default to `0` (disabled).
 
 ## Base URL resolution
 

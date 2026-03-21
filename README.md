@@ -74,7 +74,7 @@ Public product documentation lives on GitHub Pages:
 - optional grouped tool names with first-tag prefixes
 - strict mode by default with `generation_report.json`
 - generated auth env mapping for `apiKey`, bearer, OAuth2, and OpenID Connect
-- generated runtime controls for concurrency, queueing, and timeout
+- generated runtime controls for concurrency, queueing, timeout, caching, and rate limiting
 - generated-server E2E coverage against a local mock API
 - CLI E2E coverage for `generate`, `run`, and `test-server`
 - version-aware GitHub Releases automation on `master`
