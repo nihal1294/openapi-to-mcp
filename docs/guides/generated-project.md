@@ -45,6 +45,8 @@ SSE generation is intentionally gone.
 - streamable HTTP host and origin allowlist handling
 - fail-fast startup validation for base URL and runtime-control env values
 - runtime input validation against generated `inputSchema` by default
+- shaped tool descriptions from operation summaries, descriptions, and fallbacks
+- generated input examples from parameter, request-body, default, and enum metadata when available
 - object-shaped response schemas emitted as MCP `outputSchema`
 - structured JSON object results returned as `structuredContent`
 - structured tool-error results with machine-readable metadata under `meta.error`
