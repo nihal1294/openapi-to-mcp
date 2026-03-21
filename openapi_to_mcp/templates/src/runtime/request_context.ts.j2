@@ -1,0 +1,48 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+export type RequestTransport = 'stdio' | 'streamable-http';
+
+export interface RequestCallerContext {
+  identity: string;
+  transport: RequestTransport;
+}
+
+const DEFAULT_STDIO_CONTEXT: RequestCallerContext = {
+  identity: 'stdio',
+  transport: 'stdio',
+};
+
+const requestCallerStorage = new AsyncLocalStorage<RequestCallerContext>();
+
+export function getRequestCallerContext(): RequestCallerContext {
+  return requestCallerStorage.getStore() ?? DEFAULT_STDIO_CONTEXT;
+}
+
+export async function withRequestCallerContext<T>(
+  context: RequestCallerContext,
+  callback: () => Promise<T>
+): Promise<T> {
+  return await requestCallerStorage.run(context, callback);
+}
+
+export function resolveStreamableHttpCallerContext(
+  headers: Record<string, string | string[] | undefined>,
+  identityHeader: string | null
+): RequestCallerContext {
+  return {
+    identity: resolveIdentity(headers, identityHeader),
+    transport: 'streamable-http',
+  };
+}
+
+function resolveIdentity(
+  headers: Record<string, string | string[] | undefined>,
+  identityHeader: string | null
+): string {
+  if (!identityHeader) {
+    return 'anonymous';
+  }
+  const value = headers[identityHeader];
+  const first = Array.isArray(value) ? value[0] : value;
+  return first?.trim() || 'anonymous';
+}

@@ -4,6 +4,18 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { OpenApiMcpServer } from './server.js';
 import * as console from 'console';
+import { TOOL_IDENTITY_HEADER } from './runtime/config.js';
+import {
+  getHeaderValue,
+  isHostAllowed,
+  isOriginAllowed,
+  normalizeAllowedHost,
+  sendBadRequest,
+} from './runtime/http_transport.js';
+import {
+  resolveStreamableHttpCallerContext,
+  withRequestCallerContext,
+} from './runtime/request_context.js';
 
 const HOST = process.env.MCP_HTTP_HOST || '{{ host }}';
 const PORT = Number.parseInt(process.env.MCP_HTTP_PORT || '{{ port }}', 10);
@@ -27,83 +39,6 @@ const sessions = new Map<string, SessionContext>();
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
-
-function isOriginAllowed(origin: string | undefined): boolean {
-  if (!origin) {
-    return true;
-  }
-  return ALLOWED_ORIGINS.includes(origin);
-}
-
-function isHostAllowed(hostHeader: string | string[] | undefined): boolean {
-  if (!hostHeader) {
-    return false;
-  }
-
-  const first = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
-  if (!first) {
-    return false;
-  }
-
-  const host = extractHostFromHeaderValue(first);
-  if (!host) {
-    return false;
-  }
-  return ALLOWED_HOSTS.includes(host);
-}
-
-function normalizeAllowedHost(host: string): string {
-  const trimmed = host.trim().toLowerCase();
-  if (!trimmed) {
-    return '';
-  }
-  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-    return trimmed.slice(1, -1);
-  }
-  return trimmed;
-}
-
-function extractHostFromHeaderValue(headerValue: string): string {
-  const trimmed = headerValue.trim().toLowerCase();
-  if (!trimmed) {
-    return '';
-  }
-
-  if (trimmed.startsWith('[')) {
-    const closingBracketIndex = trimmed.indexOf(']');
-    if (closingBracketIndex <= 1) {
-      return '';
-    }
-    return trimmed.slice(1, closingBracketIndex);
-  }
-
-  const firstColon = trimmed.indexOf(':');
-  const lastColon = trimmed.lastIndexOf(':');
-  if (firstColon !== -1 && firstColon === lastColon) {
-    return trimmed.slice(0, firstColon);
-  }
-
-  return trimmed;
-}
-
-function getHeaderValue(header: string | string[] | undefined): string | undefined {
-  if (!header) {
-    return undefined;
-  }
-  const first = Array.isArray(header) ? header[0] : header;
-  return first?.trim() || undefined;
-}
-
-function sendBadRequest(res: express.Response, message: string): void {
-  res.status(400).json({
-    jsonrpc: '2.0',
-    error: {
-      code: -32000,
-      message,
-    },
-    id: null,
-  });
-}
 
 async function createSessionContext(): Promise<SessionContext> {
   let context: SessionContext | undefined;
@@ -146,13 +81,17 @@ async function start(): Promise<void> {
   }
 
   app.all(ENDPOINT, async (req, res) => {
+    const callerContext = resolveStreamableHttpCallerContext(
+      req.headers,
+      TOOL_IDENTITY_HEADER
+    );
     const origin = req.headers.origin;
-    if (!isOriginAllowed(origin)) {
+    if (!isOriginAllowed(origin, ALLOWED_ORIGINS)) {
       res.status(403).json({ error: 'Origin not allowed' });
       return;
     }
 
-    if (!isHostAllowed(req.headers.host)) {
+    if (!isHostAllowed(req.headers.host, ALLOWED_HOSTS)) {
       res.status(403).json({ error: 'Host not allowed' });
       return;
     }
@@ -167,7 +106,9 @@ async function start(): Promise<void> {
             sendBadRequest(res, 'Bad Request: Invalid or missing session ID');
             return;
           }
-          await existing.transport.handleRequest(req, res, req.body);
+          await withRequestCallerContext(callerContext, async () => {
+            await existing.transport.handleRequest(req, res, req.body);
+          });
           return;
         }
 
@@ -177,7 +118,9 @@ async function start(): Promise<void> {
         }
 
         const sessionContext = await createSessionContext();
-        await sessionContext.transport.handleRequest(req, res, req.body);
+        await withRequestCallerContext(callerContext, async () => {
+          await sessionContext.transport.handleRequest(req, res, req.body);
+        });
         return;
       }
 
@@ -193,7 +136,9 @@ async function start(): Promise<void> {
           return;
         }
 
-        await existing.transport.handleRequest(req, res, req.body);
+        await withRequestCallerContext(callerContext, async () => {
+          await existing.transport.handleRequest(req, res, req.body);
+        });
         return;
       }
 

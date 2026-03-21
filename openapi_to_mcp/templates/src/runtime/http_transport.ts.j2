@@ -1,0 +1,78 @@
+interface HttpErrorResponse {
+  json: (payload: object) => void;
+  status: (code: number) => HttpErrorResponse;
+}
+
+export function isOriginAllowed(
+  origin: string | undefined,
+  allowedOrigins: string[]
+): boolean {
+  if (!origin) {
+    return true;
+  }
+  return allowedOrigins.includes(origin);
+}
+
+export function isHostAllowed(
+  hostHeader: string | string[] | undefined,
+  allowedHosts: string[]
+): boolean {
+  const first = getHeaderValue(hostHeader);
+  if (!first) {
+    return false;
+  }
+  const host = extractHostFromHeaderValue(first);
+  return Boolean(host) && allowedHosts.includes(host);
+}
+
+export function normalizeAllowedHost(host: string): string {
+  const trimmed = host.trim().toLowerCase();
+  if (!trimmed) {
+    return '';
+  }
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+export function getHeaderValue(
+  header: string | string[] | undefined
+): string | undefined {
+  if (!header) {
+    return undefined;
+  }
+  const first = Array.isArray(header) ? header[0] : header;
+  return first?.trim() || undefined;
+}
+
+export function sendBadRequest(res: HttpErrorResponse, message: string): void {
+  res.status(400).json({
+    jsonrpc: '2.0',
+    error: {
+      code: -32000,
+      message,
+    },
+    id: null,
+  });
+}
+
+function extractHostFromHeaderValue(headerValue: string): string {
+  const trimmed = headerValue.trim().toLowerCase();
+  if (!trimmed) {
+    return '';
+  }
+  if (trimmed.startsWith('[')) {
+    const closingBracketIndex = trimmed.indexOf(']');
+    if (closingBracketIndex <= 1) {
+      return '';
+    }
+    return trimmed.slice(1, closingBracketIndex);
+  }
+  const firstColon = trimmed.indexOf(':');
+  const lastColon = trimmed.lastIndexOf(':');
+  if (firstColon !== -1 && firstColon === lastColon) {
+    return trimmed.slice(0, firstColon);
+  }
+  return trimmed;
+}

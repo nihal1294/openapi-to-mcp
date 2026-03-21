@@ -58,6 +58,10 @@ def run_server(  # noqa: PLR0913
     cache_ttl_ms: int | None,
     cache_max_entries: int | None,
     rate_limit_per_minute: int | None,
+    tool_access_mode: str | None,
+    tool_access_default: str | None,
+    tool_identity_header: str | None,
+    tool_allowlists: str | None,
 ) -> None:
     """Generate, build, and run an MCP server directly from an OpenAPI spec."""
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
@@ -114,6 +118,10 @@ def run_server(  # noqa: PLR0913
                     "cache_ttl_ms": cache_ttl_ms,
                     "cache_max_entries": cache_max_entries,
                     "rate_limit_per_minute": rate_limit_per_minute,
+                    "tool_access_mode": tool_access_mode,
+                    "tool_access_default": tool_access_default,
+                    "tool_identity_header": tool_identity_header,
+                    "tool_allowlists": tool_allowlists,
                 }
             ),
         )

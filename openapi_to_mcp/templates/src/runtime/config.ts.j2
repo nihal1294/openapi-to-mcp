@@ -19,6 +19,19 @@ export const RATE_LIMIT_PER_MINUTE = parseIntegerEnv(
   0,
   0
 );
+export const TOOL_ACCESS_MODE = parseChoiceEnv('MCP_TOOL_ACCESS_MODE', 'off', [
+  'off',
+  'allowlist',
+]);
+export const TOOL_ACCESS_DEFAULT = parseChoiceEnv(
+  'MCP_TOOL_ACCESS_DEFAULT',
+  'allow',
+  ['allow', 'deny']
+);
+export const TOOL_IDENTITY_HEADER = normalizeHeaderName(
+  process.env.MCP_TOOL_IDENTITY_HEADER
+);
+export const TOOL_ALLOWLISTS_JSON = process.env.MCP_TOOL_ALLOWLISTS?.trim() || '';
 
 function parseBaseUrlEnv(): string {
   const raw = process.env.TARGET_API_BASE_URL?.trim() || '';
@@ -47,4 +60,24 @@ function parseIntegerEnv(envName: string, fallback: number, minimum: number): nu
     throw new Error(`${envName} must be an integer >= ${minimum}. Received '${raw}'.`);
   }
   return parsed;
+}
+
+function parseChoiceEnv<T extends string>(
+  envName: string,
+  fallback: T,
+  choices: T[]
+): T {
+  const raw = process.env[envName]?.trim() as T | undefined;
+  if (!raw) {
+    return fallback;
+  }
+  if (!choices.includes(raw)) {
+    throw new Error(`${envName} must be one of: ${choices.join(', ')}. Received '${raw}'.`);
+  }
+  return raw;
+}
+
+function normalizeHeaderName(value: string | undefined): string | null {
+  const normalized = value?.trim().toLowerCase();
+  return normalized || null;
 }

@@ -14,7 +14,14 @@ import {
   toolRuntimeMap,
   tools,
 } from './runtime/generated.js';
+import { buildToolErrorResult, ToolExecutionError } from './runtime/errors.js';
 import { ToolExecutor } from './runtime/executor.js';
+import { createRequestId, logEvent } from './runtime/observability.js';
+import {
+  assertToolAllowed,
+  currentCallerIdentity,
+  filterToolsForCaller,
+} from './runtime/tool_access.js';
 
 function buildCustomToolMap(): Map<string, CustomToolDefinition> {
   const customToolMap = new Map<string, CustomToolDefinition>();
@@ -94,22 +101,48 @@ export class OpenApiMcpServer {
   }
 
   private setupRequestHandlers(): void {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: this.allTools }));
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: filterToolsForCaller(this.allTools),
+    }));
     this.server.setRequestHandler(
       CallToolRequestSchema,
       async (request): Promise<CallToolResult> => {
         const toolName = request.params.name;
         const args = (request.params.arguments || {}) as Record<string, unknown>;
         const customTool = this.customToolMap.get(toolName);
-        if (customTool) {
-          return customTool.handler(args);
-        }
         const tool = toolRuntimeMap.get(toolName);
-        if (!tool) {
+        if (!customTool && !tool) {
           throw new McpError(ErrorCode.MethodNotFound, `Tool '${toolName}' not found.`);
         }
-        return this.executor.execute(toolName, tool, args);
+        try {
+          assertToolAllowed(toolName);
+          if (customTool) {
+            return customTool.handler(args);
+          }
+          return this.executor.execute(toolName, tool!, args);
+        } catch (error) {
+          if (!(error instanceof ToolExecutionError)) {
+            throw error;
+          }
+          return this.handleDeniedTool(toolName, error);
+        }
       }
     );
+  }
+
+  private handleDeniedTool(
+    toolName: string,
+    error: ToolExecutionError
+  ): CallToolResult {
+    const requestId = createRequestId();
+    logEvent('error', 'tool_execution_denied', {
+      callerIdentity: currentCallerIdentity(),
+      errorCode: error.meta.code,
+      errorSource: error.meta.source,
+      requestId,
+      retryable: error.meta.retryable,
+      toolName,
+    });
+    return buildToolErrorResult(error, requestId);
   }
 }
