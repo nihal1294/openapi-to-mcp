@@ -72,6 +72,7 @@ Public product documentation lives on GitHub Pages:
 - regeneration-safe custom tools via `src/custom/tools.ts`
 - richer generated tool descriptions and input examples from spec metadata
 - optional grouped tool names with first-tag prefixes
+- optional request-scoped tool allowlists for streamable-http callers
 - strict mode by default with `generation_report.json`
 - generated auth env mapping for `apiKey`, bearer, OAuth2, and OpenID Connect
 - generated runtime controls for concurrency, queueing, timeout, bounded caching, and rate limiting

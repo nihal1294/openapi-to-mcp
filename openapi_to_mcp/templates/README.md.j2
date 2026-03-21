@@ -36,6 +36,12 @@ This MCP server was automatically generated from an OpenAPI specification by the
         *   Caching and rate limiting only apply to safe HTTP methods (`GET`, `HEAD`, `OPTIONS`).
         *   Rate limiting uses a fixed one-minute window, so quota resets at window boundaries.
         *   Invalid values fail fast at startup instead of silently falling back.
+    *   **Tool Access Controls (Optional):**
+        *   `MCP_TOOL_ACCESS_MODE`, `MCP_TOOL_ACCESS_DEFAULT`, `MCP_TOOL_IDENTITY_HEADER`, `MCP_TOOL_ALLOWLISTS`
+        *   These enable request-scoped tool allowlists for `streamable-http`.
+        *   `MCP_TOOL_ALLOWLISTS` must be a JSON object mapping caller identities to arrays of allowed tool names.
+        *   `MCP_TOOL_IDENTITY_HEADER` defines which request header supplies the caller identity.
+        *   The reserved caller identities are `anonymous` (missing header) and `stdio`.
     *   **Runtime Validation:**
         *   Generated tool input validation is set to `{{ runtime_validation }}`.
         *   When set to `input`, tool arguments are validated against the generated `inputSchema` before the upstream API call.

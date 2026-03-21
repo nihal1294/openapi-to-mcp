@@ -46,6 +46,10 @@ openapi-to-mcp run [OPTIONS]
 | `--cache-ttl-ms` | No | None | Override `MCP_CACHE_TTL_MS` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
 | `--cache-max-entries` | No | None | Override `MCP_CACHE_MAX_ENTRIES` for bounded in-memory caching |
 | `--rate-limit-per-minute` | No | None | Override `MCP_RATE_LIMIT_PER_MINUTE` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
+| `--tool-access-mode` | No | None | Override `MCP_TOOL_ACCESS_MODE` (`off` or `allowlist`) |
+| `--tool-access-default` | No | None | Override `MCP_TOOL_ACCESS_DEFAULT` (`allow` or `deny`) |
+| `--tool-identity-header` | No | None | Override `MCP_TOOL_IDENTITY_HEADER` for streamable-http caller identity |
+| `--tool-allowlists` | No | None | Override `MCP_TOOL_ALLOWLISTS` with a JSON object mapping identities to tool names |
 
 ## Examples
 
@@ -139,6 +143,24 @@ Use `0` to disable either control. These controls are ignored for unsafe methods
 as `POST`, `PUT`, `PATCH`, and `DELETE`.
 Rate limiting uses a fixed one-minute window, so quota resets at window boundaries.
 
+### Restrict visible tools by caller identity
+
+```bash
+openapi-to-mcp run \
+  --openapi-json ./openapi.yaml \
+  --target-api-base-url https://example.com/api \
+  --tool-access-mode allowlist \
+  --tool-access-default deny \
+  --tool-identity-header X-MCP-Tenant \
+  --tool-allowlists '{"acme":["listPets","getPet"]}'
+```
+
+This access model is request-scoped and intended primarily for `streamable-http`.
+The reserved identities are:
+
+- `anonymous` for requests without the configured identity header
+- `stdio` for stdio transport
+
 ## `--env-source` formats
 
 Accepted values:
@@ -151,6 +173,7 @@ Accepted values:
 CLI runtime-control flags are written as the corresponding `MCP_*` env vars before startup.
 `MCP_CACHE_TTL_MS` and `MCP_RATE_LIMIT_PER_MINUTE` both default to `0` (disabled).
 `MCP_CACHE_MAX_ENTRIES` defaults to `1000`.
+`MCP_TOOL_ACCESS_MODE` defaults to `off`, and `MCP_TOOL_ACCESS_DEFAULT` defaults to `allow`.
 
 ## Base URL resolution
 
