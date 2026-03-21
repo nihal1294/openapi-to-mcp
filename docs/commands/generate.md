@@ -111,6 +111,8 @@ openapi-to-mcp generate \
 
 `tag-prefix` uses the first operation tag when available and prefixes the generated tool
 name with a normalized form such as `pets_listPets`.
+If the normalized tag would start with a digit, the generator prefixes it with `group_`
+to keep the emitted tool name conservative.
 
 ## Generated artifacts
 

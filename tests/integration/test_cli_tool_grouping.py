@@ -38,9 +38,7 @@ def test_generate_applies_tag_prefix_grouping(
     )
 
     assert result.exit_code == 0
-    generated_source = _read_generated_source(output_dir)
-    assert '"pets_listPets"' in generated_source
-    assert '"orders_listOrders"' in generated_source
+    assert _tool_names(output_dir) == ["pets_listPets", "orders_listOrders"]
 
 
 def test_generate_policy_grouping_keeps_explicit_renames(
@@ -70,10 +68,7 @@ def test_generate_policy_grouping_keeps_explicit_renames(
     )
 
     assert result.exit_code == 0
-    generated_source = _read_generated_source(output_dir)
-    assert '"fetchPets"' in generated_source
-    assert '"pets_fetchPets"' not in generated_source
-    assert '"orders_listOrders"' in generated_source
+    assert _tool_names(output_dir) == ["fetchPets", "orders_listOrders"]
 
 
 def test_generate_cli_tool_grouping_overrides_policy_default(
@@ -102,9 +97,7 @@ def test_generate_cli_tool_grouping_overrides_policy_default(
     )
 
     assert result.exit_code == 0
-    generated_source = _read_generated_source(output_dir)
-    assert '"listPets"' in generated_source
-    assert '"pets_listPets"' not in generated_source
+    assert _tool_names(output_dir) == ["listPets", "listOrders"]
 
 
 def test_generate_fails_cleanly_on_grouping_name_collision(
@@ -134,6 +127,19 @@ def test_generate_fails_cleanly_on_grouping_name_collision(
 
 def _read_generated_source(output_dir: Path) -> str:
     return (output_dir / "src" / "runtime" / "generated.ts").read_text(encoding="utf-8")
+
+
+def _tool_names(output_dir: Path) -> list[str]:
+    generated_source = _read_generated_source(output_dir)
+    match = re.search(
+        r"export const tools = (?P<tools>\[.*?\]) as Tool\[\];",
+        generated_source,
+        re.DOTALL,
+    )
+    if match is None:
+        raise AssertionError(generated_source)
+    tools = json.loads(match.group("tools"))
+    return [tool["name"] for tool in tools]
 
 
 def _write_grouping_spec(path: Path) -> Path:

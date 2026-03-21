@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from copy import deepcopy
 from typing import Any
 
 from openapi_to_mcp.common.exceptions import GenerationError
@@ -21,7 +20,7 @@ def apply_tool_grouping(
     if tool_grouping != "tag-prefix":
         raise GenerationError(f"Unsupported tool grouping mode `{tool_grouping}`.")
 
-    grouped_tools = [deepcopy(tool) for tool in mcp_tools]
+    grouped_tools = [{**tool} for tool in mcp_tools]
     for tool in grouped_tools:
         _apply_tag_prefix(tool)
     _ensure_unique_names(grouped_tools)
@@ -57,7 +56,10 @@ def _first_tag_prefix(tool: dict[str, Any]) -> str | None:
 
 def _normalize_group_prefix(value: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9_]", "_", value.strip().lower())
-    return re.sub(r"_+", "_", cleaned).strip("_")
+    normalized = re.sub(r"_+", "_", cleaned).strip("_")
+    if normalized and normalized[0].isdigit():
+        return f"group_{normalized}"
+    return normalized
 
 
 def _ensure_unique_names(mcp_tools: list[dict[str, Any]]) -> None:

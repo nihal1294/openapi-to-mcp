@@ -94,6 +94,8 @@ Current `tool_grouping` values:
 
 `tag-prefix` uses the first operation tag, when present, to prefix the generated tool
 name with a normalized tag such as `pets_listPets`.
+If the normalized tag would start with a digit, the generator prefixes it with `group_`
+to keep the emitted tool name conservative.
 
 ### `tools.include` and `tools.exclude`
 
