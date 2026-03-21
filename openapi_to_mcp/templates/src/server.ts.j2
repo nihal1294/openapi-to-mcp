@@ -8,15 +8,41 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import * as console from 'console';
 
-import { toolRuntimeMap, tools } from './runtime/generated.js';
+import { getCustomTools } from './custom/tools.js';
+import {
+  type CustomToolDefinition,
+  toolRuntimeMap,
+  tools,
+} from './runtime/generated.js';
 import { ToolExecutor } from './runtime/executor.js';
+
+function buildCustomToolMap(): Map<string, CustomToolDefinition> {
+  const customToolMap = new Map<string, CustomToolDefinition>();
+  for (const customTool of getCustomTools()) {
+    const toolName = customTool.tool.name;
+    if (toolRuntimeMap.has(toolName)) {
+      throw new Error(`Custom tool '${toolName}' conflicts with a generated tool.`);
+    }
+    if (customToolMap.has(toolName)) {
+      throw new Error(`Custom tool '${toolName}' is registered more than once.`);
+    }
+    customToolMap.set(toolName, customTool);
+  }
+  return customToolMap;
+}
+
+function mergeTools(customToolMap: Map<string, CustomToolDefinition>) {
+  return [...tools, ...[...customToolMap.values()].map(({ tool }) => tool)];
+}
 
 export class OpenApiMcpServer {
   private static readonly activeInstances = new Set<OpenApiMcpServer>();
   private static shutdownHooksRegistered = false;
 
   public server: Server;
+  private readonly customToolMap = buildCustomToolMap();
   private readonly executor = new ToolExecutor();
+  private readonly allTools = mergeTools(this.customToolMap);
 
   constructor() {
     this.server = new Server(
@@ -68,12 +94,16 @@ export class OpenApiMcpServer {
   }
 
   private setupRequestHandlers(): void {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: this.allTools }));
     this.server.setRequestHandler(
       CallToolRequestSchema,
       async (request): Promise<CallToolResult> => {
         const toolName = request.params.name;
         const args = (request.params.arguments || {}) as Record<string, unknown>;
+        const customTool = this.customToolMap.get(toolName);
+        if (customTool) {
+          return customTool.handler(args);
+        }
         const tool = toolRuntimeMap.get(toolName);
         if (!tool) {
           throw new McpError(ErrorCode.MethodNotFound, `Tool '${toolName}' not found.`);

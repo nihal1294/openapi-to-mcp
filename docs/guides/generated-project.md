@@ -18,6 +18,7 @@ A generated project is a standalone Node.js/TypeScript MCP server.
 
 - `src/index.ts`: runtime entrypoint
 - `src/server.ts`: thin MCP server shell and request wiring
+- `src/custom/tools.ts`: preserved custom tool entry point for user-owned extensions
 - `src/runtime/generated.ts`: public tool definitions and runtime metadata registry
 - `src/runtime/executor.ts`: HTTP execution, concurrency, auth, and request shaping
 - `src/runtime/*.ts`: focused generated runtime helpers for config, validation, auth, errors, and serialization
@@ -53,6 +54,17 @@ SSE generation is intentionally gone.
 
 `meta.error.retryable` is advisory only. It tells callers whether an immediate retry is
 reasonable, but it does not guarantee success on retry and does not imply any backoff policy.
+
+## Customization boundary
+
+Generated projects reserve `src/custom/` for user-owned extensions.
+
+- `src/custom/tools.ts` is created only when missing
+- regeneration does not overwrite files under `src/custom/`
+- `src/server.ts` imports custom tools from `src/custom/tools.ts`
+
+Use this boundary for local tools or helper modules you want to keep across regeneration.
+Do not edit `src/server.ts` or `src/runtime/*.ts` directly.
 
 ## `generation_report.json`
 

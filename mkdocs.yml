@@ -27,6 +27,7 @@ nav:
       - diff: commands/diff.md
   - Guides:
       - Auth and Environment: guides/auth-and-env.md
+      - Customization Boundary: guides/customization.md
       - mcpgen.yaml: guides/mcpgen-policy.md
       - Generated Project: guides/generated-project.md
       - Local Workflows: guides/local-workflows.md
