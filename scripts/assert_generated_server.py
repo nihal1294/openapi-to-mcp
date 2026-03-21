@@ -84,6 +84,13 @@ SUITES = {
             expected={"status": "123"},
         )
     ],
+    "grouped": [
+        ToolExpectation(
+            name="test_testConversionTool",
+            arguments={"status": "available"},
+            expected={"status": "available"},
+        )
+    ],
     "upstream-server-error": [
         ToolExpectation(
             name="testConversionTool",

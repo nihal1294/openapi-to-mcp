@@ -18,6 +18,7 @@ def test_load_policy_config_parses_generation_and_tool_rules(tmp_path: Path) -> 
         generate:
           transport: stdio
           runtime_validation: none
+          tool_grouping: tag-prefix
         tools:
           include:
             operations: ["GET /pets"]
@@ -42,6 +43,7 @@ def test_load_policy_config_parses_generation_and_tool_rules(tmp_path: Path) -> 
     assert policy is not None
     assert policy.generation.transport == "stdio"
     assert policy.generation.runtime_validation == "none"
+    assert policy.generation.tool_grouping == "tag-prefix"
     assert policy.include.operations == frozenset({"GET /pets"})
     assert policy.rename_names == {"listPets": "fetchPets"}
     assert policy.auth_names["fetchPets"].security == []
@@ -73,6 +75,7 @@ def test_load_policy_config_autodiscovers_default_file(
             "execution:\n  names:\n    listPets:\n      max_concurrency: true\n",
             "max_concurrency",
         ),
+        ("generate:\n  tool_grouping: by-tag\n", "generate.tool_grouping"),
     ],
 )
 def test_load_policy_config_rejects_invalid_values(

@@ -18,6 +18,7 @@ CURRENT_HTTP_PORT=""
 STDIO_OUTPUT_DIR="${TMP_ROOT}/generated-stdio"
 HTTP_OUTPUT_DIR="${TMP_ROOT}/generated-http"
 NO_VALIDATION_OUTPUT_DIR="${TMP_ROOT}/generated-no-validation-stdio"
+GROUPED_OUTPUT_DIR="${TMP_ROOT}/generated-grouped-stdio"
 AUTH_STDIO_OUTPUT_DIR="${TMP_ROOT}/generated-auth-stdio"
 AUTH_HTTP_OUTPUT_DIR="${TMP_ROOT}/generated-auth-http"
 AUTH_HEADER_API_KEY="${AUTH_HEADER_API_KEY:-header-secret}"
@@ -208,6 +209,7 @@ generate_server() {
   local openapi_spec="$3"
   local server_name="$4"
   local runtime_validation="${5:-input}"
+  local tool_grouping="${6:-none}"
 
   rm -rf "$output_dir"
 
@@ -218,6 +220,7 @@ generate_server() {
     --mcp-server-name "$server_name"
     --transport "$transport"
     --runtime-validation "$runtime_validation"
+    --tool-grouping "$tool_grouping"
   )
 
   if [[ "$transport" == "streamable-http" ]]; then
@@ -412,6 +415,14 @@ main() {
   build_generated_server "$NO_VALIDATION_OUTPUT_DIR"
   run_suite_assertions "validation-disabled" "stdio" \
     "$NO_VALIDATION_OUTPUT_DIR" "${NO_VALIDATION_OUTPUT_DIR}/.env"
+
+  echo "Generating and validating grouped stdio server"
+  generate_server \
+    "$GROUPED_OUTPUT_DIR" "stdio" "$BASIC_OPENAPI_SPEC" \
+    "generated-grouped-stdio-e2e" "input" "tag-prefix"
+  build_generated_server "$GROUPED_OUTPUT_DIR"
+  run_suite_assertions "grouped" "stdio" \
+    "$GROUPED_OUTPUT_DIR" "${GROUPED_OUTPUT_DIR}/.env"
 
   echo "Generating and validating auth stdio server"
   generate_server \
