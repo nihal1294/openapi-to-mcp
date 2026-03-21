@@ -440,6 +440,13 @@ class Mapper:
 
         return processed_request_body
 
+    def _extract_operation_tags(self, operation: dict[str, Any]) -> list[str]:
+        """Return the operation tags as a normalized string list."""
+        tags = operation.get("tags", [])
+        if not isinstance(tags, list):
+            return []
+        return [tag for tag in tags if isinstance(tag, str) and tag.strip()]
+
     def _map_operation_to_tool(
         self,
         method: str,
@@ -493,8 +500,10 @@ class Mapper:
             "name": tool_name,
             "description": description,
             "inputSchema": input_schema,
+            "_original_name": tool_name,
             "_original_method": method.upper(),
             "_original_path": path,
+            "_original_tags": self._extract_operation_tags(operation),
             "_original_parameters": processed_params,
             "_original_request_body": processed_request_body,
             "_original_security": security_requirements,

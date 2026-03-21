@@ -27,6 +27,7 @@ from openapi_to_mcp.common.tool_runtime import (
     derive_auth_env_vars,
 )
 from openapi_to_mcp.mapping import Mapper
+from openapi_to_mcp.mapping.tool_grouping import apply_tool_grouping
 from openapi_to_mcp.policy import apply_policy
 
 if TYPE_CHECKING:
@@ -145,14 +146,15 @@ def _build_generation_report(
     *,
     mapped_tools: int,
     strict: bool,
-    transport: str,
+    generation_settings: dict[str, str],
     policy: PolicyConfig | None,
 ) -> dict[str, Any]:
     """Build generation diagnostics report."""
     mapper_report = mapper.get_report()
     return {
         "strict_mode": strict,
-        "transport": transport,
+        "tool_grouping": generation_settings["tool_grouping"],
+        "transport": generation_settings["transport"],
         "policy_file": str(policy.source_path) if policy is not None else None,
         **mapper_report,
         "mapped_tools": mapped_tools,
@@ -186,6 +188,7 @@ def generate_project(  # noqa: PLR0913
     output_dir: str,
     mcp_server_name: str | None,
     mcp_server_version: str | None,
+    tool_grouping: str,
     transport: str,
     host: str,
     port: int | None,
@@ -206,6 +209,7 @@ def generate_project(  # noqa: PLR0913
                 "name": mcp_server_name,
                 "version": mcp_server_version,
                 "transport": transport,
+                "tool_grouping": tool_grouping,
                 "host": host,
                 "port": port,
                 "mcp_endpoint": mcp_endpoint,
@@ -239,6 +243,7 @@ def generate_project(  # noqa: PLR0913
     )
     mcp_tools = mapper.map_tools()
     mcp_tools = apply_policy(mcp_tools, policy_config)
+    mcp_tools = apply_tool_grouping(mcp_tools, tool_grouping)
     logger.info("Mapped %d tools.", len(mcp_tools))
     _raise_if_no_tools_mapped(mcp_tools, policy_config=policy_config)
     public_tools = build_public_tools(mcp_tools)
@@ -268,7 +273,10 @@ def generate_project(  # noqa: PLR0913
         mapper=mapper,
         mapped_tools=len(mcp_tools),
         strict=strict,
-        transport=transport,
+        generation_settings={
+            "tool_grouping": tool_grouping,
+            "transport": transport,
+        },
         policy=policy_config,
     )
     _write_generation_report(output_dir=output_dir, report=generation_report)
@@ -283,6 +291,7 @@ def generate(  # noqa: PLR0913
     output_dir: str,
     mcp_server_name: str | None,
     mcp_server_version: str | None,
+    tool_grouping: str,
     transport: str,
     host: str,
     port: int | None,
@@ -299,6 +308,7 @@ def generate(  # noqa: PLR0913
             {
                 "mcp_server_name": mcp_server_name,
                 "mcp_server_version": mcp_server_version,
+                "tool_grouping": tool_grouping,
                 "transport": transport,
                 "host": host,
                 "port": port,
@@ -315,6 +325,7 @@ def generate(  # noqa: PLR0913
             output_dir=output_dir,
             mcp_server_name=resolved_settings["mcp_server_name"],
             mcp_server_version=resolved_settings["mcp_server_version"],
+            tool_grouping=resolved_settings["tool_grouping"],
             transport=resolved_settings["transport"],
             host=resolved_settings["host"],
             port=resolved_settings["port"],

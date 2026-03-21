@@ -15,6 +15,7 @@ class GenerationDefaults:
 
     mcp_server_name: str | None = None
     mcp_server_version: str | None = None
+    tool_grouping: str | None = None
     transport: str | None = None
     host: str | None = None
     port: int | None = None
