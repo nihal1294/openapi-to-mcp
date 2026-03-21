@@ -22,6 +22,7 @@ RUNTIME_TEMPLATE_NAMES = (
     "serialization",
     "validation",
 )
+CUSTOM_TEMPLATE_NAMES = ("tools",)
 
 
 class Generator:
@@ -89,6 +90,8 @@ class Generator:
             src_path.mkdir(exist_ok=True)
             runtime_path = src_path / "runtime"
             runtime_path.mkdir(exist_ok=True)
+            custom_path = src_path / "custom"
+            custom_path.mkdir(exist_ok=True)
         except OSError as e:
             err_msg = (
                 f"Failed to create output directories in '{self.output_path}': {e}"
@@ -102,7 +105,7 @@ class Generator:
         Raises:
             GenerationError: If template rendering or file writing fails.
         """
-        static_templates = {
+        generated_templates = {
             "package.json.j2": self.output_path / "package.json",
             "tsconfig.json.j2": self.output_path / "tsconfig.json",
             "src/server.ts.j2": self.output_path / "src" / "server.ts",
@@ -110,16 +113,25 @@ class Generator:
             ".env.example.j2": self.output_path / ".env.example",
             "src/index.ts.j2": self.output_path / "src" / "index.ts",
         }
-        static_templates.update(self._runtime_templates())
+        generated_templates.update(self._runtime_templates())
 
-        for template_name, output_file in static_templates.items():
+        for template_name, output_file in generated_templates.items():
             self._render_and_write(template_name, output_file)
+        for template_name, output_file in self._custom_templates().items():
+            self._render_if_missing(template_name, output_file)
 
     def _runtime_templates(self) -> dict[str, Path]:
         runtime_output = self.output_path / "src" / "runtime"
         return {
             f"src/runtime/{name}.ts.j2": runtime_output / f"{name}.ts"
             for name in RUNTIME_TEMPLATE_NAMES
+        }
+
+    def _custom_templates(self) -> dict[str, Path]:
+        custom_output = self.output_path / "src" / "custom"
+        return {
+            f"src/custom/{name}.ts.j2": custom_output / f"{name}.ts"
+            for name in CUSTOM_TEMPLATE_NAMES
         }
 
     def _generate_transport_file(self) -> None:
@@ -172,3 +184,10 @@ class Generator:
         except Exception as e:
             err_msg = f"Error rendering or writing template '{template_name}' to '{output_file}': {e}"
             raise GenerationError(err_msg) from e
+
+    def _render_if_missing(self, template_name: str, output_file: Path) -> None:
+        """Render a template only when the target file does not already exist."""
+        if output_file.exists():
+            logger.info("Preserving existing customization file: %s", output_file)
+            return
+        self._render_and_write(template_name, output_file)
