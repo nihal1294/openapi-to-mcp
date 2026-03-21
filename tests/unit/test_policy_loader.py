@@ -34,6 +34,8 @@ def test_load_policy_config_parses_generation_and_tool_rules(tmp_path: Path) -> 
             fetchPets:
               max_concurrency: 3
               timeout_ms: 12000
+              cache_ttl_ms: 60000
+              rate_limit_per_minute: 30
         """,
         encoding="utf-8",
     )
@@ -49,6 +51,8 @@ def test_load_policy_config_parses_generation_and_tool_rules(tmp_path: Path) -> 
     assert policy.auth_names["fetchPets"].security == []
     assert policy.execution_names["fetchPets"].max_concurrency == 3
     assert policy.execution_names["fetchPets"].timeout_ms == 12000
+    assert policy.execution_names["fetchPets"].cache_ttl_ms == 60000
+    assert policy.execution_names["fetchPets"].rate_limit_per_minute == 30
 
 
 def test_load_policy_config_autodiscovers_default_file(
@@ -74,6 +78,14 @@ def test_load_policy_config_autodiscovers_default_file(
         (
             "execution:\n  names:\n    listPets:\n      max_concurrency: true\n",
             "max_concurrency",
+        ),
+        (
+            "execution:\n  names:\n    listPets:\n      cache_ttl_ms: -1\n",
+            "cache_ttl_ms",
+        ),
+        (
+            "execution:\n  names:\n    listPets:\n      rate_limit_per_minute: -1\n",
+            "rate_limit_per_minute",
         ),
         ("generate:\n  tool_grouping: by-tag\n", "generate.tool_grouping"),
     ],

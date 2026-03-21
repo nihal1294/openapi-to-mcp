@@ -37,7 +37,12 @@ def test_apply_policy_overrides_auth_and_execution() -> None:
             )
         },
         execution_operations={
-            "GET /pets": ExecutionOverride(max_concurrency=4, timeout_ms=9000)
+            "GET /pets": ExecutionOverride(
+                max_concurrency=4,
+                timeout_ms=9000,
+                cache_ttl_ms=1500,
+                rate_limit_per_minute=12,
+            )
         },
     )
 
@@ -47,7 +52,24 @@ def test_apply_policy_overrides_auth_and_execution() -> None:
     assert tool["_original_security_schemes"] == {
         "bearerAuth": {"type": "http", "scheme": "bearer"}
     }
-    assert tool["_policy_execution"] == {"maxConcurrency": 4, "timeoutMs": 9000}
+    assert tool["_policy_execution"] == {
+        "maxConcurrency": 4,
+        "timeoutMs": 9000,
+        "cacheTtlMs": 1500,
+        "rateLimitPerMinute": 12,
+    }
+
+
+def test_apply_policy_rejects_cache_and_rate_limit_on_unsafe_methods() -> None:
+    policy = PolicyConfig(
+        source_path=_fake_path(),
+        execution_operations={
+            "POST /pets": ExecutionOverride(cache_ttl_ms=1000, rate_limit_per_minute=5)
+        },
+    )
+
+    with pytest.raises(PolicyConfigError, match="safe HTTP method"):
+        apply_policy([_mapped_tools()[1]], policy)
 
 
 def test_apply_policy_rejects_duplicate_names_created_by_rename() -> None:
