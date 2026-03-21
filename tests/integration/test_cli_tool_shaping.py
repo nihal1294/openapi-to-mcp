@@ -16,6 +16,11 @@ def _write_tool_shaping_spec(path: Path) -> Path:
         "openapi": "3.0.0",
         "info": {"title": "Tool Shaping", "version": "1.0.0"},
         "servers": [{"url": "https://example.com/api"}],
+        "components": {
+            "examples": {
+                "SearchBody": {"value": {"query": "wireless", "limit": 5}},
+            }
+        },
         "paths": {
             "/inventory/search/{inventoryId}": {
                 "post": {
@@ -27,12 +32,22 @@ def _write_tool_shaping_spec(path: Path) -> Path:
                             "required": True,
                             "example": "inv_123",
                             "schema": {"type": "string"},
-                        }
+                        },
+                        {
+                            "name": "status",
+                            "in": "query",
+                            "example": None,
+                            "schema": {"type": "string", "nullable": True},
+                        },
                     ],
                     "requestBody": {
                         "content": {
                             "application/json": {
-                                "example": {"query": "wireless", "limit": 5},
+                                "examples": {
+                                    "search": {
+                                        "$ref": "#/components/examples/SearchBody"
+                                    }
+                                },
                                 "schema": {
                                     "type": "object",
                                     "properties": {
@@ -78,4 +93,5 @@ def test_generate_emits_shaped_descriptions_and_input_examples(
     assert '"description": "Search inventory."' in generated_source
     assert '"examples": [' in generated_source
     assert '"inventoryId": "inv_123"' in generated_source
+    assert '"status": null' in generated_source
     assert '"query": "wireless"' in generated_source

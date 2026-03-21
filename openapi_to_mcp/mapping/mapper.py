@@ -351,7 +351,7 @@ class Mapper:
 
             if "description" in param:
                 param_schema_json["description"] = param["description"]
-            add_parameter_example(param, param_schema_json)
+            add_parameter_example(param, param_schema_json, self._resolve_ref)
 
             input_schema["properties"][param_name] = param_schema_json
             if param.get("required", False):
@@ -424,7 +424,7 @@ class Mapper:
                 body_schema_openapi, self.spec, raise_on_error=True
             )
             if isinstance(primary_media, dict):
-                add_media_example(primary_media, body_schema_json)
+                add_media_example(primary_media, body_schema_json, self._resolve_ref)
             input_schema["properties"]["requestBody"] = body_schema_json
             if request_body.get("required", False):
                 input_schema["required"].append("requestBody")

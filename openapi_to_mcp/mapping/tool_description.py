@@ -5,9 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-_GENERIC_DESCRIPTION_PREFIX = "operation for /"
-_IDENTIFIER_BOUNDARY = re.compile(r"(?<!^)(?=[A-Z])")
-_MIN_DESCRIPTION_WORDS = 2
+_IDENTIFIER_PARTS = re.compile(r"[A-Z]+(?=[A-Z][a-z]|\d|$)|[A-Z]?[a-z]+|\d+")
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
 _VERSION_SEGMENT = re.compile(r"^v\d+$", re.IGNORECASE)
 
@@ -45,19 +43,15 @@ def _first_sentence(text: str) -> str:
 
 
 def _is_useful_text(text: str) -> bool:
-    if not text:
-        return False
-    lowered = text.lower()
-    if _GENERIC_DESCRIPTION_PREFIX in lowered:
-        return False
-    return len(text.split()) >= _MIN_DESCRIPTION_WORDS
+    return bool(text)
 
 
 def _humanize_identifier(identifier: str) -> str:
     normalized = identifier.replace("-", " ").replace("_", " ")
     spaced_words: list[str] = []
     for chunk in normalized.split():
-        spaced_words.extend(_IDENTIFIER_BOUNDARY.sub(" ", chunk).split())
+        parts = _IDENTIFIER_PARTS.findall(chunk)
+        spaced_words.extend(parts or [chunk])
     return " ".join(word.lower() for word in spaced_words if word)
 
 
@@ -95,6 +89,8 @@ def _resource_for_path(path: str) -> str:
         if not segment.startswith("{") and not _VERSION_SEGMENT.match(segment)
     ]
     if not resource_words:
+        if any(segment.startswith("{") for segment in segments):
+            return "resource"
         return "the API root"
     return resource_words[-1]
 
