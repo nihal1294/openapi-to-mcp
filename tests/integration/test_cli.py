@@ -140,7 +140,9 @@ def test_generate_stdio_omits_http_dependencies(
     assert "express" not in package_json["dependencies"]
     assert "@types/express" not in package_json["devDependencies"]
 
+    index_source = (output_dir / "src" / "index.ts").read_text(encoding="utf-8")
     transport_source = (output_dir / "src" / "transport.ts").read_text(encoding="utf-8")
+    assert "quiet: true" in index_source
     assert "StdioServerTransport" in transport_source
 
 

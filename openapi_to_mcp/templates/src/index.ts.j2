@@ -9,7 +9,8 @@ const __dirname = path.dirname(__filename);
 const envPath = path.resolve(__dirname, '../.env');
 
 async function bootstrap(): Promise<void> {
-  dotenv.config({ path: envPath });
+  // Keep dotenv's runtime banner off stdout so stdio transport stays protocol-safe.
+  dotenv.config({ path: envPath, quiet: true });
   console.error(`Attempting to load environment variables from: ${envPath}`);
   await import('./transport.js');
 }
