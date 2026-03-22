@@ -1,0 +1,122 @@
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+
+import {
+  TOOL_ACCESS_DEFAULT,
+  TOOL_ACCESS_MODE,
+  TOOL_ALLOWLISTS_JSON,
+} from './config.js';
+import { createToolExecutionError } from './errors.js';
+import { getRequestCallerContext } from './request_context.js';
+
+type ToolAccessDefault = 'allow' | 'deny';
+type ToolAccessMode = 'off' | 'allowlist';
+
+interface ToolAccessPolicy {
+  allowlists: Map<string, Set<string>>;
+  defaultAccess: ToolAccessDefault;
+  mode: ToolAccessMode;
+}
+
+const TOOL_ACCESS_POLICY = parseToolAccessPolicy();
+
+export function filterToolsForCaller(tools: Tool[]): Tool[] {
+  if (TOOL_ACCESS_POLICY.mode === 'off') {
+    return tools;
+  }
+  const allowedNames = resolveAllowedNames();
+  if (allowedNames === null) {
+    return tools;
+  }
+  return tools.filter((tool) => allowedNames.has(tool.name));
+}
+
+export function assertToolAllowed(toolName: string): void {
+  if (TOOL_ACCESS_POLICY.mode === 'off') {
+    return;
+  }
+  const allowedNames = resolveAllowedNames();
+  if (allowedNames === null || allowedNames.has(toolName)) {
+    return;
+  }
+  const { identity, transport } = getRequestCallerContext();
+  throw createToolExecutionError(
+    'tool_not_allowed',
+    'auth',
+    false,
+    `Tool '${toolName}' is not available for caller '${identity}' on ${transport}.`
+  );
+}
+
+export function currentCallerIdentity(): string {
+  return getRequestCallerContext().identity;
+}
+
+function parseToolAccessPolicy(): ToolAccessPolicy {
+  return {
+    allowlists: parseToolAllowlists(),
+    defaultAccess: TOOL_ACCESS_DEFAULT,
+    mode: TOOL_ACCESS_MODE,
+  };
+}
+
+function parseToolAllowlists(): Map<string, Set<string>> {
+  if (!TOOL_ALLOWLISTS_JSON) {
+    return new Map();
+  }
+  const parsed = parseJsonObject(TOOL_ALLOWLISTS_JSON);
+  return new Map(
+    Object.entries(parsed).map(([identity, tools]) => [
+      identity,
+      new Set(parseToolNameArray(identity, tools)),
+    ])
+  );
+}
+
+function parseJsonObject(raw: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('MCP_TOOL_ALLOWLISTS must be valid JSON.');
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(
+      'MCP_TOOL_ALLOWLISTS must be a JSON object mapping identities to tool-name arrays.'
+    );
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function parseToolNameArray(identity: string, value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error(
+      `MCP_TOOL_ALLOWLISTS entry '${identity}' must be an array of tool names.`
+    );
+  }
+  const toolNames = value.map((item) => parseToolName(identity, item));
+  if (toolNames.some((toolName) => toolName.length === 0)) {
+    throw new Error(
+      `MCP_TOOL_ALLOWLISTS entry '${identity}' must contain only non-empty string tool names.`
+    );
+  }
+  return toolNames;
+}
+
+function parseToolName(identity: string, value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new Error(
+      `MCP_TOOL_ALLOWLISTS entry '${identity}' must contain only non-empty string tool names.`
+    );
+  }
+  return value.trim();
+}
+
+function resolveAllowedNames(): Set<string> | null {
+  const { identity } = getRequestCallerContext();
+  const explicit = TOOL_ACCESS_POLICY.allowlists.get(identity);
+  if (explicit) {
+    // An explicit empty set means deny every tool for this identity.
+    return explicit;
+  }
+  return TOOL_ACCESS_POLICY.defaultAccess === 'allow' ? null : new Set();
+}

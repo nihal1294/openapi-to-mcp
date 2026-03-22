@@ -310,6 +310,30 @@ run_performance_suite_assertions() {
   )
 }
 
+run_access_suite_assertions() {
+  local suite="$1"
+  local tool_name="$2"
+  local identity_header="${3:-}"
+  local identity_value="${4:-}"
+  local args=(
+    --suite "$suite"
+    --tool-name "$tool_name"
+    --endpoint-url "http://${HTTP_HOST}:${CURRENT_HTTP_PORT}${MCP_ENDPOINT}"
+  )
+
+  if [[ -n "$identity_header" ]]; then
+    args+=(--identity-header "$identity_header")
+  fi
+  if [[ -n "$identity_value" ]]; then
+    args+=(--identity-value "$identity_value")
+  fi
+
+  (
+    cd "$REPO_ROOT"
+    run_uv run python scripts/assert_generated_server_access.py "${args[@]}"
+  )
+}
+
 run_observability_assertion() {
   local transport="$1"
   local output_dir="$2"
@@ -415,6 +439,9 @@ main() {
   assert_startup_failure \
     "$STDIO_OUTPUT_DIR" "MCP_CACHE_MAX_ENTRIES" "0" \
     "MCP_CACHE_MAX_ENTRIES must be an integer >= 1."
+  assert_startup_failure \
+    "$STDIO_OUTPUT_DIR" "MCP_TOOL_ALLOWLISTS" "{bad-json" \
+    "MCP_TOOL_ALLOWLISTS must be valid JSON."
 
   echo "Generating and validating streamable-http server"
   generate_server \
@@ -426,6 +453,17 @@ main() {
   run_suite_assertions "upstream-server-error" "streamable-http" "$HTTP_OUTPUT_DIR"
   run_observability_assertion "streamable-http" "$HTTP_OUTPUT_DIR" '{"status":"available"}'
   run_observability_assertion "streamable-http" "$HTTP_OUTPUT_DIR" '{"status":"server_error"}' 1
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_TOOL_ACCESS_MODE" "allowlist"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_TOOL_ACCESS_DEFAULT" "deny"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_TOOL_IDENTITY_HEADER" "X-MCP-Tenant"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_TOOL_ALLOWLISTS" '{"acme":[" testConversionTool "]}'
+  start_streamable_http_server "$HTTP_OUTPUT_DIR"
+  run_access_suite_assertions "allowed" "testConversionTool" "X-MCP-Tenant" "acme"
+  run_access_suite_assertions "denied" "testConversionTool" "X-MCP-Tenant" "blocked"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_TOOL_ACCESS_MODE" "off"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_TOOL_ACCESS_DEFAULT" "allow"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_TOOL_IDENTITY_HEADER" ""
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_TOOL_ALLOWLISTS" ""
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_TTL_MS" "60000"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_MAX_ENTRIES" "1000"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RATE_LIMIT_PER_MINUTE" "0"

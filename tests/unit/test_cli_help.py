@@ -43,6 +43,10 @@ def test_run_help_lists_runtime_options() -> None:
     assert "--cache-ttl-ms" in result.output
     assert "--cache-max-entries" in result.output
     assert "--rate-limit-per-min" in result.output
+    assert "--tool-access-mode" in result.output
+    assert "--tool-access-default" in result.output
+    assert "derive caller identity" in result.output
+    assert "--tool-allowlists" in result.output
 
 
 def test_doctor_help_lists_output_options() -> None:

@@ -48,6 +48,7 @@ SSE generation is intentionally gone.
 - shaped tool descriptions from operation summaries, descriptions, and fallbacks
 - generated input examples from parameter, request-body, default, and enum metadata when available
 - optional grouped tool names via first-tag prefixes when generation enables `tool_grouping=tag-prefix`
+- optional request-scoped tool allowlists keyed by caller identity for `streamable-http`
 - optional in-memory response caching for safe methods (`GET`, `HEAD`, `OPTIONS`)
 - optional per-tool fixed-window rate limiting for safe methods
 - bounded cache size via `MCP_CACHE_MAX_ENTRIES`
@@ -57,6 +58,14 @@ SSE generation is intentionally gone.
 - per-tool request IDs exposed under `meta.requestId` and forwarded upstream as `X-Request-Id`
 - structured JSON runtime logs for tool start, success, and failure events
 - optional per-tool execution overrides for concurrency, timeout, cache TTL, and rate limit
+- tool list filtering and structured denial errors for disallowed tool calls when access control is enabled
+
+When access control is enabled:
+
+- identity values are exact, case-sensitive matches
+- `stdio` uses the reserved `stdio` identity
+- `streamable-http` resolves identity per request, and sessions are not bound to the
+  identity observed during initialization
 
 `meta.error.retryable` is advisory only. It tells callers whether an immediate retry is
 reasonable, but it does not guarantee success on retry and does not imply any backoff policy.

@@ -20,6 +20,10 @@ RUNTIME_ENV_MAP = {
     "cache_ttl_ms": "MCP_CACHE_TTL_MS",
     "cache_max_entries": "MCP_CACHE_MAX_ENTRIES",
     "rate_limit_per_minute": "MCP_RATE_LIMIT_PER_MINUTE",
+    "tool_access_mode": "MCP_TOOL_ACCESS_MODE",
+    "tool_access_default": "MCP_TOOL_ACCESS_DEFAULT",
+    "tool_identity_header": "MCP_TOOL_IDENTITY_HEADER",
+    "tool_allowlists": "MCP_TOOL_ALLOWLISTS",
 }
 
 run_runtime_override_options = [
@@ -62,6 +66,24 @@ run_runtime_override_options = [
         "--rate-limit-per-minute",
         type=int,
         help="Default per-tool rate limit for safe tools. Use 0 to disable.",
+    ),
+    click.option(
+        "--tool-access-mode",
+        type=click.Choice(["off", "allowlist"], case_sensitive=False),
+        help="Request-scoped tool access mode for generated runtimes.",
+    ),
+    click.option(
+        "--tool-access-default",
+        type=click.Choice(["allow", "deny"], case_sensitive=False),
+        help="Default tool-access behavior when no caller-specific allowlist matches.",
+    ),
+    click.option(
+        "--tool-identity-header",
+        help="Header name used to derive caller identity for streamable-http access control.",
+    ),
+    click.option(
+        "--tool-allowlists",
+        help="JSON object mapping caller identities to arrays of allowed tool names.",
     ),
 ]
 
