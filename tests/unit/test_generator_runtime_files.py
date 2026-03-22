@@ -56,6 +56,7 @@ def test_generator_generate_files_success(mocker: MagicMock) -> None:
         ("README.md.j2", output_files["README.md"]),
         (".env.example.j2", output_files[".env.example"]),
         ("src/index.ts.j2", output_files["src/index.ts"]),
+        ("src/runtime/audit.ts.j2", output_files["src/runtime/audit.ts"]),
         (
             "src/runtime/request_context.ts.j2",
             output_files["src/runtime/request_context.ts"],
@@ -77,6 +78,7 @@ def test_generator_generate_files_success(mocker: MagicMock) -> None:
         ),
         ("src/runtime/rate_limit.ts.j2", output_files["src/runtime/rate_limit.ts"]),
         ("src/runtime/request.ts.j2", output_files["src/runtime/request.ts"]),
+        ("src/runtime/redaction.ts.j2", output_files["src/runtime/redaction.ts"]),
         ("src/runtime/response.ts.j2", output_files["src/runtime/response.ts"]),
         (
             "src/runtime/serialization.ts.j2",
@@ -107,6 +109,7 @@ def _output_files() -> dict[str, MagicMock]:
         "src/index.ts": MagicMock(spec=Path, name="index_ts"),
         "src/server.ts": MagicMock(spec=Path, name="server_ts"),
         "src/custom/tools.ts": MagicMock(spec=Path, name="custom_tools"),
+        "src/runtime/audit.ts": MagicMock(spec=Path, name="runtime_audit"),
         "src/runtime/request_context.ts": MagicMock(
             spec=Path, name="runtime_request_context"
         ),
@@ -123,6 +126,7 @@ def _output_files() -> dict[str, MagicMock]:
         "src/runtime/observability.ts": MagicMock(spec=Path, name="observability"),
         "src/runtime/rate_limit.ts": MagicMock(spec=Path, name="runtime_rate_limit"),
         "src/runtime/request.ts": MagicMock(spec=Path, name="runtime_request"),
+        "src/runtime/redaction.ts": MagicMock(spec=Path, name="runtime_redaction"),
         "src/runtime/response.ts": MagicMock(spec=Path, name="runtime_response"),
         "src/runtime/serialization.ts": MagicMock(spec=Path, name="serialization"),
         "src/runtime/tool_access.ts": MagicMock(spec=Path, name="tool_access"),
