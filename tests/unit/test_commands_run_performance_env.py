@@ -104,6 +104,41 @@ def test_run_explicit_zero_performance_overrides_beat_env_source(
     )
 
 
+def test_run_writes_performance_preset_and_explicit_override(
+    runner: CliRunner, tmp_path: Path, mocker: MockerFixture
+) -> None:
+    output_dir = tmp_path / "generated"
+    subprocess_run = mocker.patch("openapi_to_mcp.commands.run_support.subprocess.run")
+    mocker.patch(
+        "openapi_to_mcp.commands.run_support.shutil.which", return_value="/usr/bin/tool"
+    )
+    _mock_generation_output(mocker, output_dir)
+
+    result = runner.invoke(
+        cli,
+        [
+            "run",
+            "--openapi-json",
+            str(tmp_path / "openapi.yaml"),
+            "--output-dir",
+            str(output_dir),
+            "--performance-preset",
+            "balanced",
+            "--cache-ttl-ms",
+            "0",
+        ],
+    )
+
+    assert result.exit_code == 0
+    env_contents = (output_dir / ".env").read_text(encoding="utf-8")
+    assert "MCP_PERFORMANCE_PRESET=balanced" in env_contents
+    assert "MCP_CACHE_TTL_MS=0" in env_contents
+    assert subprocess_run.call_args_list[0].kwargs["env"]["MCP_PERFORMANCE_PRESET"] == (
+        "balanced"
+    )
+    assert subprocess_run.call_args_list[0].kwargs["env"]["MCP_CACHE_TTL_MS"] == "0"
+
+
 def _mock_generation_output(mocker: MockerFixture, output_dir: Path) -> None:
     def fake_generate_project(**_: object) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)

@@ -38,6 +38,7 @@ def test_run_help_lists_runtime_options() -> None:
     assert "--config" in result.output
     assert "--runtime-validation" in result.output
     assert "--tool-grouping" in result.output
+    assert "--performance-preset" in result.output
     assert "--origin-allowlist" in result.output
     assert "--max-concurrency" in result.output
     assert "--cache-ttl-ms" in result.output
