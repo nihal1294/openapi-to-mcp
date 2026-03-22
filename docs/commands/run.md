@@ -46,6 +46,10 @@ openapi-to-mcp run [OPTIONS]
 | `--cache-ttl-ms` | No | None | Override `MCP_CACHE_TTL_MS` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
 | `--cache-max-entries` | No | None | Override `MCP_CACHE_MAX_ENTRIES` for bounded in-memory caching |
 | `--rate-limit-per-minute` | No | None | Override `MCP_RATE_LIMIT_PER_MINUTE` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
+| `--retry-max-retries` | No | None | Override `MCP_RETRY_MAX_RETRIES` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
+| `--retry-budget-per-minute` | No | None | Override `MCP_RETRY_BUDGET_PER_MINUTE` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
+| `--circuit-breaker-failure-threshold` | No | None | Override `MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
+| `--circuit-breaker-cooldown-ms` | No | None | Override `MCP_CIRCUIT_BREAKER_COOLDOWN_MS` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
 | `--tool-access-mode` | No | None | Override `MCP_TOOL_ACCESS_MODE` (`off` or `allowlist`) |
 | `--tool-access-default` | No | None | Override `MCP_TOOL_ACCESS_DEFAULT` (`allow` or `deny`) |
 | `--tool-identity-header` | No | None | Override `MCP_TOOL_IDENTITY_HEADER` for streamable-http caller identity |
@@ -149,6 +153,24 @@ Use `0` to disable either control. These controls are ignored for unsafe methods
 as `POST`, `PUT`, `PATCH`, and `DELETE`.
 Rate limiting uses a fixed one-minute window, so quota resets at window boundaries.
 
+### Enable safe-method retries and circuit breaking
+
+```bash
+openapi-to-mcp run \
+  --openapi-json ./openapi.yaml \
+  --target-api-base-url https://example.com/api \
+  --retry-max-retries 2 \
+  --retry-budget-per-minute 10 \
+  --circuit-breaker-failure-threshold 3 \
+  --circuit-breaker-cooldown-ms 30000
+```
+
+Retries and circuit-breaking are limited to safe methods in this first implementation.
+Retries are immediate, require both a positive retry count and a positive retry budget,
+and the budget counts retry attempts rather than original calls. The circuit breaker
+opens after the configured number of consecutive retryable failures and allows one
+half-open probe after each cooldown window.
+
 ### Restrict visible tools by caller identity
 
 ```bash
@@ -203,6 +225,9 @@ Accepted values:
 CLI runtime-control flags are written as the corresponding `MCP_*` env vars before startup.
 `MCP_CACHE_TTL_MS` and `MCP_RATE_LIMIT_PER_MINUTE` both default to `0` (disabled).
 `MCP_CACHE_MAX_ENTRIES` defaults to `1000`.
+`MCP_RETRY_MAX_RETRIES` and `MCP_RETRY_BUDGET_PER_MINUTE` default to `0` (disabled).
+`MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD` defaults to `0` (disabled).
+`MCP_CIRCUIT_BREAKER_COOLDOWN_MS` defaults to `30000`.
 `MCP_TOOL_ACCESS_MODE` defaults to `off`, and `MCP_TOOL_ACCESS_DEFAULT` defaults to `allow`.
 `MCP_AUDIT_MODE` defaults to `off`.
 
