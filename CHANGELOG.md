@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-03-22
+
+### Added
+
+- Added opt-in retry-budget and circuit-breaker controls for safe generated tools, including generated runtime config, per-tool policy overrides, and structured runtime error metadata.
+- Added reviewable performance presets for generated runtimes, with transparent expansions for concurrency, queueing, timeout, caching, rate limiting, retries, and circuit breakers.
+- Added generated-server end-to-end coverage for resilience controls, invalid preset startup failures, and preset precedence behavior.
+
+### Changed
+
+- Hardened resilience behavior so non-retryable upstream failures no longer reset accumulated circuit-breaker state.
+- Clarified runtime docs and generated project docs around preset precedence, blank preset-backed env placeholders, and conservative preset cache-cap behavior.
+- Hardened performance preset parsing so only declared preset names are accepted at startup.
+
 ## [0.8.0] - 2026-03-22
 
 ### Added
