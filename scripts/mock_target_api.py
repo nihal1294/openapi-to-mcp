@@ -70,6 +70,25 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
             {"ok": False, "error": f"Unhandled path: {parsed.path}"},
         )
 
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path == "/audit-body":
+            self._send_json(
+                HTTPStatus.OK,
+                {
+                    "echoed": self._request_json(),
+                    "ok": True,
+                    "query": self._query_params(parsed.query),
+                    "request_id": self.headers.get("X-Request-Id"),
+                },
+            )
+            return
+
+        self._send_json(
+            HTTPStatus.NOT_FOUND,
+            {"ok": False, "error": f"Unhandled path: {parsed.path}"},
+        )
+
     def log_message(self, log_format: str, *args: object) -> None:
         """Keep default logging concise but still available in CI logs."""
         print(log_format % args)  # noqa: T201
@@ -93,6 +112,13 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
             key: values[0] if len(values) == 1 else values
             for key, values in parse_qs(query_string, keep_blank_values=True).items()
         }
+
+    def _request_json(self) -> dict[str, object]:
+        content_length = int(self.headers.get("Content-Length", "0"))
+        if content_length <= 0:
+            return {}
+        payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+        return payload if isinstance(payload, dict) else {"value": payload}
 
     def _cookie_params(self) -> dict[str, str]:
         parsed = SimpleCookie(self.headers.get("Cookie", ""))
