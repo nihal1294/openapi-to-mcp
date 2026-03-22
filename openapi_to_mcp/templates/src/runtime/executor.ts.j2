@@ -2,6 +2,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import axios from 'axios';
 import * as http from 'http';
 import * as https from 'https';
+import { emitRequestAudit, emitResponseAudit } from './audit.js';
 import { buildCacheKey, resolveCacheTtlMs, ToolResponseCache } from './cache.js';
 import { MAX_CONCURRENCY, MAX_QUEUE_SIZE, PER_TOOL_MAX_CONCURRENCY, QUEUE_TIMEOUT_MS, TARGET_API_BASE_URL } from './config.js';
 import { buildToolErrorResult, mapApiErrorToToolError, ToolExecutionError } from './errors.js';
@@ -61,7 +62,9 @@ export class ToolExecutor {
       await perToolLimiter.acquire();
       acquiredPerTool = true;
       const requestContext = buildRequestContext(tool, args, requestId);
+      emitRequestAudit(toolName, tool, requestContext, requestId);
       const upstreamResponse = await executeHttpRequest(this.axiosInstance, tool, requestContext);
+      emitResponseAudit(toolName, tool, upstreamResponse, requestId, 'success');
       if (cacheKey) {
         this.responseCache.set(
           cacheKey,
@@ -78,6 +81,19 @@ export class ToolExecutor {
       logEvent('info', 'tool_execution_succeeded', { requestId, toolName, durationMs: Date.now() - startedAt });
       return result;
     } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        emitResponseAudit(
+          toolName,
+          tool,
+          {
+            responseData: error.response.data,
+            contentType: error.response.headers['content-type'],
+            status: error.response.status,
+          },
+          requestId,
+          'error'
+        );
+      }
       const toolError = error instanceof ToolExecutionError ? error : mapApiErrorToToolError(error);
       logEvent('error', 'tool_execution_failed', { requestId, toolName, durationMs: Date.now() - startedAt, errorCode: toolError.meta.code, errorSource: toolError.meta.source, retryable: toolError.meta.retryable, httpStatus: toolError.meta.httpStatus });
       return buildToolErrorResult(toolError, requestId);

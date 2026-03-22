@@ -62,6 +62,12 @@ def run_server(  # noqa: PLR0913
     tool_access_default: str | None,
     tool_identity_header: str | None,
     tool_allowlists: str | None,
+    audit_mode: str | None,
+    audit_redact_headers: str | None,
+    audit_redact_query_params: str | None,
+    audit_redact_cookie_names: str | None,
+    audit_redact_request_body_paths: str | None,
+    audit_redact_response_body_paths: str | None,
 ) -> None:
     """Generate, build, and run an MCP server directly from an OpenAPI spec."""
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
@@ -122,6 +128,12 @@ def run_server(  # noqa: PLR0913
                     "tool_access_default": tool_access_default,
                     "tool_identity_header": tool_identity_header,
                     "tool_allowlists": tool_allowlists,
+                    "audit_mode": audit_mode,
+                    "audit_redact_headers": audit_redact_headers,
+                    "audit_redact_query_params": audit_redact_query_params,
+                    "audit_redact_cookie_names": audit_redact_cookie_names,
+                    "audit_redact_request_body_paths": audit_redact_request_body_paths,
+                    "audit_redact_response_body_paths": audit_redact_response_body_paths,
                 }
             ),
         )

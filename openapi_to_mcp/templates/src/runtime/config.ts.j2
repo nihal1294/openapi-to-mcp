@@ -32,6 +32,20 @@ export const TOOL_IDENTITY_HEADER = normalizeHeaderName(
   process.env.MCP_TOOL_IDENTITY_HEADER
 );
 export const TOOL_ALLOWLISTS_JSON = process.env.MCP_TOOL_ALLOWLISTS?.trim() || '';
+export const AUDIT_MODE = parseChoiceEnv('MCP_AUDIT_MODE', 'off', ['off', 'logs']);
+export const AUDIT_REDACT_HEADERS = parseCsvEnv('MCP_AUDIT_REDACT_HEADERS');
+export const AUDIT_REDACT_QUERY_PARAMS = parseCsvEnv(
+  'MCP_AUDIT_REDACT_QUERY_PARAMS'
+);
+export const AUDIT_REDACT_COOKIE_NAMES = parseCsvEnv(
+  'MCP_AUDIT_REDACT_COOKIE_NAMES'
+);
+export const AUDIT_REDACT_REQUEST_BODY_PATHS = parseCsvEnv(
+  'MCP_AUDIT_REDACT_REQUEST_BODY_PATHS'
+);
+export const AUDIT_REDACT_RESPONSE_BODY_PATHS = parseCsvEnv(
+  'MCP_AUDIT_REDACT_RESPONSE_BODY_PATHS'
+);
 
 function parseBaseUrlEnv(): string {
   const raw = process.env.TARGET_API_BASE_URL?.trim() || '';
@@ -80,4 +94,15 @@ function parseChoiceEnv<T extends string>(
 function normalizeHeaderName(value: string | undefined): string | null {
   const normalized = value?.trim().toLowerCase();
   return normalized || null;
+}
+
+function parseCsvEnv(envName: string): string[] {
+  const raw = process.env[envName]?.trim() || '';
+  if (!raw) {
+    return [];
+  }
+  return raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
 }

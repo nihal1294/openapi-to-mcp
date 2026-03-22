@@ -7,6 +7,7 @@ import type { ToolRuntimeMetadata } from './generated.js';
 import { applyCookieParam, applyQueryParam, serializeHeaderValue, serializePathValue } from './serialization.js';
 
 export interface RequestContext {
+  cookies: Record<string, string>;
   headers: Record<string, string>;
   queryParams: Record<string, unknown>;
   requestData: unknown;
@@ -16,6 +17,7 @@ export interface RequestContext {
 export interface UpstreamResponse {
   contentType: unknown;
   responseData: unknown;
+  status: number;
 }
 
 export function isSafeMethod(method: string): boolean {
@@ -29,8 +31,14 @@ export function buildRequestContext(
 ): RequestContext {
   const requestContext = applyParameterValues(tool, args);
   requestContext.headers['X-Request-Id'] = requestId;
-  applyAuthContext(tool, requestContext.headers, requestContext.queryParams);
+  applyAuthContext(
+    tool,
+    requestContext.headers,
+    requestContext.queryParams,
+    requestContext.cookies
+  );
   applyDefaultAuthHeader(requestContext.headers);
+  applyCookieHeader(requestContext.headers, requestContext.cookies);
   requestContext.requestData = applyRequestBody(tool, args, requestContext.headers);
   return requestContext;
 }
@@ -59,6 +67,7 @@ export async function executeHttpRequest(
     return {
       responseData: response.data,
       contentType: response.headers['content-type'],
+      status: response.status,
     };
   } finally {
     clearTimeout(timeoutHandle);
@@ -72,7 +81,7 @@ function applyParameterValues(
   let targetPath = tool.path;
   const queryParams: Record<string, unknown> = {};
   const headers: Record<string, string> = { Accept: 'application/json' };
-  const cookieValues: Record<string, string> = {};
+  const cookies: Record<string, string> = {};
 
   for (const parameter of tool.parameters || []) {
     const paramValue = args[parameter.name];
@@ -95,19 +104,17 @@ function applyParameterValues(
       continue;
     }
     if (parameter.in === 'cookie') {
-      applyCookieParam(cookieValues, parameter, paramValue);
+      applyCookieParam(cookies, parameter, paramValue);
     }
   }
-  if (Object.keys(cookieValues).length > 0) {
-    headers.Cookie = Object.entries(cookieValues).map(([key, value]) => `${key}=${value}`).join('; ');
-  }
-  return { headers, queryParams, requestData: undefined, targetPath };
+  return { cookies, headers, queryParams, requestData: undefined, targetPath };
 }
 
 function applyAuthContext(
   tool: ToolRuntimeMetadata,
   headers: Record<string, string>,
-  queryParams: Record<string, unknown>
+  queryParams: Record<string, unknown>,
+  cookies: Record<string, string>
 ): void {
   const resolvedAuth = resolveAuthForTool(tool);
   if (!resolvedAuth.ok) {
@@ -120,12 +127,7 @@ function applyAuthContext(
   }
   Object.assign(headers, resolvedAuth.headers);
   Object.assign(queryParams, resolvedAuth.query);
-  if (Object.keys(resolvedAuth.cookies).length > 0) {
-    const cookieHeader = Object.entries(resolvedAuth.cookies)
-      .map(([key, value]) => `${key}=${value}`)
-      .join('; ');
-    headers.Cookie = headers.Cookie ? `${headers.Cookie}; ${cookieHeader}` : cookieHeader;
-  }
+  Object.assign(cookies, resolvedAuth.cookies);
 }
 
 function applyDefaultAuthHeader(headers: Record<string, string>): void {
@@ -139,6 +141,19 @@ function applyDefaultAuthHeader(headers: Record<string, string>): void {
   const headerName = TARGET_API_AUTH_HEADER.substring(0, separatorIndex).trim();
   const headerValue = TARGET_API_AUTH_HEADER.substring(separatorIndex + 1).trim();
   headers[headerName] = headerValue;
+}
+
+function applyCookieHeader(
+  headers: Record<string, string>,
+  cookies: Record<string, string>
+): void {
+  if (Object.keys(cookies).length === 0) {
+    return;
+  }
+  const cookieHeader = Object.entries(cookies)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('; ');
+  headers.Cookie = headers.Cookie ? `${headers.Cookie}; ${cookieHeader}` : cookieHeader;
 }
 
 function applyRequestBody(
