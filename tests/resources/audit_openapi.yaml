@@ -30,6 +30,10 @@ paths:
                   properties:
                     email:
                       type: string
+                tokens:
+                  type: array
+                  items:
+                    type: string
                 note:
                   type: string
       responses:

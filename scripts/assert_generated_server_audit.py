@@ -1,4 +1,4 @@
-"""Assert generated audit-log redaction behavior for one streamable-http tool call."""
+"""Assert generated audit-log behavior for one streamable-http tool call."""
 
 from __future__ import annotations
 
@@ -112,9 +112,21 @@ def _load_matching_events(
     raise AssertionError(log_file.read_text(encoding="utf-8"))
 
 
+def _lookup_name(payload: dict[str, Any], key: str) -> object:
+    if key not in payload:
+        raise AssertionError(json.dumps(payload, indent=2))
+    return payload[key]
+
+
 def _lookup_path(payload: dict[str, Any], path: str) -> object:
     current: object = payload
     for segment in path.split("."):
+        if isinstance(current, list):
+            try:
+                current = current[int(segment)]
+            except ValueError, IndexError:
+                raise AssertionError(json.dumps(payload, indent=2)) from None
+            continue
         if not isinstance(current, dict) or segment not in current:
             raise AssertionError(json.dumps(payload, indent=2))
         current = current[segment]
@@ -126,12 +138,42 @@ def _assert_redacted(value: object, payload: dict[str, Any]) -> None:
         raise AssertionError(json.dumps(payload, indent=2))
 
 
+def _assert_named_redactions(
+    payload: dict[str, Any], field: str, names: list[str]
+) -> None:
+    if not names:
+        return
+    container = payload.get(field)
+    if not isinstance(container, dict):
+        raise TypeError(json.dumps(payload, indent=2))
+    for name in names:
+        _assert_redacted(_lookup_name(container, name), payload)
+
+
+def _assert_path_redactions(
+    payload: dict[str, Any], field: str, paths: list[str]
+) -> None:
+    if not paths:
+        return
+    container = payload.get(field)
+    if not isinstance(container, dict):
+        raise TypeError(json.dumps(payload, indent=2))
+    for path in paths:
+        _assert_redacted(_lookup_path(container, path), payload)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--endpoint-url", required=True)
     parser.add_argument("--tool-name", required=True)
     parser.add_argument("--tool-arguments", required=True)
     parser.add_argument("--log-file", required=True)
+    parser.add_argument("--expected-outcome", default="success")
+    parser.add_argument("--redacted-header", action="append", default=[])
+    parser.add_argument("--redacted-query", action="append", default=[])
+    parser.add_argument("--redacted-cookie", action="append", default=[])
+    parser.add_argument("--redacted-request-path", action="append", default=[])
+    parser.add_argument("--redacted-response-path", action="append", default=[])
     args = parser.parse_args()
 
     session = StreamableHttpSession(args.endpoint_url)
@@ -142,25 +184,16 @@ def main() -> None:
         Path(args.log_file), request_id
     )
 
-    _assert_redacted(request_event["headers"]["Authorization"], request_event)
-    _assert_redacted(request_event["query"]["status"], request_event)
-    _assert_redacted(
-        _lookup_path(request_event["requestBody"], "credentials.token"),
-        request_event,
-    )
-    _assert_redacted(
-        _lookup_path(request_event["requestBody"], "profile.email"),
-        request_event,
-    )
-    if response_event["outcome"] != "success":
+    _assert_named_redactions(request_event, "headers", args.redacted_header)
+    _assert_named_redactions(request_event, "query", args.redacted_query)
+    _assert_named_redactions(request_event, "cookies", args.redacted_cookie)
+    _assert_path_redactions(request_event, "requestBody", args.redacted_request_path)
+    if response_event["outcome"] != args.expected_outcome:
         raise AssertionError(json.dumps(response_event, indent=2))
-    _assert_redacted(
-        _lookup_path(response_event["responseBody"], "echoed.credentials.token"),
+    _assert_path_redactions(
         response_event,
-    )
-    _assert_redacted(
-        _lookup_path(response_event["responseBody"], "echoed.profile.email"),
-        response_event,
+        "responseBody",
+        args.redacted_response_path,
     )
 
 

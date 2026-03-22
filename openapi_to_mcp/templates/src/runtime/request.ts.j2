@@ -11,13 +11,17 @@ export interface RequestContext {
   headers: Record<string, string>;
   queryParams: Record<string, unknown>;
   requestData: unknown;
+  sensitiveCookieNames: string[];
   targetPath: string;
 }
 
 export interface UpstreamResponse {
+  cacheHit?: boolean;
   contentType: unknown;
+  errorCode?: string;
+  errorSource?: string;
   responseData: unknown;
-  status: number;
+  status: number | null;
 }
 
 export function isSafeMethod(method: string): boolean {
@@ -31,7 +35,7 @@ export function buildRequestContext(
 ): RequestContext {
   const requestContext = applyParameterValues(tool, args);
   requestContext.headers['X-Request-Id'] = requestId;
-  applyAuthContext(
+  requestContext.sensitiveCookieNames = applyAuthContext(
     tool,
     requestContext.headers,
     requestContext.queryParams,
@@ -107,7 +111,14 @@ function applyParameterValues(
       applyCookieParam(cookies, parameter, paramValue);
     }
   }
-  return { cookies, headers, queryParams, requestData: undefined, targetPath };
+  return {
+    cookies,
+    headers,
+    queryParams,
+    requestData: undefined,
+    sensitiveCookieNames: [],
+    targetPath,
+  };
 }
 
 function applyAuthContext(
@@ -115,7 +126,7 @@ function applyAuthContext(
   headers: Record<string, string>,
   queryParams: Record<string, unknown>,
   cookies: Record<string, string>
-): void {
+): string[] {
   const resolvedAuth = resolveAuthForTool(tool);
   if (!resolvedAuth.ok) {
     throw createToolExecutionError(
@@ -128,6 +139,7 @@ function applyAuthContext(
   Object.assign(headers, resolvedAuth.headers);
   Object.assign(queryParams, resolvedAuth.query);
   Object.assign(cookies, resolvedAuth.cookies);
+  return Object.keys(resolvedAuth.cookies);
 }
 
 function applyDefaultAuthHeader(headers: Record<string, string>): void {

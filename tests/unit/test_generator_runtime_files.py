@@ -66,6 +66,10 @@ def test_generator_generate_files_success(mocker: MagicMock) -> None:
         ("src/runtime/config.ts.j2", output_files["src/runtime/config.ts"]),
         ("src/runtime/errors.ts.j2", output_files["src/runtime/errors.ts"]),
         ("src/runtime/executor.ts.j2", output_files["src/runtime/executor.ts"]),
+        (
+            "src/runtime/executor_support.ts.j2",
+            output_files["src/runtime/executor_support.ts"],
+        ),
         ("src/runtime/generated.ts.j2", output_files["src/runtime/generated.ts"]),
         (
             "src/runtime/http_transport.ts.j2",
@@ -118,6 +122,9 @@ def _output_files() -> dict[str, MagicMock]:
         "src/runtime/config.ts": MagicMock(spec=Path, name="runtime_config"),
         "src/runtime/errors.ts": MagicMock(spec=Path, name="runtime_errors"),
         "src/runtime/executor.ts": MagicMock(spec=Path, name="runtime_executor"),
+        "src/runtime/executor_support.ts": MagicMock(
+            spec=Path, name="runtime_executor_support"
+        ),
         "src/runtime/generated.ts": MagicMock(spec=Path, name="runtime_generated"),
         "src/runtime/http_transport.ts": MagicMock(
             spec=Path, name="runtime_http_transport"

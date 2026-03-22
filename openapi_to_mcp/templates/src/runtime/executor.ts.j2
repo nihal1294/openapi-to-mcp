@@ -2,17 +2,26 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import axios from 'axios';
 import * as http from 'http';
 import * as https from 'https';
-import { emitRequestAudit, emitResponseAudit } from './audit.js';
+import { emitRequestAudit } from './audit.js';
 import { buildCacheKey, resolveCacheTtlMs, ToolResponseCache } from './cache.js';
-import { MAX_CONCURRENCY, MAX_QUEUE_SIZE, PER_TOOL_MAX_CONCURRENCY, QUEUE_TIMEOUT_MS, TARGET_API_BASE_URL } from './config.js';
-import { buildToolErrorResult, mapApiErrorToToolError, ToolExecutionError } from './errors.js';
+import {
+  MAX_CONCURRENCY,
+  MAX_QUEUE_SIZE,
+  PER_TOOL_MAX_CONCURRENCY,
+  QUEUE_TIMEOUT_MS,
+  TARGET_API_BASE_URL,
+} from './config.js';
 import type { ToolRuntimeMetadata } from './generated.js';
 import { ConcurrencyLimiter } from './limiter.js';
-import { createRequestId, logEvent } from './observability.js';
+import { createRequestId } from './observability.js';
 import { resolveRateLimitPerMinute, ToolRateLimiter } from './rate_limit.js';
-import { buildRequestContext, executeHttpRequest } from './request.js';
-import { buildToolSuccessResult } from './response.js';
-import { validateToolArguments } from './validation.js';
+import {
+  executeUpstream,
+  handleExecutionError,
+  prepareRequestContext,
+  tryCachedResult,
+  type ExecutionContext,
+} from './executor_support.js';
 
 export class ToolExecutor {
   private readonly axiosInstance = axios.create({
@@ -20,90 +29,95 @@ export class ToolExecutor {
     httpAgent: new http.Agent({ keepAlive: true }),
     httpsAgent: new https.Agent({ keepAlive: true }),
   });
-  private readonly globalLimiter = new ConcurrencyLimiter(MAX_CONCURRENCY, MAX_QUEUE_SIZE, QUEUE_TIMEOUT_MS);
+  private readonly globalLimiter = new ConcurrencyLimiter(
+    MAX_CONCURRENCY,
+    MAX_QUEUE_SIZE,
+    QUEUE_TIMEOUT_MS
+  );
   private readonly perToolLimiters = new Map<string, ConcurrencyLimiter>();
   private readonly responseCache = new ToolResponseCache();
   private readonly rateLimiter = new ToolRateLimiter();
-  private getPerToolLimiter(toolName: string, tool: ToolRuntimeMetadata): ConcurrencyLimiter {
-    const existing = this.perToolLimiters.get(toolName);
-    if (existing) {
-      return existing;
-    }
-    const maxConcurrency = tool.execution?.maxConcurrency ?? PER_TOOL_MAX_CONCURRENCY;
-    const created = new ConcurrencyLimiter(maxConcurrency, MAX_QUEUE_SIZE, QUEUE_TIMEOUT_MS);
-    this.perToolLimiters.set(toolName, created);
-    return created;
-  }
+
   public async execute(
     toolName: string,
     tool: ToolRuntimeMetadata,
     args: Record<string, unknown>
   ): Promise<CallToolResult> {
-    const requestId = createRequestId();
-    const startedAt = Date.now();
-    const perToolLimiter = this.getPerToolLimiter(toolName, tool);
+    const context: ExecutionContext = {
+      requestId: createRequestId(),
+      startedAt: Date.now(),
+      toolName,
+      tool,
+    };
     const cacheTtlMs = resolveCacheTtlMs(tool);
     const cacheKey = cacheTtlMs > 0 ? buildCacheKey(toolName, args) : null;
     let acquiredGlobal = false;
     let acquiredPerTool = false;
+    let requestAudited = false;
+
     try {
-      logEvent('info', 'tool_execution_started', { requestId, toolName });
-      validateToolArguments(toolName, args);
+      const requestContext = prepareRequestContext(context, args);
+      emitRequestAudit(toolName, tool, requestContext, context.requestId);
+      requestAudited = true;
       this.rateLimiter.assertAllowed(toolName, resolveRateLimitPerMinute(tool));
-      if (cacheKey) {
-        const cached = this.responseCache.get(cacheKey);
-        if (cached) {
-          logEvent('info', 'tool_execution_cache_hit', { requestId, toolName, durationMs: Date.now() - startedAt });
-          return buildToolSuccessResult(cached.responseData, cached.contentType, requestId);
-        }
+      const cachedResult = tryCachedResult(
+        this.responseCache,
+        context,
+        cacheKey
+      );
+      if (cachedResult) {
+        return cachedResult;
       }
+      const perToolLimiter = this.getPerToolLimiter(toolName, tool);
       await this.globalLimiter.acquire();
       acquiredGlobal = true;
       await perToolLimiter.acquire();
       acquiredPerTool = true;
-      const requestContext = buildRequestContext(tool, args, requestId);
-      emitRequestAudit(toolName, tool, requestContext, requestId);
-      const upstreamResponse = await executeHttpRequest(this.axiosInstance, tool, requestContext);
-      emitResponseAudit(toolName, tool, upstreamResponse, requestId, 'success');
-      if (cacheKey) {
-        this.responseCache.set(
-          cacheKey,
-          upstreamResponse.responseData,
-          upstreamResponse.contentType,
-          cacheTtlMs
-        );
-      }
-      const result = buildToolSuccessResult(
-        upstreamResponse.responseData,
-        upstreamResponse.contentType,
-        requestId
+      return await executeUpstream(
+        this.axiosInstance,
+        this.responseCache,
+        context,
+        requestContext,
+        cacheKey,
+        cacheTtlMs
       );
-      logEvent('info', 'tool_execution_succeeded', { requestId, toolName, durationMs: Date.now() - startedAt });
-      return result;
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        emitResponseAudit(
-          toolName,
-          tool,
-          {
-            responseData: error.response.data,
-            contentType: error.response.headers['content-type'],
-            status: error.response.status,
-          },
-          requestId,
-          'error'
-        );
-      }
-      const toolError = error instanceof ToolExecutionError ? error : mapApiErrorToToolError(error);
-      logEvent('error', 'tool_execution_failed', { requestId, toolName, durationMs: Date.now() - startedAt, errorCode: toolError.meta.code, errorSource: toolError.meta.source, retryable: toolError.meta.retryable, httpStatus: toolError.meta.httpStatus });
-      return buildToolErrorResult(toolError, requestId);
+      return handleExecutionError(context, error, requestAudited);
     } finally {
-      if (acquiredPerTool) {
-        perToolLimiter.release();
-      }
-      if (acquiredGlobal) {
-        this.globalLimiter.release();
-      }
+      this.releaseLimiters(acquiredGlobal, acquiredPerTool, toolName, tool);
+    }
+  }
+
+  private getPerToolLimiter(
+    toolName: string,
+    tool: ToolRuntimeMetadata
+  ): ConcurrencyLimiter {
+    const existing = this.perToolLimiters.get(toolName);
+    if (existing) {
+      return existing;
+    }
+    const maxConcurrency =
+      tool.execution?.maxConcurrency ?? PER_TOOL_MAX_CONCURRENCY;
+    const created = new ConcurrencyLimiter(
+      maxConcurrency,
+      MAX_QUEUE_SIZE,
+      QUEUE_TIMEOUT_MS
+    );
+    this.perToolLimiters.set(toolName, created);
+    return created;
+  }
+
+  private releaseLimiters(
+    acquiredGlobal: boolean,
+    acquiredPerTool: boolean,
+    toolName: string,
+    tool: ToolRuntimeMetadata
+  ): void {
+    if (acquiredPerTool) {
+      this.getPerToolLimiter(toolName, tool).release();
+    }
+    if (acquiredGlobal) {
+      this.globalLimiter.release();
     }
   }
 }

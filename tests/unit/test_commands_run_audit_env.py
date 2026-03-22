@@ -40,8 +40,14 @@ def test_run_applies_audit_overrides(
             "logs",
             "--audit-redact-headers",
             "Authorization,X-Trace-Id",
+            "--audit-redact-query-params",
+            "status,token",
+            "--audit-redact-cookie-names",
+            "session_token",
             "--audit-redact-request-body-paths",
             "credentials.token",
+            "--audit-redact-response-body-paths",
+            "echoed.credentials.token",
         ],
     )
 
@@ -49,8 +55,27 @@ def test_run_applies_audit_overrides(
     env_contents = (output_dir / ".env").read_text(encoding="utf-8")
     assert "MCP_AUDIT_MODE=logs" in env_contents
     assert "MCP_AUDIT_REDACT_HEADERS=Authorization,X-Trace-Id" in env_contents
+    assert "MCP_AUDIT_REDACT_QUERY_PARAMS=status,token" in env_contents
+    assert "MCP_AUDIT_REDACT_COOKIE_NAMES=session_token" in env_contents
     assert "MCP_AUDIT_REDACT_REQUEST_BODY_PATHS=credentials.token" in env_contents
+    assert (
+        "MCP_AUDIT_REDACT_RESPONSE_BODY_PATHS=echoed.credentials.token" in env_contents
+    )
     assert subprocess_run.call_args_list[0].kwargs["env"]["MCP_AUDIT_MODE"] == "logs"
+    assert (
+        subprocess_run.call_args_list[0].kwargs["env"]["MCP_AUDIT_REDACT_QUERY_PARAMS"]
+        == "status,token"
+    )
+    assert (
+        subprocess_run.call_args_list[0].kwargs["env"]["MCP_AUDIT_REDACT_COOKIE_NAMES"]
+        == "session_token"
+    )
+    assert (
+        subprocess_run.call_args_list[0].kwargs["env"][
+            "MCP_AUDIT_REDACT_RESPONSE_BODY_PATHS"
+        ]
+        == "echoed.credentials.token"
+    )
 
 
 def test_run_audit_overrides_beat_env_source(

@@ -346,10 +346,27 @@ run_audit_assertion() {
   local output_dir="$1"
   local tool_name="$2"
   local tool_arguments="$3"
+  shift 3
 
   (
     cd "$REPO_ROOT"
     run_uv run python scripts/assert_generated_server_audit.py \
+      --endpoint-url "http://${HTTP_HOST}:${CURRENT_HTTP_PORT}${MCP_ENDPOINT}" \
+      --tool-name "$tool_name" \
+      --tool-arguments "$tool_arguments" \
+      --log-file "$(http_server_log_file "$output_dir")" \
+      "$@"
+  )
+}
+
+run_cached_audit_assertion() {
+  local output_dir="$1"
+  local tool_name="${2:-testConversionTool}"
+  local tool_arguments="${3:-{\"status\":\"cached\"}}"
+
+  (
+    cd "$REPO_ROOT"
+    run_uv run python scripts/assert_generated_server_cached_audit.py \
       --endpoint-url "http://${HTTP_HOST}:${CURRENT_HTTP_PORT}${MCP_ENDPOINT}" \
       --tool-name "$tool_name" \
       --tool-arguments "$tool_arguments" \
@@ -490,11 +507,14 @@ main() {
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_TTL_MS" "60000"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_MAX_ENTRIES" "1000"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RATE_LIMIT_PER_MINUTE" "0"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_AUDIT_MODE" "logs"
   start_streamable_http_server "$HTTP_OUTPUT_DIR"
   run_performance_suite_assertions "cached"
+  run_cached_audit_assertion "$HTTP_OUTPUT_DIR"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_TTL_MS" "60000"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_MAX_ENTRIES" "1000"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RATE_LIMIT_PER_MINUTE" "1"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_AUDIT_MODE" "off"
   start_streamable_http_server "$HTTP_OUTPUT_DIR"
   run_performance_suite_assertions "cached-rate-limited"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_TTL_MS" "0"
@@ -514,13 +534,24 @@ main() {
   replace_or_append_env_var "${AUDIT_HTTP_OUTPUT_DIR}/.env" \
     "MCP_AUDIT_REDACT_QUERY_PARAMS" "status"
   replace_or_append_env_var "${AUDIT_HTTP_OUTPUT_DIR}/.env" \
-    "MCP_AUDIT_REDACT_REQUEST_BODY_PATHS" "credentials.token,profile.email"
+    "MCP_AUDIT_REDACT_REQUEST_BODY_PATHS" "credentials.token,profile.email,tokens.*"
   replace_or_append_env_var "${AUDIT_HTTP_OUTPUT_DIR}/.env" \
-    "MCP_AUDIT_REDACT_RESPONSE_BODY_PATHS" "echoed.credentials.token,echoed.profile.email"
+    "MCP_AUDIT_REDACT_RESPONSE_BODY_PATHS" \
+    "echoed.credentials.token,echoed.profile.email,echoed.tokens.*"
   start_streamable_http_server "$AUDIT_HTTP_OUTPUT_DIR"
   run_audit_assertion \
     "$AUDIT_HTTP_OUTPUT_DIR" "postAuditBody" \
-    '{"status":"queued","requestBody":{"credentials":{"token":"secret-token"},"profile":{"email":"user@example.com"},"note":"keep"}}'
+    '{"status":"queued","requestBody":{"credentials":{"token":"secret-token"},"profile":{"email":"user@example.com"},"tokens":["alpha","beta"],"note":"keep"}}' \
+    --redacted-header Authorization \
+    --redacted-query status \
+    --redacted-request-path credentials.token \
+    --redacted-request-path profile.email \
+    --redacted-request-path tokens.0 \
+    --redacted-request-path tokens.1 \
+    --redacted-response-path echoed.credentials.token \
+    --redacted-response-path echoed.profile.email \
+    --redacted-response-path echoed.tokens.0 \
+    --redacted-response-path echoed.tokens.1
 
   echo "Generating and validating stdio server without runtime validation"
   generate_server \
@@ -554,8 +585,13 @@ main() {
     "generated-auth-http-e2e"
   build_generated_server "$AUTH_HTTP_OUTPUT_DIR"
   prepare_auth_env_file "$AUTH_HTTP_OUTPUT_DIR"
+  replace_or_append_env_var "${AUTH_HTTP_OUTPUT_DIR}/.env" "MCP_AUDIT_MODE" "logs"
   start_streamable_http_server "$AUTH_HTTP_OUTPUT_DIR"
   run_suite_assertions "auth" "streamable-http" "$AUTH_HTTP_OUTPUT_DIR"
+  run_audit_assertion \
+    "$AUTH_HTTP_OUTPUT_DIR" "getCookieAuth" '{}' \
+    --redacted-header Cookie \
+    --redacted-cookie session_token
 
   echo "Generated-server E2E passed"
 }

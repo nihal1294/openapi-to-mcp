@@ -18,6 +18,7 @@ RUNTIME_TEMPLATE_NAMES = (
     "config",
     "errors",
     "executor",
+    "executor_support",
     "generated",
     "http_transport",
     "limiter",

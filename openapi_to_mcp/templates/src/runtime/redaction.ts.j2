@@ -45,6 +45,7 @@ export function redactBodyPaths(value: unknown, paths: string[]): unknown {
 }
 
 function parsePath(path: string): string[] {
+  // Ignore empty segments so minor typos like `a..b` degrade predictably.
   return path
     .split('.')
     .map((segment) => segment.trim())
@@ -71,6 +72,12 @@ function redactArrayPath(target: unknown[], segments: string[]): void {
     return;
   }
   if (head === '*') {
+    if (rest.length === 0) {
+      target.forEach((_, index) => {
+        target[index] = REDACTED_VALUE;
+      });
+      return;
+    }
     target.forEach((item) => redactAtPath(item, rest));
     return;
   }

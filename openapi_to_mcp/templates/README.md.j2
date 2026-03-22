@@ -50,6 +50,10 @@ This MCP server was automatically generated from an OpenAPI specification by the
         *   `MCP_AUDIT_REDACT_REQUEST_BODY_PATHS`, `MCP_AUDIT_REDACT_RESPONSE_BODY_PATHS`
         *   `MCP_AUDIT_MODE=logs` emits `tool_audit_request` and `tool_audit_response` events on stderr.
         *   Header, query, and cookie names are matched case-insensitively.
+        *   Auth-derived cookie values are redacted by default.
+        *   Body-path redaction only applies to JSON object or array payloads.
+        *   Cached successes still emit paired audit events with `cacheHit: true`.
+        *   Network and runtime failures emit `tool_audit_response` with `status: null` when no upstream HTTP response exists.
         *   Body-path redaction uses dot notation and supports `*` array wildcards.
     *   **Runtime Validation:**
         *   Generated tool input validation is set to `{{ runtime_validation }}`.

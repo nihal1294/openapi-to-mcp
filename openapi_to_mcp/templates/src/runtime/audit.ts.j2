@@ -14,6 +14,20 @@ import type { RequestContext, UpstreamResponse } from './request.js';
 
 type AuditOutcome = 'success' | 'error';
 
+function normalizeConfiguredNames(values: string[]): Set<string> {
+  return new Set(values.map((value) => value.toLowerCase()));
+}
+
+function buildRedactionNames(
+  configuredNames: Set<string>,
+  extraNames: string[]
+): Set<string> {
+  return new Set([
+    ...configuredNames,
+    ...extraNames.map((value) => value.toLowerCase()),
+  ]);
+}
+
 const HEADER_REDACTIONS = normalizeConfiguredNames(AUDIT_REDACT_HEADERS);
 const QUERY_REDACTIONS = normalizeConfiguredNames(AUDIT_REDACT_QUERY_PARAMS);
 const COOKIE_REDACTIONS = normalizeConfiguredNames(AUDIT_REDACT_COOKIE_NAMES);
@@ -38,7 +52,13 @@ export function emitRequestAudit(
     targetPath: requestContext.targetPath,
     headers: redactHeaders(requestContext.headers, HEADER_REDACTIONS),
     query: redactNamedValues(requestContext.queryParams, QUERY_REDACTIONS),
-    cookies: redactNamedValues(requestContext.cookies, COOKIE_REDACTIONS),
+    cookies: redactNamedValues(
+      requestContext.cookies,
+      buildRedactionNames(
+        COOKIE_REDACTIONS,
+        requestContext.sensitiveCookieNames
+      )
+    ),
     requestBody: redactBodyPaths(
       requestContext.requestData,
       AUDIT_REDACT_REQUEST_BODY_PATHS
@@ -65,15 +85,14 @@ export function emitResponseAudit(
     outcome,
     method: tool.method,
     path: tool.path,
+    cacheHit: response.cacheHit === true,
     status: response.status,
     contentType: response.contentType,
+    errorCode: response.errorCode,
+    errorSource: response.errorSource,
     responseBody: redactBodyPaths(
       response.responseData,
       AUDIT_REDACT_RESPONSE_BODY_PATHS
     ),
   });
-}
-
-function normalizeConfiguredNames(values: string[]): Set<string> {
-  return new Set(values.map((value) => value.toLowerCase()));
 }

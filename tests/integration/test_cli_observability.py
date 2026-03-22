@@ -38,6 +38,9 @@ def test_generate_emits_observability_runtime_wiring(
     executor_source = (output_dir / "src" / "runtime" / "executor.ts").read_text(
         encoding="utf-8"
     )
+    executor_support_source = (
+        output_dir / "src" / "runtime" / "executor_support.ts"
+    ).read_text(encoding="utf-8")
     request_source = (output_dir / "src" / "runtime" / "request.ts").read_text(
         encoding="utf-8"
     )
@@ -53,11 +56,12 @@ def test_generate_emits_observability_runtime_wiring(
     assert "stdout stays reserved for MCP messages" in observability_source
     assert "unsupported http scheme:" in auth_source
     assert "X-Request-Id" in request_source
-    assert "tool_execution_started" in executor_source
-    assert "tool_execution_cache_hit" in executor_source
-    assert "tool_execution_succeeded" in executor_source
-    assert "tool_execution_failed" in executor_source
-    assert "instanceof ToolExecutionError" in executor_source
+    assert "prepareRequestContext" in executor_source
+    assert "tool_execution_started" in executor_support_source
+    assert "tool_execution_cache_hit" in executor_support_source
+    assert "tool_execution_succeeded" in executor_support_source
+    assert "tool_execution_failed" in executor_support_source
+    assert "instanceof ToolExecutionError" in executor_support_source
     assert "timeout: TOOL_TIMEOUT_MS" not in executor_source
     assert "meta: { requestId }" in response_source
     assert "meta: { requestId, error: error.meta }" in errors_source

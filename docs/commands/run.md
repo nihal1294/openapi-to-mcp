@@ -185,8 +185,11 @@ openapi-to-mcp run \
 ```
 
 Audit events are emitted on stderr as structured JSON. Header, query, and cookie names
-are matched case-insensitively. Body-path redaction uses dot notation with optional `*`
-array wildcards.
+are matched case-insensitively, and auth-derived cookie values are redacted by default.
+Body-path redaction only applies to JSON object or array payloads and uses dot notation
+with optional `*` array wildcards. Cached successes still emit paired audit events with
+`cacheHit: true`. Network and runtime failures emit `tool_audit_response` with
+`status: null` when there is no upstream HTTP response.
 
 ## `--env-source` formats
 

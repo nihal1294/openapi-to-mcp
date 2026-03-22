@@ -60,6 +60,8 @@ SSE generation is intentionally gone.
 - per-tool request IDs exposed under `meta.requestId` and forwarded upstream as `X-Request-Id`
 - structured JSON runtime logs for tool start, success, and failure events
 - optional `tool_audit_request` and `tool_audit_response` events with redacted payloads
+- auth-derived cookie values redacted by default in audit events
+- `tool_audit_response` emitted for cached successes and non-HTTP failures
 - optional per-tool execution overrides for concurrency, timeout, cache TTL, and rate limit
 - tool list filtering and structured denial errors for disallowed tool calls when access control is enabled
 
