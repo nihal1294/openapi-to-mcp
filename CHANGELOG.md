@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-03-22
+
+### Added
+
+- Added caller-aware tool allowlists for generated runtimes, including filtered `tools/list` responses and structured denial errors for disallowed `tools/call` requests.
+- Added opt-in audit and redaction hooks for generated runtimes with deterministic controls for headers, query params, cookie names, and request/response body paths.
+- Added generated-server end-to-end coverage for allowlist enforcement and audit redaction behavior.
+
+### Changed
+
+- Hardened audit behavior so auth-derived cookie values are redacted by default, cached successes emit paired audit events, and non-HTTP failures still produce terminal response audit events.
+- Clarified generated runtime and CLI docs for access-control identity handling and audit redaction behavior.
+
 ## [0.7.0] - 2026-03-22
 
 ### Added
