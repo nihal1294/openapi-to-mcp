@@ -1,0 +1,60 @@
+export type PerformancePresetName =
+  | 'off'
+{% for preset in performance_presets %}
+  | '{{ preset.name }}'
+{% endfor %};
+
+export interface PerformancePresetValues {
+  maxConcurrency: number;
+  perToolMaxConcurrency: number;
+  maxQueueSize: number;
+  queueTimeoutMs: number;
+  toolTimeoutMs: number;
+  cacheTtlMs: number;
+  cacheMaxEntries: number;
+  rateLimitPerMinute: number;
+  retryMaxRetries: number;
+  retryBudgetPerMinute: number;
+  circuitBreakerFailureThreshold: number;
+  circuitBreakerCooldownMs: number;
+}
+
+export type PerformancePresetKey = keyof PerformancePresetValues;
+
+export const PERFORMANCE_PRESETS: Record<
+  Exclude<PerformancePresetName, 'off'>,
+  PerformancePresetValues
+> = {
+{% for preset in performance_presets %}
+  '{{ preset.name }}': {
+    maxConcurrency: {{ preset.max_concurrency }},
+    perToolMaxConcurrency: {{ preset.per_tool_max_concurrency }},
+    maxQueueSize: {{ preset.max_queue_size }},
+    queueTimeoutMs: {{ preset.queue_timeout_ms }},
+    toolTimeoutMs: {{ preset.tool_timeout_ms }},
+    cacheTtlMs: {{ preset.cache_ttl_ms }},
+    cacheMaxEntries: {{ preset.cache_max_entries }},
+    rateLimitPerMinute: {{ preset.rate_limit_per_minute }},
+    retryMaxRetries: {{ preset.retry_max_retries }},
+    retryBudgetPerMinute: {{ preset.retry_budget_per_minute }},
+    circuitBreakerFailureThreshold: {{ preset.circuit_breaker_failure_threshold }},
+    circuitBreakerCooldownMs: {{ preset.circuit_breaker_cooldown_ms }},
+  },
+{% endfor %}
+};
+
+export function parsePerformancePreset(value: string | undefined): PerformancePresetName {
+  const raw = value?.trim();
+  if (!raw) {
+    return 'off';
+  }
+  if (
+    raw === 'off' ||
+    Object.prototype.hasOwnProperty.call(PERFORMANCE_PRESETS, raw)
+  ) {
+    return raw as PerformancePresetName;
+  }
+  throw new Error(
+    `MCP_PERFORMANCE_PRESET must be one of: off, ${Object.keys(PERFORMANCE_PRESETS).join(', ')}. Received '${raw}'.`
+  );
+}

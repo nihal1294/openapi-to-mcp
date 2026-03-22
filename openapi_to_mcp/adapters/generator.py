@@ -24,6 +24,7 @@ RUNTIME_TEMPLATE_NAMES = (
     "http_transport",
     "limiter",
     "observability",
+    "performance_preset",
     "rate_limit",
     "resilience",
     "retry",

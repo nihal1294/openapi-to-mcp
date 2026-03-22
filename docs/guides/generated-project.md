@@ -55,6 +55,7 @@ SSE generation is intentionally gone.
 - optional per-tool fixed-window rate limiting for safe methods
 - optional retry budgets and bounded retries for safe methods
 - optional circuit breakers with open, half-open, and closed state for safe methods
+- optional reviewable performance presets for runtime defaults
 - circuit-breaker state is process-local and resets on process restart
 - bounded cache size via `MCP_CACHE_MAX_ENTRIES`
 - object-shaped response schemas emitted as MCP `outputSchema`
@@ -81,6 +82,34 @@ reasonable, but it does not guarantee success on retry and does not imply any ba
 When retry budgets or circuit breakers reject a call, `meta.error` also includes
 structured runtime metadata such as `retryAfterMs` and `attempts` when available.
 Circuit-breaker cooldown only applies when the configured failure threshold is positive.
+
+`MCP_PERFORMANCE_PRESET` currently expands to these global defaults:
+
+- `conservative`: `16 / 4 / 64 / 2000 / 20000 / 0 / 500 / 30 / 0 / 0 / 0 / 30000`
+- `balanced`: `32 / 8 / 256 / 5000 / 30000 / 30000 / 1000 / 60 / 1 / 30 / 3 / 15000`
+- `aggressive`: `64 / 16 / 512 / 8000 / 45000 / 120000 / 2000 / 120 / 2 / 60 / 5 / 10000`
+
+Those values correspond to:
+
+- max concurrency
+- per-tool concurrency
+- queue size
+- queue timeout
+- tool timeout
+- cache TTL
+- cache max entries
+- rate limit
+- retry max retries
+- retry budget per minute
+- breaker failure threshold
+- breaker cooldown
+
+Explicit env vars and per-tool execution overrides still win over preset-expanded values.
+Generated `.env.example` files leave preset-backed override vars blank so presets can
+take effect without manual cleanup.
+The `conservative` preset leaves caching off by default, but if you later enable
+`MCP_CACHE_TTL_MS` explicitly it still uses the preset's `500` entry cap unless you
+also override `MCP_CACHE_MAX_ENTRIES`.
 
 ## Customization boundary
 

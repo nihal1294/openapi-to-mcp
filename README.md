@@ -75,6 +75,7 @@ Public product documentation lives on GitHub Pages:
 - optional request-scoped tool allowlists for streamable-http callers
 - optional redacted audit logs for request and response payloads
 - optional retry budgets and circuit breakers for safe upstream calls
+- reviewable performance presets built on top of the explicit runtime controls
 - strict mode by default with `generation_report.json`
 - generated auth env mapping for `apiKey`, bearer, OAuth2, and OpenID Connect
 - generated runtime controls for concurrency, queueing, timeout, bounded caching, rate limiting, retries, and circuit breakers

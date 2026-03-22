@@ -6,10 +6,13 @@ from typing import TYPE_CHECKING
 
 import rich_click as click
 
+from openapi_to_mcp.common.performance_presets import PERFORMANCE_PRESET_NAMES
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
 RUNTIME_ENV_MAP = {
+    "performance_preset": "MCP_PERFORMANCE_PRESET",
     "origin_allowlist": "MCP_ALLOWED_ORIGINS",
     "host_allowlist": "MCP_ALLOWED_HOSTS",
     "max_concurrency": "MCP_MAX_CONCURRENCY",
@@ -37,6 +40,11 @@ RUNTIME_ENV_MAP = {
 }
 
 run_runtime_override_options = [
+    click.option(
+        "--performance-preset",
+        type=click.Choice(PERFORMANCE_PRESET_NAMES, case_sensitive=False),
+        help="Apply a named bundle of runtime defaults. Explicit runtime overrides still win.",
+    ),
     click.option(
         "--origin-allowlist",
         help="Comma-separated origins allowed for streamable-http.",
