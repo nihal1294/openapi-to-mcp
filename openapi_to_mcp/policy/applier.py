@@ -101,32 +101,60 @@ def _apply_execution_override(
     )
     if override is None:
         return
-    _validate_response_control_override(tool, override)
-    metadata: dict[str, int] = {}
-    if override.max_concurrency is not None:
-        metadata["maxConcurrency"] = override.max_concurrency
-    if override.timeout_ms is not None:
-        metadata["timeoutMs"] = override.timeout_ms
-    if override.cache_ttl_ms is not None:
-        metadata["cacheTtlMs"] = override.cache_ttl_ms
-    if override.rate_limit_per_minute is not None:
-        metadata["rateLimitPerMinute"] = override.rate_limit_per_minute
+    _validate_safe_method_execution_override(tool, override)
+    metadata = _build_execution_metadata(override)
     if metadata:
         tool["_policy_execution"] = metadata
 
 
-def _validate_response_control_override(
+def _validate_safe_method_execution_override(
     tool: dict[str, Any],
     override: ExecutionOverride,
 ) -> None:
-    if override.cache_ttl_ms is None and override.rate_limit_per_minute is None:
+    if not _has_safe_method_execution_override(override):
         return
     method = _tool_method(tool)
     if method in {"GET", "HEAD", "OPTIONS"}:
         return
     raise PolicyConfigError(
-        "cache_ttl_ms and rate_limit_per_minute require a safe HTTP method (GET, HEAD, or OPTIONS)."
+        "cache_ttl_ms, rate_limit_per_minute, retry_max_retries, "
+        "retry_budget_per_minute, circuit_breaker_failure_threshold, and "
+        "circuit_breaker_cooldown_ms require a safe HTTP method "
+        "(GET, HEAD, or OPTIONS)."
     )
+
+
+def _has_safe_method_execution_override(override: ExecutionOverride) -> bool:
+    return any(
+        value is not None
+        for value in (
+            override.cache_ttl_ms,
+            override.rate_limit_per_minute,
+            override.retry_max_retries,
+            override.retry_budget_per_minute,
+            override.circuit_breaker_failure_threshold,
+            override.circuit_breaker_cooldown_ms,
+        )
+    )
+
+
+def _build_execution_metadata(override: ExecutionOverride) -> dict[str, int]:
+    metadata_pairs = (
+        ("maxConcurrency", override.max_concurrency),
+        ("timeoutMs", override.timeout_ms),
+        ("cacheTtlMs", override.cache_ttl_ms),
+        ("rateLimitPerMinute", override.rate_limit_per_minute),
+        ("retryMaxRetries", override.retry_max_retries),
+        ("retryBudgetPerMinute", override.retry_budget_per_minute),
+        (
+            "circuitBreakerFailureThreshold",
+            override.circuit_breaker_failure_threshold,
+        ),
+        ("circuitBreakerCooldownMs", override.circuit_breaker_cooldown_ms),
+    )
+    return {
+        runtime_key: value for runtime_key, value in metadata_pairs if value is not None
+    }
 
 
 def _lookup_override[T](

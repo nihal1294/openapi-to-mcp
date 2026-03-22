@@ -55,6 +55,10 @@ class ExecutionOverride:
     timeout_ms: int | None = None
     cache_ttl_ms: int | None = None
     rate_limit_per_minute: int | None = None
+    retry_max_retries: int | None = None
+    retry_budget_per_minute: int | None = None
+    circuit_breaker_failure_threshold: int | None = None
+    circuit_breaker_cooldown_ms: int | None = None
 
 
 @dataclass(frozen=True)

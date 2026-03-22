@@ -169,4 +169,24 @@ def _parse_execution_override(value: object, field_name: str) -> ExecutionOverri
             f"{field_name}.rate_limit_per_minute",
             minimum=0,
         ),
+        retry_max_retries=optional_int(
+            entry.get("retry_max_retries"),
+            f"{field_name}.retry_max_retries",
+            minimum=0,
+        ),
+        retry_budget_per_minute=optional_int(
+            entry.get("retry_budget_per_minute"),
+            f"{field_name}.retry_budget_per_minute",
+            minimum=0,
+        ),
+        circuit_breaker_failure_threshold=optional_int(
+            entry.get("circuit_breaker_failure_threshold"),
+            f"{field_name}.circuit_breaker_failure_threshold",
+            minimum=0,
+        ),
+        circuit_breaker_cooldown_ms=optional_int(
+            entry.get("circuit_breaker_cooldown_ms"),
+            f"{field_name}.circuit_breaker_cooldown_ms",
+            minimum=1,
+        ),
     )
