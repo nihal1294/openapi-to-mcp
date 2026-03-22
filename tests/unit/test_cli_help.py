@@ -43,6 +43,10 @@ def test_run_help_lists_runtime_options() -> None:
     assert "--cache-ttl-ms" in result.output
     assert "--cache-max-entries" in result.output
     assert "--rate-limit-per-min" in result.output
+    assert "--retry-max-retries" in result.output
+    assert "--retry-budget-per" in result.output
+    assert "--circuit-breaker-fa" in result.output
+    assert "--circuit-breaker-co" in result.output
     assert "--tool-access-mode" in result.output
     assert "--tool-access-default" in result.output
     assert "derive caller identity" in result.output

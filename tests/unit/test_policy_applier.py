@@ -42,6 +42,10 @@ def test_apply_policy_overrides_auth_and_execution() -> None:
                 timeout_ms=9000,
                 cache_ttl_ms=1500,
                 rate_limit_per_minute=12,
+                retry_max_retries=2,
+                retry_budget_per_minute=9,
+                circuit_breaker_failure_threshold=3,
+                circuit_breaker_cooldown_ms=20000,
             )
         },
     )
@@ -57,6 +61,10 @@ def test_apply_policy_overrides_auth_and_execution() -> None:
         "timeoutMs": 9000,
         "cacheTtlMs": 1500,
         "rateLimitPerMinute": 12,
+        "retryMaxRetries": 2,
+        "retryBudgetPerMinute": 9,
+        "circuitBreakerFailureThreshold": 3,
+        "circuitBreakerCooldownMs": 20000,
     }
 
 
@@ -64,7 +72,14 @@ def test_apply_policy_rejects_cache_and_rate_limit_on_unsafe_methods() -> None:
     policy = PolicyConfig(
         source_path=_fake_path(),
         execution_operations={
-            "POST /pets": ExecutionOverride(cache_ttl_ms=1000, rate_limit_per_minute=5)
+            "POST /pets": ExecutionOverride(
+                cache_ttl_ms=1000,
+                rate_limit_per_minute=5,
+                retry_max_retries=2,
+                retry_budget_per_minute=10,
+                circuit_breaker_failure_threshold=3,
+                circuit_breaker_cooldown_ms=1000,
+            )
         },
     )
 

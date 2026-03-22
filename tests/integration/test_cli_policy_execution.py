@@ -43,6 +43,10 @@ def test_generate_uses_policy_file_for_rename_auth_and_execution(
                         "timeout_ms": 12000,
                         "cache_ttl_ms": 60000,
                         "rate_limit_per_minute": 30,
+                        "retry_max_retries": 2,
+                        "retry_budget_per_minute": 10,
+                        "circuit_breaker_failure_threshold": 4,
+                        "circuit_breaker_cooldown_ms": 15000,
                     }
                 }
             },
@@ -76,16 +80,30 @@ def test_generate_uses_policy_file_for_rename_auth_and_execution(
     assert '"timeoutMs": 12000' in generated_source
     assert '"cacheTtlMs": 60000' in generated_source
     assert '"rateLimitPerMinute": 30' in generated_source
+    assert '"retryMaxRetries": 2' in generated_source
+    assert '"retryBudgetPerMinute": 10' in generated_source
+    assert '"circuitBreakerFailureThreshold": 4' in generated_source
+    assert '"circuitBreakerCooldownMs": 15000' in generated_source
     assert "AUTH_BEARERAUTH_TOKEN=" in env_example
 
 
-def test_generate_rejects_unsafe_policy_cache_override(
+def test_generate_rejects_unsafe_policy_resilience_override(
     runner: CliRunner, tmp_path: Path
 ) -> None:
     spec_path = _write_post_spec(tmp_path / "openapi.json")
     config_path = _write_policy(
         tmp_path / "mcpgen.yaml",
-        {"execution": {"operations": {"POST /test": {"cache_ttl_ms": 1000}}}},
+        {
+            "execution": {
+                "operations": {
+                    "POST /test": {
+                        "cache_ttl_ms": 1000,
+                        "retry_max_retries": 2,
+                        "circuit_breaker_failure_threshold": 3,
+                    }
+                }
+            }
+        },
     )
     output_dir = tmp_path / "generated"
 
