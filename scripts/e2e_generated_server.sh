@@ -318,6 +318,22 @@ run_performance_suite_assertions() {
   )
 }
 
+run_resilience_suite_assertions() {
+  local suite="$1"
+  local tool_name="${2:-testConversionTool}"
+  local cooldown_ms="${3:-2000}"
+
+  (
+    cd "$REPO_ROOT"
+    run_uv run python scripts/assert_generated_server_resilience.py \
+      --suite "$suite" \
+      --tool-name "$tool_name" \
+      --cooldown-ms "$cooldown_ms" \
+      --mock-base-url "$TARGET_API_BASE_URL" \
+      --endpoint-url "http://${HTTP_HOST}:${CURRENT_HTTP_PORT}${MCP_ENDPOINT}"
+  )
+}
+
 run_access_suite_assertions() {
   local suite="$1"
   local tool_name="$2"
@@ -480,6 +496,12 @@ main() {
     "$STDIO_OUTPUT_DIR" "MCP_CACHE_MAX_ENTRIES" "0" \
     "MCP_CACHE_MAX_ENTRIES must be an integer >= 1."
   assert_startup_failure \
+    "$STDIO_OUTPUT_DIR" "MCP_RETRY_MAX_RETRIES" "-1" \
+    "MCP_RETRY_MAX_RETRIES must be an integer >= 0."
+  assert_startup_failure \
+    "$STDIO_OUTPUT_DIR" "MCP_CIRCUIT_BREAKER_COOLDOWN_MS" "0" \
+    "MCP_CIRCUIT_BREAKER_COOLDOWN_MS must be an integer >= 1."
+  assert_startup_failure \
     "$STDIO_OUTPUT_DIR" "MCP_TOOL_ALLOWLISTS" "{bad-json" \
     "MCP_TOOL_ALLOWLISTS must be valid JSON."
 
@@ -522,6 +544,35 @@ main() {
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RATE_LIMIT_PER_MINUTE" "1"
   start_streamable_http_server "$HTTP_OUTPUT_DIR"
   run_performance_suite_assertions "rate-limited"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_TTL_MS" "0"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RATE_LIMIT_PER_MINUTE" "0"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RETRY_MAX_RETRIES" "1"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RETRY_BUDGET_PER_MINUTE" "5"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" \
+    "MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD" "0"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" \
+    "MCP_CIRCUIT_BREAKER_COOLDOWN_MS" "30000"
+  start_streamable_http_server "$HTTP_OUTPUT_DIR"
+  run_resilience_suite_assertions "retry-recovers"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RETRY_MAX_RETRIES" "2"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RETRY_BUDGET_PER_MINUTE" "1"
+  start_streamable_http_server "$HTTP_OUTPUT_DIR"
+  run_resilience_suite_assertions "retry-budget-exhausted"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RETRY_MAX_RETRIES" "0"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RETRY_BUDGET_PER_MINUTE" "0"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" \
+    "MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD" "2"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" \
+    "MCP_CIRCUIT_BREAKER_COOLDOWN_MS" "2000"
+  start_streamable_http_server "$HTTP_OUTPUT_DIR"
+  run_resilience_suite_assertions "circuit-breaker-open" "testConversionTool" "2000"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" \
+    "MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD" "1"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" \
+    "MCP_CIRCUIT_BREAKER_COOLDOWN_MS" "1000"
+  start_streamable_http_server "$HTTP_OUTPUT_DIR"
+  run_resilience_suite_assertions \
+    "circuit-breaker-recovery" "testConversionTool" "1000"
 
   echo "Generating and validating audit streamable-http server"
   generate_server \
