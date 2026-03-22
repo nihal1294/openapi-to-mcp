@@ -20,6 +20,7 @@ from openapi_to_mcp.common.exceptions import (
     SchemaError,
     SpecLoaderError,
 )
+from openapi_to_mcp.common.performance_presets import performance_preset_context
 from openapi_to_mcp.common.terminal import print_success_panel
 from openapi_to_mcp.common.tool_runtime import (
     build_public_tools,
@@ -137,6 +138,7 @@ def _prepare_template_context(  # noqa: PLR0913
         "runtime_tools": runtime_tools,
         "auth_env_vars": auth_env_vars,
         "api_base_url_comment": api_base_url,
+        "performance_presets": performance_preset_context(),
         "server_description": spec_info.get("description", ""),
     }
 

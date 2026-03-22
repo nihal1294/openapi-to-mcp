@@ -48,6 +48,7 @@ def run_server(  # noqa: PLR0913
     on_schema_error: str | None,
     target_api_base_url: str | None,
     env_source: str | None,
+    performance_preset: str | None,
     origin_allowlist: str | None,
     host_allowlist: str | None,
     max_concurrency: int | None,
@@ -118,6 +119,7 @@ def run_server(  # noqa: PLR0913
             env_source,
             build_runtime_override_env(
                 {
+                    "performance_preset": performance_preset,
                     "origin_allowlist": origin_allowlist,
                     "host_allowlist": host_allowlist,
                     "max_concurrency": max_concurrency,
