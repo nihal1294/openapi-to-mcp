@@ -114,5 +114,7 @@ function finishCircuitBreaker(
     circuitBreaker.recordFailure(toolName, settings, lease);
     return;
   }
-  circuitBreaker.recordSuccess(toolName, lease);
+  if (lease?.halfOpen) {
+    circuitBreaker.recordSuccess(toolName, lease);
+  }
 }

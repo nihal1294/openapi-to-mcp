@@ -48,6 +48,12 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
         if parsed.path == "/test":
             query = self._query_params(parsed.query)
             call_count = self._increment_call_count(parsed.path, parsed.query)
+            if query.get("status") == "client_error":
+                self._send_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"call_count": call_count, "error": "bad request", "ok": False},
+                )
+                return
             if self._should_fail_status(query.get("status"), call_count):
                 self._send_json(
                     HTTPStatus.SERVICE_UNAVAILABLE,

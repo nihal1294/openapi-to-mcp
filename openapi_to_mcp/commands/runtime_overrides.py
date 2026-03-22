@@ -80,12 +80,12 @@ run_runtime_override_options = [
     click.option(
         "--retry-max-retries",
         type=int,
-        help="Maximum retry count for safe tools. Use 0 to disable retries.",
+        help="Maximum retry count for safe tools. Retries only activate when retry budget is also > 0. Use 0 to disable retries.",
     ),
     click.option(
         "--retry-budget-per-minute",
         type=int,
-        help="Maximum retry attempts per tool per minute for safe tools. Use 0 to disable retries.",
+        help="Maximum retry attempts per tool per minute for safe tools. Retries only activate when retry count is also > 0. Use 0 to disable retries.",
     ),
     click.option(
         "--circuit-breaker-failure-threshold",
@@ -95,7 +95,7 @@ run_runtime_override_options = [
     click.option(
         "--circuit-breaker-cooldown-ms",
         type=int,
-        help="Cooldown window before a safe tool circuit allows one half-open probe.",
+        help="Cooldown window before a safe tool circuit allows one half-open probe. Only applies when failure threshold is > 0.",
     ),
     click.option(
         "--tool-access-mode",

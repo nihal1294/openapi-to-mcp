@@ -187,17 +187,23 @@ def run_circuit_breaker_open(
         expected_meta,
     )
     _assert_error(
-        session.call_tool(4, tool_name, "breaker_error"),
+        session.call_tool(4, tool_name, "client_error"),
+        "API bad request",
+        {"code": "api_bad_request", "source": "upstream", "retryable": False},
+    )
+    _assert_error(
+        session.call_tool(5, tool_name, "breaker_error"),
         "API server error (503)",
         expected_meta,
     )
     meta = _assert_error(
-        session.call_tool(5, tool_name, "breaker_error"),
+        session.call_tool(6, tool_name, "breaker_error"),
         "Circuit breaker is open",
         {"code": "circuit_breaker_open", "source": "runtime", "retryable": True},
     )
     _assert_retry_after(meta)
     _assert_call_count(mock_base_url, "status=breaker_error", TWO_CALLS)
+    _assert_call_count(mock_base_url, "status=client_error", ONE_CALL)
 
 
 def run_circuit_breaker_recovery(

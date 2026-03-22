@@ -47,6 +47,9 @@ def test_run_help_lists_runtime_options() -> None:
     assert "--retry-budget-per" in result.output
     assert "--circuit-breaker-fa" in result.output
     assert "--circuit-breaker-co" in result.output
+    assert "retry budget is also" in result.output
+    assert "retry count is also" in result.output
+    assert "when failure threshold" in result.output
     assert "--tool-access-mode" in result.output
     assert "--tool-access-default" in result.output
     assert "derive caller identity" in result.output

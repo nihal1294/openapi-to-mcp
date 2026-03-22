@@ -33,15 +33,6 @@ export class ToolRetryBudget {
     retryBudgetPerMinute: number,
     nextAttempt: number
   ): void {
-    if (retryBudgetPerMinute <= 0) {
-      throw createToolExecutionError(
-        'retry_budget_exhausted',
-        'runtime',
-        true,
-        'Retry budget exhausted for this tool.',
-        { attempts: nextAttempt, retryAfterMs: 60000 }
-      );
-    }
     const current = this.currentWindow(toolName);
     if (current.retryCount >= retryBudgetPerMinute) {
       throw createToolExecutionError(

@@ -37,3 +37,4 @@ def test_generate_emits_resilience_runtime_files_and_env_defaults(
     assert "MCP_RETRY_BUDGET_PER_MINUTE=0" in env_example
     assert "MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD=0" in env_example
     assert "MCP_CIRCUIT_BREAKER_COOLDOWN_MS=30000" in env_example
+    assert "resets on restart" in env_example

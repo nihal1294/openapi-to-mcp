@@ -55,6 +55,7 @@ SSE generation is intentionally gone.
 - optional per-tool fixed-window rate limiting for safe methods
 - optional retry budgets and bounded retries for safe methods
 - optional circuit breakers with open, half-open, and closed state for safe methods
+- circuit-breaker state is process-local and resets on process restart
 - bounded cache size via `MCP_CACHE_MAX_ENTRIES`
 - object-shaped response schemas emitted as MCP `outputSchema`
 - structured JSON object results returned as `structuredContent`
@@ -79,6 +80,7 @@ When access control is enabled:
 reasonable, but it does not guarantee success on retry and does not imply any backoff policy.
 When retry budgets or circuit breakers reject a call, `meta.error` also includes
 structured runtime metadata such as `retryAfterMs` and `attempts` when available.
+Circuit-breaker cooldown only applies when the configured failure threshold is positive.
 
 ## Customization boundary
 

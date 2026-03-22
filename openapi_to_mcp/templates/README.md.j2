@@ -38,7 +38,9 @@ This MCP server was automatically generated from an OpenAPI specification by the
         *   Set `MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD=0` to disable the circuit breaker.
         *   Retries and circuit-breaker controls only apply to safe HTTP methods (`GET`, `HEAD`, `OPTIONS`).
         *   Retries are immediate in this first implementation and require both a positive retry count and a positive retry budget.
+        *   Set `MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD=0` to disable the breaker entirely; `MCP_CIRCUIT_BREAKER_COOLDOWN_MS` only applies when the threshold is positive.
         *   Circuit-breaker thresholds count consecutive retryable failures and allow one half-open probe after each cooldown window.
+        *   Circuit-breaker state is process-local and resets on process restart.
         *   Rate limiting uses a fixed one-minute window, so quota resets at window boundaries.
         *   Invalid values fail fast at startup instead of silently falling back.
     *   **Tool Access Controls (Optional):**

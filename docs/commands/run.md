@@ -46,10 +46,10 @@ openapi-to-mcp run [OPTIONS]
 | `--cache-ttl-ms` | No | None | Override `MCP_CACHE_TTL_MS` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
 | `--cache-max-entries` | No | None | Override `MCP_CACHE_MAX_ENTRIES` for bounded in-memory caching |
 | `--rate-limit-per-minute` | No | None | Override `MCP_RATE_LIMIT_PER_MINUTE` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
-| `--retry-max-retries` | No | None | Override `MCP_RETRY_MAX_RETRIES` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
-| `--retry-budget-per-minute` | No | None | Override `MCP_RETRY_BUDGET_PER_MINUTE` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
+| `--retry-max-retries` | No | None | Override `MCP_RETRY_MAX_RETRIES` for safe tools (`GET`, `HEAD`, `OPTIONS`); retries only activate when retry budget is also positive |
+| `--retry-budget-per-minute` | No | None | Override `MCP_RETRY_BUDGET_PER_MINUTE` for safe tools (`GET`, `HEAD`, `OPTIONS`); retries only activate when retry count is also positive |
 | `--circuit-breaker-failure-threshold` | No | None | Override `MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
-| `--circuit-breaker-cooldown-ms` | No | None | Override `MCP_CIRCUIT_BREAKER_COOLDOWN_MS` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
+| `--circuit-breaker-cooldown-ms` | No | None | Override `MCP_CIRCUIT_BREAKER_COOLDOWN_MS` for safe tools (`GET`, `HEAD`, `OPTIONS`); only applies when failure threshold is positive |
 | `--tool-access-mode` | No | None | Override `MCP_TOOL_ACCESS_MODE` (`off` or `allowlist`) |
 | `--tool-access-default` | No | None | Override `MCP_TOOL_ACCESS_DEFAULT` (`allow` or `deny`) |
 | `--tool-identity-header` | No | None | Override `MCP_TOOL_IDENTITY_HEADER` for streamable-http caller identity |
@@ -169,7 +169,9 @@ Retries and circuit-breaking are limited to safe methods in this first implement
 Retries are immediate, require both a positive retry count and a positive retry budget,
 and the budget counts retry attempts rather than original calls. The circuit breaker
 opens after the configured number of consecutive retryable failures and allows one
-half-open probe after each cooldown window.
+half-open probe after each cooldown window. Set the failure threshold to `0` to
+disable the breaker entirely; the cooldown has no effect until the threshold is
+positive. Circuit-breaker state is process-local and resets when the server restarts.
 
 ### Restrict visible tools by caller identity
 
