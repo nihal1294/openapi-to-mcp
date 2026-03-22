@@ -139,11 +139,77 @@ def test_run_writes_performance_preset_and_explicit_override(
     assert subprocess_run.call_args_list[0].kwargs["env"]["MCP_CACHE_TTL_MS"] == "0"
 
 
-def _mock_generation_output(mocker: MockerFixture, output_dir: Path) -> None:
+def test_run_preset_is_not_shadowed_by_blank_generated_env_values(
+    runner: CliRunner,
+    tmp_path: Path,
+    mocker: MockerFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "generated"
+    subprocess_run = mocker.patch("openapi_to_mcp.commands.run_support.subprocess.run")
+    mocker.patch(
+        "openapi_to_mcp.commands.run_support.shutil.which", return_value="/usr/bin/tool"
+    )
+    for env_name in (
+        "MCP_MAX_CONCURRENCY",
+        "MCP_CACHE_TTL_MS",
+        "MCP_CACHE_MAX_ENTRIES",
+        "MCP_RATE_LIMIT_PER_MINUTE",
+        "MCP_RETRY_MAX_RETRIES",
+        "MCP_RETRY_BUDGET_PER_MINUTE",
+        "MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD",
+        "MCP_CIRCUIT_BREAKER_COOLDOWN_MS",
+    ):
+        monkeypatch.delenv(env_name, raising=False)
+    env_example = """TARGET_API_BASE_URL=https://example.com
+MCP_PERFORMANCE_PRESET=off
+MCP_MAX_CONCURRENCY=
+MCP_CACHE_TTL_MS=
+MCP_CACHE_MAX_ENTRIES=
+MCP_RATE_LIMIT_PER_MINUTE=
+MCP_RETRY_MAX_RETRIES=
+MCP_RETRY_BUDGET_PER_MINUTE=
+MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD=
+MCP_CIRCUIT_BREAKER_COOLDOWN_MS=
+"""
+    _mock_generation_output(
+        mocker,
+        output_dir,
+        env_example,
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "run",
+            "--openapi-json",
+            str(tmp_path / "openapi.yaml"),
+            "--output-dir",
+            str(output_dir),
+            "--performance-preset",
+            "balanced",
+        ],
+    )
+
+    assert result.exit_code == 0
+    env_contents = (output_dir / ".env").read_text(encoding="utf-8")
+    assert "MCP_PERFORMANCE_PRESET=balanced" in env_contents
+    assert "MCP_MAX_CONCURRENCY=" in env_contents
+    assert "MCP_CACHE_TTL_MS=" in env_contents
+    runtime_env = subprocess_run.call_args_list[0].kwargs["env"]
+    assert runtime_env["MCP_PERFORMANCE_PRESET"] == "balanced"
+    assert "MCP_MAX_CONCURRENCY" not in runtime_env
+    assert "MCP_CACHE_TTL_MS" not in runtime_env
+
+
+def _mock_generation_output(
+    mocker: MockerFixture, output_dir: Path, env_example: str | None = None
+) -> None:
     def fake_generate_project(**_: object) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / ".env.example").write_text(
-            "TARGET_API_BASE_URL=https://example.com\n", encoding="utf-8"
+            env_example or "TARGET_API_BASE_URL=https://example.com\n",
+            encoding="utf-8",
         )
 
     mocker.patch(

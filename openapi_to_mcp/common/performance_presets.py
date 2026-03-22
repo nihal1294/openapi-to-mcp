@@ -26,13 +26,49 @@ class PerformancePreset:
 
 PERFORMANCE_PRESETS = (
     PerformancePreset(
-        "conservative", 16, 4, 64, 2000, 20000, 0, 500, 30, 0, 0, 0, 30000
+        name="conservative",
+        max_concurrency=16,
+        per_tool_max_concurrency=4,
+        max_queue_size=64,
+        queue_timeout_ms=2000,
+        tool_timeout_ms=20000,
+        cache_ttl_ms=0,
+        cache_max_entries=500,
+        rate_limit_per_minute=30,
+        retry_max_retries=0,
+        retry_budget_per_minute=0,
+        circuit_breaker_failure_threshold=0,
+        circuit_breaker_cooldown_ms=30000,
     ),
     PerformancePreset(
-        "balanced", 32, 8, 256, 5000, 30000, 30000, 1000, 60, 1, 30, 3, 15000
+        name="balanced",
+        max_concurrency=32,
+        per_tool_max_concurrency=8,
+        max_queue_size=256,
+        queue_timeout_ms=5000,
+        tool_timeout_ms=30000,
+        cache_ttl_ms=30000,
+        cache_max_entries=1000,
+        rate_limit_per_minute=60,
+        retry_max_retries=1,
+        retry_budget_per_minute=30,
+        circuit_breaker_failure_threshold=3,
+        circuit_breaker_cooldown_ms=15000,
     ),
     PerformancePreset(
-        "aggressive", 64, 16, 512, 8000, 45000, 120000, 2000, 120, 2, 60, 5, 10000
+        name="aggressive",
+        max_concurrency=64,
+        per_tool_max_concurrency=16,
+        max_queue_size=512,
+        queue_timeout_ms=8000,
+        tool_timeout_ms=45000,
+        cache_ttl_ms=120000,
+        cache_max_entries=2000,
+        rate_limit_per_minute=120,
+        retry_max_retries=2,
+        retry_budget_per_minute=60,
+        circuit_breaker_failure_threshold=5,
+        circuit_breaker_cooldown_ms=10000,
     ),
 )
 PERFORMANCE_PRESET_NAMES = ("off", *(preset.name for preset in PERFORMANCE_PRESETS))

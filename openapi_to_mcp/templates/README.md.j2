@@ -34,6 +34,7 @@ This MCP server was automatically generated from an OpenAPI specification by the
         *   `MCP_RETRY_MAX_RETRIES`, `MCP_RETRY_BUDGET_PER_MINUTE`, `MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD`, `MCP_CIRCUIT_BREAKER_COOLDOWN_MS`
         *   `MCP_PERFORMANCE_PRESET` expands into reviewable runtime defaults for the controls below.
         *   Explicit env vars still override any preset-expanded values.
+        *   The generated `.env.example` leaves preset-backed override vars blank so a preset can take effect without manual cleanup.
         *   These control parallel tool execution, queueing behavior, timeouts, and optional performance controls for safe tools.
         *   Set `MCP_CACHE_TTL_MS=0` or `MCP_RATE_LIMIT_PER_MINUTE=0` to disable that control globally.
         *   `MCP_CACHE_MAX_ENTRIES` bounds the in-memory cache size when caching is enabled.
@@ -56,6 +57,8 @@ This MCP server was automatically generated from an OpenAPI specification by the
 {% endfor %}
 
 Explicit env vars and per-tool execution overrides still win over these preset values.
+The `conservative` preset leaves caching off by default, but if you later enable caching explicitly it still uses the preset's `500` entry cap unless you also override `MCP_CACHE_MAX_ENTRIES`.
+
     *   **Tool Access Controls (Optional):**
         *   `MCP_TOOL_ACCESS_MODE`, `MCP_TOOL_ACCESS_DEFAULT`, `MCP_TOOL_IDENTITY_HEADER`, `MCP_TOOL_ALLOWLISTS`
         *   These enable request-scoped tool allowlists for generated runtimes.

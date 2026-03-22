@@ -496,6 +496,9 @@ main() {
     "$STDIO_OUTPUT_DIR" "MCP_CACHE_MAX_ENTRIES" "0" \
     "MCP_CACHE_MAX_ENTRIES must be an integer >= 1."
   assert_startup_failure \
+    "$STDIO_OUTPUT_DIR" "MCP_PERFORMANCE_PRESET" "toString" \
+    "MCP_PERFORMANCE_PRESET must be one of: off, conservative, balanced, aggressive."
+  assert_startup_failure \
     "$STDIO_OUTPUT_DIR" "MCP_RETRY_MAX_RETRIES" "-1" \
     "MCP_RETRY_MAX_RETRIES must be an integer >= 0."
   assert_startup_failure \

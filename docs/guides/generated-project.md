@@ -105,6 +105,11 @@ Those values correspond to:
 - breaker cooldown
 
 Explicit env vars and per-tool execution overrides still win over preset-expanded values.
+Generated `.env.example` files leave preset-backed override vars blank so presets can
+take effect without manual cleanup.
+The `conservative` preset leaves caching off by default, but if you later enable
+`MCP_CACHE_TTL_MS` explicitly it still uses the preset's `500` entry cap unless you
+also override `MCP_CACHE_MAX_ENTRIES`.
 
 ## Customization boundary
 

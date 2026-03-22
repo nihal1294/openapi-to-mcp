@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from click.testing import CliRunner
 
 
-def test_generate_emits_performance_runtime_files_and_env_defaults(
+def test_generate_emits_performance_runtime_files_and_env_placeholders(
     runner: CliRunner, tmp_path: Path
 ) -> None:
     output_dir = tmp_path / "generated"
@@ -40,9 +40,18 @@ def test_generate_emits_performance_runtime_files_and_env_defaults(
         output_dir / "src" / "runtime" / "performance_preset.ts"
     ).read_text(encoding="utf-8")
     assert "MCP_PERFORMANCE_PRESET=off" in env_example
-    assert "MCP_CACHE_TTL_MS=0" in env_example
-    assert "MCP_CACHE_MAX_ENTRIES=1000" in env_example
-    assert "MCP_RATE_LIMIT_PER_MINUTE=0" in env_example
+    assert "MCP_MAX_CONCURRENCY=" in env_example
+    assert "MCP_CACHE_TTL_MS=" in env_example
+    assert "MCP_CACHE_MAX_ENTRIES=" in env_example
+    assert "MCP_RATE_LIMIT_PER_MINUTE=" in env_example
+    assert "MCP_MAX_CONCURRENCY=32" not in env_example
+    assert "MCP_CACHE_TTL_MS=0" not in env_example
+    assert "MCP_CACHE_MAX_ENTRIES=1000" not in env_example
+    assert "MCP_RATE_LIMIT_PER_MINUTE=0" not in env_example
+    assert (
+        "Object.prototype.hasOwnProperty.call(PERFORMANCE_PRESETS, raw)"
+        in preset_source
+    )
     for preset in PERFORMANCE_PRESETS:
         assert f"'{preset.name}':" in preset_source
         assert f"cacheTtlMs: {preset.cache_ttl_ms}" in preset_source

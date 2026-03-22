@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from click.testing import CliRunner
 
 
-def test_generate_emits_resilience_runtime_files_and_env_defaults(
+def test_generate_emits_resilience_runtime_files_and_env_placeholders(
     runner: CliRunner, tmp_path: Path
 ) -> None:
     output_dir = tmp_path / "generated"
@@ -33,8 +33,8 @@ def test_generate_emits_resilience_runtime_files_and_env_defaults(
     assert (output_dir / "src" / "runtime" / "circuit_breaker.ts").exists()
 
     env_example = (output_dir / ".env.example").read_text(encoding="utf-8")
-    assert "MCP_RETRY_MAX_RETRIES=0" in env_example
-    assert "MCP_RETRY_BUDGET_PER_MINUTE=0" in env_example
-    assert "MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD=0" in env_example
-    assert "MCP_CIRCUIT_BREAKER_COOLDOWN_MS=30000" in env_example
+    assert "MCP_RETRY_MAX_RETRIES=" in env_example
+    assert "MCP_RETRY_BUDGET_PER_MINUTE=" in env_example
+    assert "MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD=" in env_example
+    assert "MCP_CIRCUIT_BREAKER_COOLDOWN_MS=" in env_example
     assert "resets on restart" in env_example

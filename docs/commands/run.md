@@ -197,6 +197,10 @@ positive. Circuit-breaker state is process-local and resets when the server rest
 | `balanced` | 32 | 8 | 256 | 5000 | 30000 | 30000 | 1000 | 60 | 1 | 30 | 3 | 15000 |
 | `aggressive` | 64 | 16 | 512 | 8000 | 45000 | 120000 | 2000 | 120 | 2 | 60 | 5 | 10000 |
 
+The `conservative` preset leaves caching off by default, but if you later enable
+`MCP_CACHE_TTL_MS` explicitly it still uses the preset's `500` entry cap unless you
+also override `MCP_CACHE_MAX_ENTRIES`.
+
 ### Restrict visible tools by caller identity
 
 ```bash
@@ -247,7 +251,10 @@ Accepted values:
 - a path to a `.json` file
 - a path to a `.env` file
 
-`run` copies `.env.example` to `.env` when needed, writes overrides, and then starts the generated server with resolved runtime values.
+`run` copies `.env.example` to `.env` when needed, writes overrides, and then starts
+the generated server with resolved runtime values. Generated `.env.example` files
+leave preset-backed runtime override vars blank so `MCP_PERFORMANCE_PRESET` can take
+effect without manual cleanup.
 CLI runtime-control flags are written as the corresponding `MCP_*` env vars before startup.
 `MCP_PERFORMANCE_PRESET` defaults to `off`.
 `MCP_CACHE_TTL_MS` and `MCP_RATE_LIMIT_PER_MINUTE` both default to `0` (disabled).

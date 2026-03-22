@@ -48,7 +48,10 @@ export function parsePerformancePreset(value: string | undefined): PerformancePr
   if (!raw) {
     return 'off';
   }
-  if (raw === 'off' || raw in PERFORMANCE_PRESETS) {
+  if (
+    raw === 'off' ||
+    Object.prototype.hasOwnProperty.call(PERFORMANCE_PRESETS, raw)
+  ) {
     return raw as PerformancePresetName;
   }
   throw new Error(
