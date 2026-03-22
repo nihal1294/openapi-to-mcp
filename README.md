@@ -17,16 +17,30 @@ Standalone CLI for diagnosing, diffing, generating, running, and testing Node.js
 
 ## Install
 
-Treat `openapi-to-mcp` as an installable CLI first.
+New releases are published to PyPI.
+
+Run it without a permanent install:
 
 ```bash
-uv tool install git+https://github.com/nihal1294/openapi-to-mcp@vX.Y.Z
+uvx openapi-to-mcp --help
+```
+
+Install it permanently:
+
+```bash
+uv tool install openapi-to-mcp
+# or
+pip install openapi-to-mcp
 openapi-to-mcp --help
 ```
 
-Until the project is published to PyPI, this is the cleanest end-user install path.
+If you need a fallback before a given release reaches PyPI, install from a tagged Git release instead:
 
-GitHub Releases also publish a wheel and source tarball for each version. Those artifacts are useful for pinned manual installs and packaging verification, but the docs treat them as an advanced path rather than the default user experience.
+```bash
+uv tool install git+https://github.com/nihal1294/openapi-to-mcp@vX.Y.Z
+```
+
+GitHub Releases also publish a wheel and source tarball for each version. Those artifacts remain useful for pinned manual installs and packaging verification, but the default user path for new releases is PyPI.
 
 ## Quickstart
 
@@ -81,7 +95,7 @@ Public product documentation lives on GitHub Pages:
 - generated runtime controls for concurrency, queueing, timeout, bounded caching, rate limiting, retries, and circuit breakers
 - generated-server E2E coverage against a local mock API
 - CLI E2E coverage for `generate`, `run`, and `test-server`
-- version-aware GitHub Releases automation on `master`
+- version-aware GitHub Releases and PyPI publishing automation on `master`
 
 ## Development
 
