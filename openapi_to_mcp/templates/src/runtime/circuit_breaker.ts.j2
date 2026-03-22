@@ -1,0 +1,153 @@
+import { CIRCUIT_BREAKER_COOLDOWN_MS, CIRCUIT_BREAKER_FAILURE_THRESHOLD } from './config.js';
+import { createToolExecutionError } from './errors.js';
+import type { ToolRuntimeMetadata } from './generated.js';
+import { isSafeMethod } from './request.js';
+
+type BreakerStateName = 'closed' | 'open' | 'half-open';
+
+interface BreakerState {
+  consecutiveFailures: number;
+  openedAt: number | null;
+  probeInFlight: boolean;
+  state: BreakerStateName;
+}
+
+export interface CircuitBreakerLease {
+  halfOpen: boolean;
+}
+
+export interface CircuitBreakerSettings {
+  cooldownMs: number;
+  failureThreshold: number;
+}
+
+export function resolveCircuitBreakerSettings(
+  tool: ToolRuntimeMetadata
+): CircuitBreakerSettings | null {
+  if (!isSafeMethod(tool.method)) {
+    return null;
+  }
+  const failureThreshold =
+    tool.execution?.circuitBreakerFailureThreshold ??
+    CIRCUIT_BREAKER_FAILURE_THRESHOLD;
+  if (failureThreshold <= 0) {
+    return null;
+  }
+  return {
+    cooldownMs: tool.execution?.circuitBreakerCooldownMs ?? CIRCUIT_BREAKER_COOLDOWN_MS,
+    failureThreshold,
+  };
+}
+
+export class ToolCircuitBreaker {
+  private readonly states = new Map<string, BreakerState>();
+
+  public acquireExecution(
+    toolName: string,
+    settings: CircuitBreakerSettings | null
+  ): CircuitBreakerLease | null {
+    if (!settings) {
+      return null;
+    }
+    const current = this.currentState(toolName, settings);
+    if (current.state === 'open') {
+      throw createToolExecutionError(
+        'circuit_breaker_open',
+        'runtime',
+        true,
+        `Circuit breaker is open for tool '${toolName}'.`,
+        { retryAfterMs: this.retryAfterMs(current, settings) }
+      );
+    }
+    if (current.state === 'half-open') {
+      if (current.probeInFlight) {
+        throw createToolExecutionError(
+          'circuit_breaker_open',
+          'runtime',
+          true,
+          `Circuit breaker probe is already in progress for tool '${toolName}'.`
+        );
+      }
+      current.probeInFlight = true;
+      this.states.set(toolName, current);
+      return { halfOpen: true };
+    }
+    return { halfOpen: false };
+  }
+
+  public recordSuccess(toolName: string, lease: CircuitBreakerLease | null): void {
+    if (!lease) {
+      return;
+    }
+    this.states.delete(toolName);
+  }
+
+  public recordFailure(
+    toolName: string,
+    settings: CircuitBreakerSettings | null,
+    lease: CircuitBreakerLease | null
+  ): void {
+    if (!settings || !lease) {
+      return;
+    }
+    if (lease.halfOpen) {
+      this.states.set(toolName, this.openState(settings.failureThreshold));
+      return;
+    }
+    const failures = (this.states.get(toolName)?.consecutiveFailures ?? 0) + 1;
+    if (failures >= settings.failureThreshold) {
+      this.states.set(toolName, this.openState(failures));
+      return;
+    }
+    this.states.set(toolName, this.closedState(failures));
+  }
+
+  private currentState(
+    toolName: string,
+    settings: CircuitBreakerSettings
+  ): BreakerState {
+    const existing = this.states.get(toolName);
+    if (!existing) {
+      return this.closedState(0);
+    }
+    if (existing.state !== 'open' || this.retryAfterMs(existing, settings) > 0) {
+      return existing;
+    }
+    const halfOpen = {
+      consecutiveFailures: existing.consecutiveFailures,
+      openedAt: existing.openedAt,
+      probeInFlight: false,
+      state: 'half-open' as const,
+    };
+    this.states.set(toolName, halfOpen);
+    return halfOpen;
+  }
+
+  private retryAfterMs(
+    state: BreakerState,
+    settings: CircuitBreakerSettings
+  ): number {
+    if (state.state !== 'open' || state.openedAt === null) {
+      return 0;
+    }
+    return Math.max(0, settings.cooldownMs - (Date.now() - state.openedAt));
+  }
+
+  private closedState(consecutiveFailures: number): BreakerState {
+    return {
+      consecutiveFailures,
+      openedAt: null,
+      probeInFlight: false,
+      state: 'closed',
+    };
+  }
+
+  private openState(consecutiveFailures: number): BreakerState {
+    return {
+      consecutiveFailures,
+      openedAt: Date.now(),
+      probeInFlight: false,
+      state: 'open',
+    };
+  }
+}

@@ -63,6 +63,10 @@ def test_generator_generate_files_success(mocker: MagicMock) -> None:
         ),
         ("src/runtime/auth.ts.j2", output_files["src/runtime/auth.ts"]),
         ("src/runtime/cache.ts.j2", output_files["src/runtime/cache.ts"]),
+        (
+            "src/runtime/circuit_breaker.ts.j2",
+            output_files["src/runtime/circuit_breaker.ts"],
+        ),
         ("src/runtime/config.ts.j2", output_files["src/runtime/config.ts"]),
         ("src/runtime/errors.ts.j2", output_files["src/runtime/errors.ts"]),
         ("src/runtime/executor.ts.j2", output_files["src/runtime/executor.ts"]),
@@ -81,6 +85,8 @@ def test_generator_generate_files_success(mocker: MagicMock) -> None:
             output_files["src/runtime/observability.ts"],
         ),
         ("src/runtime/rate_limit.ts.j2", output_files["src/runtime/rate_limit.ts"]),
+        ("src/runtime/resilience.ts.j2", output_files["src/runtime/resilience.ts"]),
+        ("src/runtime/retry.ts.j2", output_files["src/runtime/retry.ts"]),
         ("src/runtime/request.ts.j2", output_files["src/runtime/request.ts"]),
         ("src/runtime/redaction.ts.j2", output_files["src/runtime/redaction.ts"]),
         ("src/runtime/response.ts.j2", output_files["src/runtime/response.ts"]),
@@ -119,6 +125,9 @@ def _output_files() -> dict[str, MagicMock]:
         ),
         "src/runtime/auth.ts": MagicMock(spec=Path, name="runtime_auth"),
         "src/runtime/cache.ts": MagicMock(spec=Path, name="runtime_cache"),
+        "src/runtime/circuit_breaker.ts": MagicMock(
+            spec=Path, name="runtime_circuit_breaker"
+        ),
         "src/runtime/config.ts": MagicMock(spec=Path, name="runtime_config"),
         "src/runtime/errors.ts": MagicMock(spec=Path, name="runtime_errors"),
         "src/runtime/executor.ts": MagicMock(spec=Path, name="runtime_executor"),
@@ -132,6 +141,8 @@ def _output_files() -> dict[str, MagicMock]:
         "src/runtime/limiter.ts": MagicMock(spec=Path, name="runtime_limiter"),
         "src/runtime/observability.ts": MagicMock(spec=Path, name="observability"),
         "src/runtime/rate_limit.ts": MagicMock(spec=Path, name="runtime_rate_limit"),
+        "src/runtime/resilience.ts": MagicMock(spec=Path, name="runtime_resilience"),
+        "src/runtime/retry.ts": MagicMock(spec=Path, name="runtime_retry"),
         "src/runtime/request.ts": MagicMock(spec=Path, name="runtime_request"),
         "src/runtime/redaction.ts": MagicMock(spec=Path, name="runtime_redaction"),
         "src/runtime/response.ts": MagicMock(spec=Path, name="runtime_response"),

@@ -20,6 +20,10 @@ RUNTIME_ENV_MAP = {
     "cache_ttl_ms": "MCP_CACHE_TTL_MS",
     "cache_max_entries": "MCP_CACHE_MAX_ENTRIES",
     "rate_limit_per_minute": "MCP_RATE_LIMIT_PER_MINUTE",
+    "retry_max_retries": "MCP_RETRY_MAX_RETRIES",
+    "retry_budget_per_minute": "MCP_RETRY_BUDGET_PER_MINUTE",
+    "circuit_breaker_failure_threshold": "MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD",
+    "circuit_breaker_cooldown_ms": "MCP_CIRCUIT_BREAKER_COOLDOWN_MS",
     "tool_access_mode": "MCP_TOOL_ACCESS_MODE",
     "tool_access_default": "MCP_TOOL_ACCESS_DEFAULT",
     "tool_identity_header": "MCP_TOOL_IDENTITY_HEADER",
@@ -72,6 +76,26 @@ run_runtime_override_options = [
         "--rate-limit-per-minute",
         type=int,
         help="Default per-tool rate limit for safe tools. Use 0 to disable.",
+    ),
+    click.option(
+        "--retry-max-retries",
+        type=int,
+        help="Maximum retry count for safe tools. Retries only activate when retry budget is also > 0. Use 0 to disable retries.",
+    ),
+    click.option(
+        "--retry-budget-per-minute",
+        type=int,
+        help="Maximum retry attempts per tool per minute for safe tools. Retries only activate when retry count is also > 0. Use 0 to disable retries.",
+    ),
+    click.option(
+        "--circuit-breaker-failure-threshold",
+        type=int,
+        help="Consecutive breaker-qualifying failures before safe tools open the circuit. Use 0 to disable.",
+    ),
+    click.option(
+        "--circuit-breaker-cooldown-ms",
+        type=int,
+        help="Cooldown window before a safe tool circuit allows one half-open probe. Only applies when failure threshold is > 0.",
     ),
     click.option(
         "--tool-access-mode",

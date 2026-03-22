@@ -29,6 +29,10 @@ export interface ToolExecutionMetadata {
   timeoutMs?: number;
   cacheTtlMs?: number;
   rateLimitPerMinute?: number;
+  retryMaxRetries?: number;
+  retryBudgetPerMinute?: number;
+  circuitBreakerFailureThreshold?: number;
+  circuitBreakerCooldownMs?: number;
 }
 
 export interface CustomToolDefinition {

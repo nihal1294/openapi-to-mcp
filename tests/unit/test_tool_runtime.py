@@ -48,6 +48,10 @@ def test_build_runtime_tool_registry_renames_all_runtime_fields() -> None:
                 "timeoutMs": 9000,
                 "cacheTtlMs": 60000,
                 "rateLimitPerMinute": 30,
+                "retryMaxRetries": 2,
+                "retryBudgetPerMinute": 15,
+                "circuitBreakerFailureThreshold": 3,
+                "circuitBreakerCooldownMs": 20000,
             },
         }
     ]
@@ -65,6 +69,10 @@ def test_build_runtime_tool_registry_renames_all_runtime_fields() -> None:
                 "timeoutMs": 9000,
                 "cacheTtlMs": 60000,
                 "rateLimitPerMinute": 30,
+                "retryMaxRetries": 2,
+                "retryBudgetPerMinute": 15,
+                "circuitBreakerFailureThreshold": 3,
+                "circuitBreakerCooldownMs": 20000,
             },
         }
     }

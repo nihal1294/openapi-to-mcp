@@ -4,6 +4,7 @@ import * as http from 'http';
 import * as https from 'https';
 import { emitRequestAudit } from './audit.js';
 import { buildCacheKey, resolveCacheTtlMs, ToolResponseCache } from './cache.js';
+import { resolveCircuitBreakerSettings, ToolCircuitBreaker } from './circuit_breaker.js';
 import {
   MAX_CONCURRENCY,
   MAX_QUEUE_SIZE,
@@ -15,8 +16,13 @@ import type { ToolRuntimeMetadata } from './generated.js';
 import { ConcurrencyLimiter } from './limiter.js';
 import { createRequestId } from './observability.js';
 import { resolveRateLimitPerMinute, ToolRateLimiter } from './rate_limit.js';
+import { executeWithResilience } from './resilience.js';
 import {
-  executeUpstream,
+  resolveRetryBudgetPerMinute,
+  resolveRetryMaxRetries,
+  ToolRetryBudget,
+} from './retry.js';
+import {
   handleExecutionError,
   prepareRequestContext,
   tryCachedResult,
@@ -37,6 +43,8 @@ export class ToolExecutor {
   private readonly perToolLimiters = new Map<string, ConcurrencyLimiter>();
   private readonly responseCache = new ToolResponseCache();
   private readonly rateLimiter = new ToolRateLimiter();
+  private readonly retryBudget = new ToolRetryBudget();
+  private readonly circuitBreaker = new ToolCircuitBreaker();
 
   public async execute(
     toolName: string,
@@ -51,6 +59,9 @@ export class ToolExecutor {
     };
     const cacheTtlMs = resolveCacheTtlMs(tool);
     const cacheKey = cacheTtlMs > 0 ? buildCacheKey(toolName, args) : null;
+    const retryMaxRetries = resolveRetryMaxRetries(tool);
+    const retryBudgetPerMinute = resolveRetryBudgetPerMinute(tool);
+    const circuitBreakerSettings = resolveCircuitBreakerSettings(tool);
     let acquiredGlobal = false;
     let acquiredPerTool = false;
     let requestAudited = false;
@@ -60,11 +71,7 @@ export class ToolExecutor {
       emitRequestAudit(toolName, tool, requestContext, context.requestId);
       requestAudited = true;
       this.rateLimiter.assertAllowed(toolName, resolveRateLimitPerMinute(tool));
-      const cachedResult = tryCachedResult(
-        this.responseCache,
-        context,
-        cacheKey
-      );
+      const cachedResult = tryCachedResult(this.responseCache, context, cacheKey);
       if (cachedResult) {
         return cachedResult;
       }
@@ -73,13 +80,18 @@ export class ToolExecutor {
       acquiredGlobal = true;
       await perToolLimiter.acquire();
       acquiredPerTool = true;
-      return await executeUpstream(
+      return await executeWithResilience(
         this.axiosInstance,
         this.responseCache,
+        this.retryBudget,
+        this.circuitBreaker,
         context,
         requestContext,
         cacheKey,
-        cacheTtlMs
+        cacheTtlMs,
+        retryMaxRetries,
+        retryBudgetPerMinute,
+        circuitBreakerSettings
       );
     } catch (error) {
       return handleExecutionError(context, error, requestAudited);

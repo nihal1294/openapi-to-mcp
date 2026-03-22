@@ -18,6 +18,7 @@ AUTH_CREDENTIALS = {
     "/auth/cookie": ("cookie", "session_token", "cookie-secret"),
     "/auth/bearer": ("bearer", "Authorization", "bearer-secret"),
 }
+FLAKY_TWICE_FAILURE_COUNT = 2
 REQUEST_COUNTS: Counter[str] = Counter()
 REQUEST_COUNT_LOCK = Lock()
 
@@ -29,15 +30,31 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
-
         if parsed.path == "/health":
             self._send_json(HTTPStatus.OK, {"ok": True})
             return
-
+        if parsed.path == "/call-count":
+            query = self._query_params(parsed.query)
+            self._send_json(
+                HTTPStatus.OK,
+                {
+                    "call_count": self._lookup_call_count(
+                        str(query.get("path", "")),
+                        str(query.get("query", "")),
+                    )
+                },
+            )
+            return
         if parsed.path == "/test":
             query = self._query_params(parsed.query)
             call_count = self._increment_call_count(parsed.path, parsed.query)
-            if query.get("status") == "server_error":
+            if query.get("status") == "client_error":
+                self._send_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"call_count": call_count, "error": "bad request", "ok": False},
+                )
+                return
+            if self._should_fail_status(query.get("status"), call_count):
                 self._send_json(
                     HTTPStatus.SERVICE_UNAVAILABLE,
                     {
@@ -45,6 +62,7 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
                         "ok": False,
                         "error": "temporary upstream issue",
                         "request_id": self.headers.get("X-Request-Id"),
+                        "status": query.get("status"),
                     },
                 )
                 return
@@ -60,11 +78,9 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
                 },
             )
             return
-
         if parsed.path in AUTH_CREDENTIALS:
             self._handle_auth_request(parsed)
             return
-
         self._send_json(
             HTTPStatus.NOT_FOUND,
             {"ok": False, "error": f"Unhandled path: {parsed.path}"},
@@ -83,7 +99,6 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
                 },
             )
             return
-
         self._send_json(
             HTTPStatus.NOT_FOUND,
             {"ok": False, "error": f"Unhandled path: {parsed.path}"},
@@ -94,9 +109,14 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
         print(log_format % args)  # noqa: T201
 
     def _increment_call_count(self, path: str, query_string: str) -> int:
-        request_key = f"{path}?{query_string}" if query_string else path
+        request_key = _request_key(path, query_string)
         with REQUEST_COUNT_LOCK:
             REQUEST_COUNTS[request_key] += 1
+            return REQUEST_COUNTS[request_key]
+
+    def _lookup_call_count(self, path: str, query_string: str) -> int:
+        request_key = _request_key(path, query_string)
+        with REQUEST_COUNT_LOCK:
             return REQUEST_COUNTS[request_key]
 
     def _send_json(self, status: HTTPStatus, payload: dict[str, object]) -> None:
@@ -119,6 +139,15 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
             return {}
         payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
         return payload if isinstance(payload, dict) else {"value": payload}
+
+    def _should_fail_status(self, status: object, call_count: int) -> bool:
+        if status in {"server_error", "breaker_error", "breaker_recovery_error"}:
+            return True
+        if status == "flaky_once":
+            return call_count <= 1
+        if status == "flaky_twice":
+            return call_count <= FLAKY_TWICE_FAILURE_COUNT
+        return False
 
     def _cookie_params(self) -> dict[str, str]:
         parsed = SimpleCookie(self.headers.get("Cookie", ""))
@@ -143,7 +172,6 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
         valid = received == expected
         if auth_kind == "bearer":
             valid = received == f"Bearer {expected}"
-
         if not valid:
             self._send_json(
                 HTTPStatus.UNAUTHORIZED,
@@ -156,7 +184,6 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
                 },
             )
             return
-
         self._send_json(
             HTTPStatus.OK,
             {
@@ -182,6 +209,10 @@ def main() -> None:
         pass
     finally:
         server.server_close()
+
+
+def _request_key(path: str, query_string: str) -> str:
+    return f"{path}?{query_string}" if query_string else path
 
 
 if __name__ == "__main__":

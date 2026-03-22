@@ -30,10 +30,17 @@ This MCP server was automatically generated from an OpenAPI specification by the
     *   **MCP Runtime Controls (Optional but Recommended):**
         *   `MCP_MAX_CONCURRENCY`, `MCP_PER_TOOL_MAX_CONCURRENCY`, `MCP_MAX_QUEUE_SIZE`, `MCP_QUEUE_TIMEOUT_MS`, `MCP_TOOL_TIMEOUT_MS`
         *   `MCP_CACHE_TTL_MS`, `MCP_CACHE_MAX_ENTRIES`, `MCP_RATE_LIMIT_PER_MINUTE`
+        *   `MCP_RETRY_MAX_RETRIES`, `MCP_RETRY_BUDGET_PER_MINUTE`, `MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD`, `MCP_CIRCUIT_BREAKER_COOLDOWN_MS`
         *   These control parallel tool execution, queueing behavior, timeouts, and optional performance controls for safe tools.
         *   Set `MCP_CACHE_TTL_MS=0` or `MCP_RATE_LIMIT_PER_MINUTE=0` to disable that control globally.
         *   `MCP_CACHE_MAX_ENTRIES` bounds the in-memory cache size when caching is enabled.
-        *   Caching and rate limiting only apply to safe HTTP methods (`GET`, `HEAD`, `OPTIONS`).
+        *   Set `MCP_RETRY_MAX_RETRIES=0` or `MCP_RETRY_BUDGET_PER_MINUTE=0` to disable retries.
+        *   Set `MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD=0` to disable the circuit breaker.
+        *   Retries and circuit-breaker controls only apply to safe HTTP methods (`GET`, `HEAD`, `OPTIONS`).
+        *   Retries are immediate in this first implementation and require both a positive retry count and a positive retry budget.
+        *   Set `MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD=0` to disable the breaker entirely; `MCP_CIRCUIT_BREAKER_COOLDOWN_MS` only applies when the threshold is positive.
+        *   Circuit-breaker thresholds count consecutive retryable failures and allow one half-open probe after each cooldown window.
+        *   Circuit-breaker state is process-local and resets on process restart.
         *   Rate limiting uses a fixed one-minute window, so quota resets at window boundaries.
         *   Invalid values fail fast at startup instead of silently falling back.
     *   **Tool Access Controls (Optional):**

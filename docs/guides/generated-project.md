@@ -53,6 +53,9 @@ SSE generation is intentionally gone.
   cookie names, request bodies, and response bodies
 - optional in-memory response caching for safe methods (`GET`, `HEAD`, `OPTIONS`)
 - optional per-tool fixed-window rate limiting for safe methods
+- optional retry budgets and bounded retries for safe methods
+- optional circuit breakers with open, half-open, and closed state for safe methods
+- circuit-breaker state is process-local and resets on process restart
 - bounded cache size via `MCP_CACHE_MAX_ENTRIES`
 - object-shaped response schemas emitted as MCP `outputSchema`
 - structured JSON object results returned as `structuredContent`
@@ -63,6 +66,7 @@ SSE generation is intentionally gone.
 - auth-derived cookie values redacted by default in audit events
 - `tool_audit_response` emitted for cached successes and non-HTTP failures
 - optional per-tool execution overrides for concurrency, timeout, cache TTL, and rate limit
+- optional per-tool execution overrides for retry counts, retry budgets, and circuit-breaker settings
 - tool list filtering and structured denial errors for disallowed tool calls when access control is enabled
 
 When access control is enabled:
@@ -74,6 +78,9 @@ When access control is enabled:
 
 `meta.error.retryable` is advisory only. It tells callers whether an immediate retry is
 reasonable, but it does not guarantee success on retry and does not imply any backoff policy.
+When retry budgets or circuit breakers reject a call, `meta.error` also includes
+structured runtime metadata such as `retryAfterMs` and `attempts` when available.
+Circuit-breaker cooldown only applies when the configured failure threshold is positive.
 
 ## Customization boundary
 

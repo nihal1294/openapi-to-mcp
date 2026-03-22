@@ -36,6 +36,10 @@ def test_load_policy_config_parses_generation_and_tool_rules(tmp_path: Path) -> 
               timeout_ms: 12000
               cache_ttl_ms: 60000
               rate_limit_per_minute: 30
+              retry_max_retries: 2
+              retry_budget_per_minute: 10
+              circuit_breaker_failure_threshold: 4
+              circuit_breaker_cooldown_ms: 15000
         """,
         encoding="utf-8",
     )
@@ -53,6 +57,10 @@ def test_load_policy_config_parses_generation_and_tool_rules(tmp_path: Path) -> 
     assert policy.execution_names["fetchPets"].timeout_ms == 12000
     assert policy.execution_names["fetchPets"].cache_ttl_ms == 60000
     assert policy.execution_names["fetchPets"].rate_limit_per_minute == 30
+    assert policy.execution_names["fetchPets"].retry_max_retries == 2
+    assert policy.execution_names["fetchPets"].retry_budget_per_minute == 10
+    assert policy.execution_names["fetchPets"].circuit_breaker_failure_threshold == 4
+    assert policy.execution_names["fetchPets"].circuit_breaker_cooldown_ms == 15000
 
 
 def test_load_policy_config_autodiscovers_default_file(
@@ -86,6 +94,22 @@ def test_load_policy_config_autodiscovers_default_file(
         (
             "execution:\n  names:\n    listPets:\n      rate_limit_per_minute: -1\n",
             "rate_limit_per_minute",
+        ),
+        (
+            "execution:\n  names:\n    listPets:\n      retry_max_retries: -1\n",
+            "retry_max_retries",
+        ),
+        (
+            "execution:\n  names:\n    listPets:\n      retry_budget_per_minute: -1\n",
+            "retry_budget_per_minute",
+        ),
+        (
+            "execution:\n  names:\n    listPets:\n      circuit_breaker_failure_threshold: -1\n",
+            "circuit_breaker_failure_threshold",
+        ),
+        (
+            "execution:\n  names:\n    listPets:\n      circuit_breaker_cooldown_ms: 0\n",
+            "circuit_breaker_cooldown_ms",
         ),
         ("generate:\n  tool_grouping: by-tag\n", "generate.tool_grouping"),
     ],

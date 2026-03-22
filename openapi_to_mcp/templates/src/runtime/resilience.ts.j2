@@ -1,0 +1,120 @@
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { AxiosInstance } from 'axios';
+
+import type { ToolResponseCache } from './cache.js';
+import type {
+  CircuitBreakerLease,
+  CircuitBreakerSettings,
+  ToolCircuitBreaker,
+} from './circuit_breaker.js';
+import {
+  mapApiErrorToToolError,
+  shouldRetryToolFailure,
+  type ToolExecutionError,
+} from './errors.js';
+import { executeUpstream, type ExecutionContext } from './executor_support.js';
+import { logEvent } from './observability.js';
+import type { RequestContext } from './request.js';
+import type { ToolRetryBudget } from './retry.js';
+
+export async function executeWithResilience(
+  axiosInstance: AxiosInstance,
+  responseCache: ToolResponseCache,
+  retryBudget: ToolRetryBudget,
+  circuitBreaker: ToolCircuitBreaker,
+  context: ExecutionContext,
+  requestContext: RequestContext,
+  cacheKey: string | null,
+  cacheTtlMs: number,
+  retryMaxRetries: number,
+  retryBudgetPerMinute: number,
+  circuitBreakerSettings: CircuitBreakerSettings | null
+): Promise<CallToolResult> {
+  const circuitLease = circuitBreaker.acquireExecution(
+    context.toolName,
+    circuitBreakerSettings
+  );
+  let attempt = 1;
+
+  while (true) {
+    try {
+      const result = await executeUpstream(
+        axiosInstance,
+        responseCache,
+        context,
+        requestContext,
+        cacheKey,
+        cacheTtlMs
+      );
+      circuitBreaker.recordSuccess(context.toolName, circuitLease);
+      return result;
+    } catch (error) {
+      const toolError = mapApiErrorToToolError(error);
+      const nextAttempt = attempt + 1;
+      if (!shouldRetry(toolError, attempt, retryMaxRetries, retryBudgetPerMinute)) {
+        finishCircuitBreaker(
+          circuitBreaker,
+          context.toolName,
+          circuitBreakerSettings,
+          circuitLease,
+          toolError
+        );
+        throw toolError;
+      }
+      try {
+        retryBudget.assertRetryAllowed(
+          context.toolName,
+          retryBudgetPerMinute,
+          nextAttempt
+        );
+      } catch (budgetError) {
+        finishCircuitBreaker(
+          circuitBreaker,
+          context.toolName,
+          circuitBreakerSettings,
+          circuitLease,
+          toolError
+        );
+        throw budgetError;
+      }
+      logEvent('info', 'tool_execution_retrying', {
+        requestId: context.requestId,
+        toolName: context.toolName,
+        attempt: nextAttempt,
+        errorCode: toolError.meta.code,
+      });
+      attempt = nextAttempt;
+    }
+  }
+}
+
+function shouldRetry(
+  error: ToolExecutionError,
+  attempt: number,
+  retryMaxRetries: number,
+  retryBudgetPerMinute: number
+): boolean {
+  if (!shouldRetryToolFailure(error)) {
+    return false;
+  }
+  if (retryMaxRetries <= 0 || retryBudgetPerMinute <= 0) {
+    return false;
+  }
+  return attempt <= retryMaxRetries;
+}
+
+function finishCircuitBreaker(
+  circuitBreaker: ToolCircuitBreaker,
+  toolName: string,
+  settings: CircuitBreakerSettings | null,
+  lease: CircuitBreakerLease | null,
+  error: ToolExecutionError
+): void {
+  if (shouldRetryToolFailure(error)) {
+    circuitBreaker.recordFailure(toolName, settings, lease);
+    return;
+  }
+  if (lease?.halfOpen) {
+    circuitBreaker.recordSuccess(toolName, lease);
+  }
+}

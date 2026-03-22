@@ -1,0 +1,61 @@
+import {
+  RETRY_BUDGET_PER_MINUTE,
+  RETRY_MAX_RETRIES,
+} from './config.js';
+import { createToolExecutionError } from './errors.js';
+import type { ToolRuntimeMetadata } from './generated.js';
+import { isSafeMethod } from './request.js';
+
+interface RetryWindow {
+  retryCount: number;
+  windowStartedAt: number;
+}
+
+export function resolveRetryMaxRetries(tool: ToolRuntimeMetadata): number {
+  if (!isSafeMethod(tool.method)) {
+    return 0;
+  }
+  return tool.execution?.retryMaxRetries ?? RETRY_MAX_RETRIES;
+}
+
+export function resolveRetryBudgetPerMinute(tool: ToolRuntimeMetadata): number {
+  if (!isSafeMethod(tool.method)) {
+    return 0;
+  }
+  return tool.execution?.retryBudgetPerMinute ?? RETRY_BUDGET_PER_MINUTE;
+}
+
+export class ToolRetryBudget {
+  private readonly windows = new Map<string, RetryWindow>();
+
+  public assertRetryAllowed(
+    toolName: string,
+    retryBudgetPerMinute: number,
+    nextAttempt: number
+  ): void {
+    const current = this.currentWindow(toolName);
+    if (current.retryCount >= retryBudgetPerMinute) {
+      throw createToolExecutionError(
+        'retry_budget_exhausted',
+        'runtime',
+        true,
+        'Retry budget exhausted for this tool.',
+        {
+          attempts: nextAttempt,
+          retryAfterMs: 60000 - (Date.now() - current.windowStartedAt),
+        }
+      );
+    }
+    current.retryCount += 1;
+    this.windows.set(toolName, current);
+  }
+
+  private currentWindow(toolName: string): RetryWindow {
+    const existing = this.windows.get(toolName);
+    const now = Date.now();
+    if (!existing || now - existing.windowStartedAt >= 60000) {
+      return { retryCount: 0, windowStartedAt: now };
+    }
+    return existing;
+  }
+}
