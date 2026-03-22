@@ -36,6 +36,7 @@ openapi-to-mcp run [OPTIONS]
 | `--tool-grouping` | No | `none` | Optional grouped tool naming strategy (`none` or `tag-prefix`) |
 | `--target-api-base-url` | No | None | Override `TARGET_API_BASE_URL` explicitly |
 | `--env-source` | No | None | Runtime env values as JSON string or path to `.json` or `.env` |
+| `--performance-preset` | No | None | Apply a named bundle of runtime defaults; explicit runtime overrides still win |
 | `--origin-allowlist` | No | None | Override `MCP_ALLOWED_ORIGINS` for `streamable-http` |
 | `--host-allowlist` | No | None | Override `MCP_ALLOWED_HOSTS` for `streamable-http` |
 | `--max-concurrency` | No | None | Override `MCP_MAX_CONCURRENCY` |
@@ -138,6 +139,19 @@ openapi-to-mcp run \
   --tool-timeout-ms 45000
 ```
 
+### Apply a performance preset with one explicit override
+
+```bash
+openapi-to-mcp run \
+  --openapi-json ./openapi.yaml \
+  --target-api-base-url https://example.com/api \
+  --performance-preset balanced \
+  --cache-ttl-ms 0
+```
+
+`--performance-preset` expands to reviewable defaults. Explicit runtime overrides still
+win, so this command keeps the `balanced` preset while disabling caching explicitly.
+
 ### Enable safe-method caching and rate limiting
 
 ```bash
@@ -172,6 +186,16 @@ opens after the configured number of consecutive retryable failures and allows o
 half-open probe after each cooldown window. Set the failure threshold to `0` to
 disable the breaker entirely; the cooldown has no effect until the threshold is
 positive. Circuit-breaker state is process-local and resets when the server restarts.
+
+### Performance preset expansions
+
+`--performance-preset` and `MCP_PERFORMANCE_PRESET` currently expand to:
+
+| Preset | Max concurrency | Per-tool | Queue size | Queue timeout ms | Tool timeout ms | Cache TTL ms | Cache max entries | Rate limit/min | Retry max | Retry budget/min | Breaker threshold | Breaker cooldown ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `conservative` | 16 | 4 | 64 | 2000 | 20000 | 0 | 500 | 30 | 0 | 0 | 0 | 30000 |
+| `balanced` | 32 | 8 | 256 | 5000 | 30000 | 30000 | 1000 | 60 | 1 | 30 | 3 | 15000 |
+| `aggressive` | 64 | 16 | 512 | 8000 | 45000 | 120000 | 2000 | 120 | 2 | 60 | 5 | 10000 |
 
 ### Restrict visible tools by caller identity
 
@@ -225,6 +249,7 @@ Accepted values:
 
 `run` copies `.env.example` to `.env` when needed, writes overrides, and then starts the generated server with resolved runtime values.
 CLI runtime-control flags are written as the corresponding `MCP_*` env vars before startup.
+`MCP_PERFORMANCE_PRESET` defaults to `off`.
 `MCP_CACHE_TTL_MS` and `MCP_RATE_LIMIT_PER_MINUTE` both default to `0` (disabled).
 `MCP_CACHE_MAX_ENTRIES` defaults to `1000`.
 `MCP_RETRY_MAX_RETRIES` and `MCP_RETRY_BUDGET_PER_MINUTE` default to `0` (disabled).

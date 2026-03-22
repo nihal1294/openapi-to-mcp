@@ -28,9 +28,12 @@ This MCP server was automatically generated from an OpenAPI specification by the
     *   **`TARGET_API_AUTH_HEADER` (Optional):**
         *   Provide the full authorization header string if required by the target API (e.g., `Authorization: Bearer your_token` or `X-API-Key: your_key`). Leave it commented out or blank if no auth header is needed.
     *   **MCP Runtime Controls (Optional but Recommended):**
+        *   `MCP_PERFORMANCE_PRESET=off|conservative|balanced|aggressive`
         *   `MCP_MAX_CONCURRENCY`, `MCP_PER_TOOL_MAX_CONCURRENCY`, `MCP_MAX_QUEUE_SIZE`, `MCP_QUEUE_TIMEOUT_MS`, `MCP_TOOL_TIMEOUT_MS`
         *   `MCP_CACHE_TTL_MS`, `MCP_CACHE_MAX_ENTRIES`, `MCP_RATE_LIMIT_PER_MINUTE`
         *   `MCP_RETRY_MAX_RETRIES`, `MCP_RETRY_BUDGET_PER_MINUTE`, `MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD`, `MCP_CIRCUIT_BREAKER_COOLDOWN_MS`
+        *   `MCP_PERFORMANCE_PRESET` expands into reviewable runtime defaults for the controls below.
+        *   Explicit env vars still override any preset-expanded values.
         *   These control parallel tool execution, queueing behavior, timeouts, and optional performance controls for safe tools.
         *   Set `MCP_CACHE_TTL_MS=0` or `MCP_RATE_LIMIT_PER_MINUTE=0` to disable that control globally.
         *   `MCP_CACHE_MAX_ENTRIES` bounds the in-memory cache size when caching is enabled.
@@ -43,6 +46,16 @@ This MCP server was automatically generated from an OpenAPI specification by the
         *   Circuit-breaker state is process-local and resets on process restart.
         *   Rate limiting uses a fixed one-minute window, so quota resets at window boundaries.
         *   Invalid values fail fast at startup instead of silently falling back.
+
+### Performance preset expansions
+
+| Preset | Max concurrency | Per-tool | Queue size | Queue timeout ms | Tool timeout ms | Cache TTL ms | Cache max entries | Rate limit/min | Retry max | Retry budget/min | Breaker threshold | Breaker cooldown ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+{% for preset in performance_presets -%}
+| `{{ preset.name }}` | {{ preset.max_concurrency }} | {{ preset.per_tool_max_concurrency }} | {{ preset.max_queue_size }} | {{ preset.queue_timeout_ms }} | {{ preset.tool_timeout_ms }} | {{ preset.cache_ttl_ms }} | {{ preset.cache_max_entries }} | {{ preset.rate_limit_per_minute }} | {{ preset.retry_max_retries }} | {{ preset.retry_budget_per_minute }} | {{ preset.circuit_breaker_failure_threshold }} | {{ preset.circuit_breaker_cooldown_ms }} |
+{% endfor %}
+
+Explicit env vars and per-tool execution overrides still win over these preset values.
     *   **Tool Access Controls (Optional):**
         *   `MCP_TOOL_ACCESS_MODE`, `MCP_TOOL_ACCESS_DEFAULT`, `MCP_TOOL_IDENTITY_HEADER`, `MCP_TOOL_ALLOWLISTS`
         *   These enable request-scoped tool allowlists for generated runtimes.
