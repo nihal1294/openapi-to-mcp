@@ -546,6 +546,23 @@ main() {
   run_performance_suite_assertions "rate-limited"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_TTL_MS" "0"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RATE_LIMIT_PER_MINUTE" "0"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_PERFORMANCE_PRESET" "balanced"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_TTL_MS" ""
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_MAX_ENTRIES" ""
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RATE_LIMIT_PER_MINUTE" ""
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RETRY_MAX_RETRIES" ""
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RETRY_BUDGET_PER_MINUTE" ""
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" \
+    "MCP_CIRCUIT_BREAKER_FAILURE_THRESHOLD" ""
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" \
+    "MCP_CIRCUIT_BREAKER_COOLDOWN_MS" ""
+  start_streamable_http_server "$HTTP_OUTPUT_DIR"
+  run_performance_suite_assertions "preset-cached"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_TTL_MS" "0"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RATE_LIMIT_PER_MINUTE" "0"
+  start_streamable_http_server "$HTTP_OUTPUT_DIR"
+  run_performance_suite_assertions "preset-uncached"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_PERFORMANCE_PRESET" "off"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RETRY_MAX_RETRIES" "1"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RETRY_BUDGET_PER_MINUTE" "5"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" \
