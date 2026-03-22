@@ -60,6 +60,13 @@ SSE generation is intentionally gone.
 - optional per-tool execution overrides for concurrency, timeout, cache TTL, and rate limit
 - tool list filtering and structured denial errors for disallowed tool calls when access control is enabled
 
+When access control is enabled:
+
+- identity values are exact, case-sensitive matches
+- `stdio` uses the reserved `stdio` identity
+- `streamable-http` resolves identity per request, and sessions are not bound to the
+  identity observed during initialization
+
 `meta.error.retryable` is advisory only. It tells callers whether an immediate retry is
 reasonable, but it does not guarantee success on retry and does not imply any backoff policy.
 

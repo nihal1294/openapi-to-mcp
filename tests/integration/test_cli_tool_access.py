@@ -31,6 +31,7 @@ def test_generate_emits_tool_access_runtime_wiring(
     assert result.exit_code == 0
     assert (output_dir / "src" / "runtime" / "request_context.ts").exists()
     assert (output_dir / "src" / "runtime" / "tool_access.ts").exists()
+    assert (output_dir / "src" / "runtime" / "http_transport.ts").exists()
 
     env_example = (output_dir / ".env.example").read_text(encoding="utf-8")
     server_source = (output_dir / "src" / "server.ts").read_text(encoding="utf-8")
@@ -48,6 +49,7 @@ def test_generate_emits_tool_access_runtime_wiring(
     assert "MCP_TOOL_ALLOWLISTS=" in env_example
     assert "filterToolsForCaller(this.allTools)" in server_source
     assert "tool_execution_denied" in server_source
+    assert "error.meta.source !== 'auth'" in server_source
     assert "withRequestCallerContext" in transport_source
     assert "MCP_TOOL_ACCESS_MODE" in config_source
     assert "MCP_TOOL_ALLOWLISTS must be valid JSON." in access_source

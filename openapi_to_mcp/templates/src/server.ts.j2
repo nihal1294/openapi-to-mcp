@@ -124,6 +124,9 @@ export class OpenApiMcpServer {
           if (!(error instanceof ToolExecutionError)) {
             throw error;
           }
+          if (error.meta.source !== 'auth') {
+            throw error;
+          }
           return this.handleDeniedTool(toolName, error);
         }
       }

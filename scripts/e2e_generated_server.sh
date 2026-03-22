@@ -456,7 +456,7 @@ main() {
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_TOOL_ACCESS_MODE" "allowlist"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_TOOL_ACCESS_DEFAULT" "deny"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_TOOL_IDENTITY_HEADER" "X-MCP-Tenant"
-  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_TOOL_ALLOWLISTS" '{"acme":["testConversionTool"]}'
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_TOOL_ALLOWLISTS" '{"acme":[" testConversionTool "]}'
   start_streamable_http_server "$HTTP_OUTPUT_DIR"
   run_access_suite_assertions "allowed" "testConversionTool" "X-MCP-Tenant" "acme"
   run_access_suite_assertions "denied" "testConversionTool" "X-MCP-Tenant" "blocked"

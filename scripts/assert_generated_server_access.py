@@ -56,6 +56,7 @@ class StreamableHttpSession:
             timeout=30,
             headers=self._headers(),
         )
+        # Streamable HTTP commonly returns 202 here with no body; only HTTP status matters.
         initialized.raise_for_status()
 
     def list_tools(self) -> dict[str, Any]:

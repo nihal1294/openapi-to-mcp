@@ -161,6 +161,10 @@ The reserved identities are:
 - `anonymous` for requests without the configured identity header
 - `stdio` for stdio transport
 
+Identity values are exact, case-sensitive matches against `MCP_TOOL_ALLOWLISTS`.
+For `streamable-http`, identity is resolved from each incoming request. Sessions are not
+bound to the identity observed during initialization.
+
 ## `--env-source` formats
 
 Accepted values:

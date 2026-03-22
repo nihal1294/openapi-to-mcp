@@ -93,10 +93,8 @@ function parseToolNameArray(identity: string, value: unknown): string[] {
       `MCP_TOOL_ALLOWLISTS entry '${identity}' must be an array of tool names.`
     );
   }
-  const toolNames = value.filter(
-    (item): item is string => typeof item === 'string' && item.trim().length > 0
-  );
-  if (toolNames.length !== value.length) {
+  const toolNames = value.map((item) => parseToolName(identity, item));
+  if (toolNames.some((toolName) => toolName.length === 0)) {
     throw new Error(
       `MCP_TOOL_ALLOWLISTS entry '${identity}' must contain only non-empty string tool names.`
     );
@@ -104,10 +102,20 @@ function parseToolNameArray(identity: string, value: unknown): string[] {
   return toolNames;
 }
 
+function parseToolName(identity: string, value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new Error(
+      `MCP_TOOL_ALLOWLISTS entry '${identity}' must contain only non-empty string tool names.`
+    );
+  }
+  return value.trim();
+}
+
 function resolveAllowedNames(): Set<string> | null {
   const { identity } = getRequestCallerContext();
   const explicit = TOOL_ACCESS_POLICY.allowlists.get(identity);
   if (explicit) {
+    // An explicit empty set means deny every tool for this identity.
     return explicit;
   }
   return TOOL_ACCESS_POLICY.defaultAccess === 'allow' ? null : new Set();
