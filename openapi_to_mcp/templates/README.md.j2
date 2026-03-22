@@ -45,6 +45,16 @@ This MCP server was automatically generated from an OpenAPI specification by the
         *   Identity values are exact, case-sensitive matches.
         *   Invalid `MCP_TOOL_ALLOWLISTS` JSON fails fast at startup.
         *   For `streamable-http`, identity is resolved from each incoming request. Sessions are not bound to the identity observed during initialization.
+    *   **Audit and Redaction Controls (Optional):**
+        *   `MCP_AUDIT_MODE`, `MCP_AUDIT_REDACT_HEADERS`, `MCP_AUDIT_REDACT_QUERY_PARAMS`, `MCP_AUDIT_REDACT_COOKIE_NAMES`
+        *   `MCP_AUDIT_REDACT_REQUEST_BODY_PATHS`, `MCP_AUDIT_REDACT_RESPONSE_BODY_PATHS`
+        *   `MCP_AUDIT_MODE=logs` emits `tool_audit_request` and `tool_audit_response` events on stderr.
+        *   Header, query, and cookie names are matched case-insensitively.
+        *   Auth-derived cookie values are redacted by default.
+        *   Body-path redaction only applies to JSON object or array payloads.
+        *   Cached successes still emit paired audit events with `cacheHit: true`.
+        *   Network and runtime failures emit `tool_audit_response` with `status: null` when no upstream HTTP response exists.
+        *   Body-path redaction uses dot notation and supports `*` array wildcards.
     *   **Runtime Validation:**
         *   Generated tool input validation is set to `{{ runtime_validation }}`.
         *   When set to `input`, tool arguments are validated against the generated `inputSchema` before the upstream API call.
@@ -55,6 +65,7 @@ This MCP server was automatically generated from an OpenAPI specification by the
         *   Tool results include `meta.requestId`.
         *   The generated runtime forwards that value upstream as `X-Request-Id`.
         *   Tool start, success, and failure events are emitted as JSON logs on stderr.
+        *   Audit logs stay local to stderr and do not depend on any external sink.
     *   **Streamable HTTP Settings (if transport is `streamable-http`):**
         *   `MCP_HTTP_HOST`, `MCP_HTTP_PORT`, `MCP_HTTP_ENDPOINT`, `MCP_ALLOWED_ORIGINS`, `MCP_ALLOWED_HOSTS`
         *   Invalid `TARGET_API_BASE_URL` values also fail fast at startup. Use an absolute `http` or `https` URL.

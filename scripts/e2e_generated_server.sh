@@ -7,6 +7,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TMP_ROOT="${TMP_ROOT:-${RUNNER_TEMP:-/tmp}/openapi-to-mcp-e2e}"
 BASIC_OPENAPI_SPEC="${OPENAPI_SPEC:-${REPO_ROOT}/tests/resources/test_openapi.yaml}"
 AUTH_OPENAPI_SPEC="${AUTH_OPENAPI_SPEC:-${REPO_ROOT}/tests/resources/auth_openapi.yaml}"
+AUDIT_OPENAPI_SPEC="${AUDIT_OPENAPI_SPEC:-${REPO_ROOT}/tests/resources/audit_openapi.yaml}"
 MOCK_API_HOST="${MOCK_API_HOST:-127.0.0.1}"
 MOCK_API_PORT="${MOCK_API_PORT:-}"
 HTTP_HOST="${HTTP_HOST:-127.0.0.1}"
@@ -21,6 +22,7 @@ NO_VALIDATION_OUTPUT_DIR="${TMP_ROOT}/generated-no-validation-stdio"
 GROUPED_OUTPUT_DIR="${TMP_ROOT}/generated-grouped-stdio"
 AUTH_STDIO_OUTPUT_DIR="${TMP_ROOT}/generated-auth-stdio"
 AUTH_HTTP_OUTPUT_DIR="${TMP_ROOT}/generated-auth-http"
+AUDIT_HTTP_OUTPUT_DIR="${TMP_ROOT}/generated-audit-http"
 AUTH_HEADER_API_KEY="${AUTH_HEADER_API_KEY:-header-secret}"
 AUTH_QUERY_API_KEY="${AUTH_QUERY_API_KEY:-query-secret}"
 AUTH_COOKIE_API_KEY="${AUTH_COOKIE_API_KEY:-cookie-secret}"
@@ -251,7 +253,8 @@ build_generated_server() {
 
 start_streamable_http_server() {
   local output_dir="$1"
-  local log_file="${TMP_ROOT}/$(basename "$output_dir").log"
+  local log_file
+  log_file="$(http_server_log_file "$output_dir")"
   local runtime_http_port="${HTTP_PORT:-}"
 
   if [[ -n "$HTTP_SERVER_PID" ]] && kill -0 "$HTTP_SERVER_PID" >/dev/null 2>&1; then
@@ -276,6 +279,11 @@ start_streamable_http_server() {
   ensure_process_alive "$HTTP_SERVER_PID" "generated HTTP server" "$log_file"
   wait_for_http_status "http://${HTTP_HOST}:${CURRENT_HTTP_PORT}${MCP_ENDPOINT}" 400
   ensure_process_alive "$HTTP_SERVER_PID" "generated HTTP server" "$log_file"
+}
+
+http_server_log_file() {
+  local output_dir="$1"
+  printf '%s/%s.log\n' "$TMP_ROOT" "$(basename "$output_dir")"
 }
 
 run_suite_assertions() {
@@ -331,6 +339,38 @@ run_access_suite_assertions() {
   (
     cd "$REPO_ROOT"
     run_uv run python scripts/assert_generated_server_access.py "${args[@]}"
+  )
+}
+
+run_audit_assertion() {
+  local output_dir="$1"
+  local tool_name="$2"
+  local tool_arguments="$3"
+  shift 3
+
+  (
+    cd "$REPO_ROOT"
+    run_uv run python scripts/assert_generated_server_audit.py \
+      --endpoint-url "http://${HTTP_HOST}:${CURRENT_HTTP_PORT}${MCP_ENDPOINT}" \
+      --tool-name "$tool_name" \
+      --tool-arguments "$tool_arguments" \
+      --log-file "$(http_server_log_file "$output_dir")" \
+      "$@"
+  )
+}
+
+run_cached_audit_assertion() {
+  local output_dir="$1"
+  local tool_name="${2:-testConversionTool}"
+  local tool_arguments="${3:-{\"status\":\"cached\"}}"
+
+  (
+    cd "$REPO_ROOT"
+    run_uv run python scripts/assert_generated_server_cached_audit.py \
+      --endpoint-url "http://${HTTP_HOST}:${CURRENT_HTTP_PORT}${MCP_ENDPOINT}" \
+      --tool-name "$tool_name" \
+      --tool-arguments "$tool_arguments" \
+      --log-file "$(http_server_log_file "$output_dir")"
   )
 }
 
@@ -467,11 +507,14 @@ main() {
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_TTL_MS" "60000"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_MAX_ENTRIES" "1000"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RATE_LIMIT_PER_MINUTE" "0"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_AUDIT_MODE" "logs"
   start_streamable_http_server "$HTTP_OUTPUT_DIR"
   run_performance_suite_assertions "cached"
+  run_cached_audit_assertion "$HTTP_OUTPUT_DIR"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_TTL_MS" "60000"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_MAX_ENTRIES" "1000"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RATE_LIMIT_PER_MINUTE" "1"
+  replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_AUDIT_MODE" "off"
   start_streamable_http_server "$HTTP_OUTPUT_DIR"
   run_performance_suite_assertions "cached-rate-limited"
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_CACHE_TTL_MS" "0"
@@ -479,6 +522,36 @@ main() {
   replace_or_append_env_var "${HTTP_OUTPUT_DIR}/.env" "MCP_RATE_LIMIT_PER_MINUTE" "1"
   start_streamable_http_server "$HTTP_OUTPUT_DIR"
   run_performance_suite_assertions "rate-limited"
+
+  echo "Generating and validating audit streamable-http server"
+  generate_server \
+    "$AUDIT_HTTP_OUTPUT_DIR" "streamable-http" "$AUDIT_OPENAPI_SPEC" \
+    "generated-audit-http-e2e"
+  build_generated_server "$AUDIT_HTTP_OUTPUT_DIR"
+  replace_or_append_env_var "${AUDIT_HTTP_OUTPUT_DIR}/.env" \
+    "TARGET_API_AUTH_HEADER" "Authorization: Bearer audit-secret"
+  replace_or_append_env_var "${AUDIT_HTTP_OUTPUT_DIR}/.env" "MCP_AUDIT_MODE" "logs"
+  replace_or_append_env_var "${AUDIT_HTTP_OUTPUT_DIR}/.env" \
+    "MCP_AUDIT_REDACT_QUERY_PARAMS" "status"
+  replace_or_append_env_var "${AUDIT_HTTP_OUTPUT_DIR}/.env" \
+    "MCP_AUDIT_REDACT_REQUEST_BODY_PATHS" "credentials.token,profile.email,tokens.*"
+  replace_or_append_env_var "${AUDIT_HTTP_OUTPUT_DIR}/.env" \
+    "MCP_AUDIT_REDACT_RESPONSE_BODY_PATHS" \
+    "echoed.credentials.token,echoed.profile.email,echoed.tokens.*"
+  start_streamable_http_server "$AUDIT_HTTP_OUTPUT_DIR"
+  run_audit_assertion \
+    "$AUDIT_HTTP_OUTPUT_DIR" "postAuditBody" \
+    '{"status":"queued","requestBody":{"credentials":{"token":"secret-token"},"profile":{"email":"user@example.com"},"tokens":["alpha","beta"],"note":"keep"}}' \
+    --redacted-header Authorization \
+    --redacted-query status \
+    --redacted-request-path credentials.token \
+    --redacted-request-path profile.email \
+    --redacted-request-path tokens.0 \
+    --redacted-request-path tokens.1 \
+    --redacted-response-path echoed.credentials.token \
+    --redacted-response-path echoed.profile.email \
+    --redacted-response-path echoed.tokens.0 \
+    --redacted-response-path echoed.tokens.1
 
   echo "Generating and validating stdio server without runtime validation"
   generate_server \
@@ -512,8 +585,13 @@ main() {
     "generated-auth-http-e2e"
   build_generated_server "$AUTH_HTTP_OUTPUT_DIR"
   prepare_auth_env_file "$AUTH_HTTP_OUTPUT_DIR"
+  replace_or_append_env_var "${AUTH_HTTP_OUTPUT_DIR}/.env" "MCP_AUDIT_MODE" "logs"
   start_streamable_http_server "$AUTH_HTTP_OUTPUT_DIR"
   run_suite_assertions "auth" "streamable-http" "$AUTH_HTTP_OUTPUT_DIR"
+  run_audit_assertion \
+    "$AUTH_HTTP_OUTPUT_DIR" "getCookieAuth" '{}' \
+    --redacted-header Cookie \
+    --redacted-cookie session_token
 
   echo "Generated-server E2E passed"
 }

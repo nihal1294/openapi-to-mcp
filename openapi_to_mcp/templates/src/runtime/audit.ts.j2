@@ -1,0 +1,98 @@
+import {
+  AUDIT_MODE,
+  AUDIT_REDACT_COOKIE_NAMES,
+  AUDIT_REDACT_HEADERS,
+  AUDIT_REDACT_QUERY_PARAMS,
+  AUDIT_REDACT_REQUEST_BODY_PATHS,
+  AUDIT_REDACT_RESPONSE_BODY_PATHS,
+} from './config.js';
+import type { ToolRuntimeMetadata } from './generated.js';
+import { logEvent } from './observability.js';
+import { redactBodyPaths, redactHeaders, redactNamedValues } from './redaction.js';
+import { getRequestCallerContext } from './request_context.js';
+import type { RequestContext, UpstreamResponse } from './request.js';
+
+type AuditOutcome = 'success' | 'error';
+
+function normalizeConfiguredNames(values: string[]): Set<string> {
+  return new Set(values.map((value) => value.toLowerCase()));
+}
+
+function buildRedactionNames(
+  configuredNames: Set<string>,
+  extraNames: string[]
+): Set<string> {
+  return new Set([
+    ...configuredNames,
+    ...extraNames.map((value) => value.toLowerCase()),
+  ]);
+}
+
+const HEADER_REDACTIONS = normalizeConfiguredNames(AUDIT_REDACT_HEADERS);
+const QUERY_REDACTIONS = normalizeConfiguredNames(AUDIT_REDACT_QUERY_PARAMS);
+const COOKIE_REDACTIONS = normalizeConfiguredNames(AUDIT_REDACT_COOKIE_NAMES);
+
+export function emitRequestAudit(
+  toolName: string,
+  tool: ToolRuntimeMetadata,
+  requestContext: RequestContext,
+  requestId: string
+): void {
+  if (AUDIT_MODE === 'off') {
+    return;
+  }
+  const caller = getRequestCallerContext();
+  logEvent('info', 'tool_audit_request', {
+    requestId,
+    toolName,
+    callerIdentity: caller.identity,
+    transport: caller.transport,
+    method: tool.method,
+    path: tool.path,
+    targetPath: requestContext.targetPath,
+    headers: redactHeaders(requestContext.headers, HEADER_REDACTIONS),
+    query: redactNamedValues(requestContext.queryParams, QUERY_REDACTIONS),
+    cookies: redactNamedValues(
+      requestContext.cookies,
+      buildRedactionNames(
+        COOKIE_REDACTIONS,
+        requestContext.sensitiveCookieNames
+      )
+    ),
+    requestBody: redactBodyPaths(
+      requestContext.requestData,
+      AUDIT_REDACT_REQUEST_BODY_PATHS
+    ),
+  });
+}
+
+export function emitResponseAudit(
+  toolName: string,
+  tool: ToolRuntimeMetadata,
+  response: UpstreamResponse,
+  requestId: string,
+  outcome: AuditOutcome
+): void {
+  if (AUDIT_MODE === 'off') {
+    return;
+  }
+  const caller = getRequestCallerContext();
+  logEvent('info', 'tool_audit_response', {
+    requestId,
+    toolName,
+    callerIdentity: caller.identity,
+    transport: caller.transport,
+    outcome,
+    method: tool.method,
+    path: tool.path,
+    cacheHit: response.cacheHit === true,
+    status: response.status,
+    contentType: response.contentType,
+    errorCode: response.errorCode,
+    errorSource: response.errorSource,
+    responseBody: redactBodyPaths(
+      response.responseData,
+      AUDIT_REDACT_RESPONSE_BODY_PATHS
+    ),
+  });
+}

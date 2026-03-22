@@ -47,6 +47,9 @@ def test_run_help_lists_runtime_options() -> None:
     assert "--tool-access-default" in result.output
     assert "derive caller identity" in result.output
     assert "--tool-allowlists" in result.output
+    assert "--audit-mode" in result.output
+    assert "names redacted in audit" in result.output
+    assert "request-body audit" in result.output
 
 
 def test_doctor_help_lists_output_options() -> None:

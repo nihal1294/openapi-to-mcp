@@ -24,6 +24,12 @@ RUNTIME_ENV_MAP = {
     "tool_access_default": "MCP_TOOL_ACCESS_DEFAULT",
     "tool_identity_header": "MCP_TOOL_IDENTITY_HEADER",
     "tool_allowlists": "MCP_TOOL_ALLOWLISTS",
+    "audit_mode": "MCP_AUDIT_MODE",
+    "audit_redact_headers": "MCP_AUDIT_REDACT_HEADERS",
+    "audit_redact_query_params": "MCP_AUDIT_REDACT_QUERY_PARAMS",
+    "audit_redact_cookie_names": "MCP_AUDIT_REDACT_COOKIE_NAMES",
+    "audit_redact_request_body_paths": "MCP_AUDIT_REDACT_REQUEST_BODY_PATHS",
+    "audit_redact_response_body_paths": "MCP_AUDIT_REDACT_RESPONSE_BODY_PATHS",
 }
 
 run_runtime_override_options = [
@@ -84,6 +90,31 @@ run_runtime_override_options = [
     click.option(
         "--tool-allowlists",
         help="JSON object mapping caller identities to arrays of allowed tool names.",
+    ),
+    click.option(
+        "--audit-mode",
+        type=click.Choice(["off", "logs"], case_sensitive=False),
+        help="Audit sink mode for generated runtimes.",
+    ),
+    click.option(
+        "--audit-redact-headers",
+        help="Comma-separated header names redacted in audit events.",
+    ),
+    click.option(
+        "--audit-redact-query-params",
+        help="Comma-separated query parameter names redacted in audit events.",
+    ),
+    click.option(
+        "--audit-redact-cookie-names",
+        help="Comma-separated cookie names redacted in audit events.",
+    ),
+    click.option(
+        "--audit-redact-request-body-paths",
+        help="Comma-separated dot paths redacted in request-body audit fields.",
+    ),
+    click.option(
+        "--audit-redact-response-body-paths",
+        help="Comma-separated dot paths redacted in response-body audit fields.",
     ),
 ]
 

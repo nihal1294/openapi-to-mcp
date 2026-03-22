@@ -1,0 +1,164 @@
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { AxiosInstance } from 'axios';
+import axios from 'axios';
+import { emitResponseAudit } from './audit.js';
+import type { ToolResponseCache } from './cache.js';
+import {
+  buildToolErrorResult,
+  mapApiErrorToToolError,
+  ToolExecutionError,
+} from './errors.js';
+import type { ToolRuntimeMetadata } from './generated.js';
+import { logEvent } from './observability.js';
+import {
+  buildRequestContext,
+  executeHttpRequest,
+  type RequestContext,
+  type UpstreamResponse,
+} from './request.js';
+import { buildToolSuccessResult } from './response.js';
+import { validateToolArguments } from './validation.js';
+
+export interface ExecutionContext {
+  requestId: string;
+  startedAt: number;
+  toolName: string;
+  tool: ToolRuntimeMetadata;
+}
+
+export function prepareRequestContext(
+  context: ExecutionContext,
+  args: Record<string, unknown>
+): RequestContext {
+  logEvent('info', 'tool_execution_started', {
+    requestId: context.requestId,
+    toolName: context.toolName,
+  });
+  validateToolArguments(context.toolName, args);
+  return buildRequestContext(context.tool, args, context.requestId);
+}
+
+export function tryCachedResult(
+  responseCache: ToolResponseCache,
+  context: ExecutionContext,
+  cacheKey: string | null
+): CallToolResult | null {
+  if (!cacheKey) {
+    return null;
+  }
+  const cached = responseCache.get(cacheKey);
+  if (!cached) {
+    return null;
+  }
+  emitResponseAudit(
+    context.toolName,
+    context.tool,
+    {
+      cacheHit: true,
+      contentType: cached.contentType,
+      responseData: cached.responseData,
+      status: cached.status,
+    },
+    context.requestId,
+    'success'
+  );
+  logEvent('info', 'tool_execution_cache_hit', {
+    requestId: context.requestId,
+    toolName: context.toolName,
+    durationMs: Date.now() - context.startedAt,
+  });
+  return buildToolSuccessResult(
+    cached.responseData,
+    cached.contentType,
+    context.requestId
+  );
+}
+
+export async function executeUpstream(
+  axiosInstance: AxiosInstance,
+  responseCache: ToolResponseCache,
+  context: ExecutionContext,
+  requestContext: RequestContext,
+  cacheKey: string | null,
+  cacheTtlMs: number
+): Promise<CallToolResult> {
+  const upstreamResponse = await executeHttpRequest(
+    axiosInstance,
+    context.tool,
+    requestContext
+  );
+  emitResponseAudit(
+    context.toolName,
+    context.tool,
+    upstreamResponse,
+    context.requestId,
+    'success'
+  );
+  if (cacheKey) {
+    responseCache.set(
+      cacheKey,
+      upstreamResponse.responseData,
+      upstreamResponse.contentType,
+      upstreamResponse.status ?? 200,
+      cacheTtlMs
+    );
+  }
+  const result = buildToolSuccessResult(
+    upstreamResponse.responseData,
+    upstreamResponse.contentType,
+    context.requestId
+  );
+  logEvent('info', 'tool_execution_succeeded', {
+    requestId: context.requestId,
+    toolName: context.toolName,
+    durationMs: Date.now() - context.startedAt,
+  });
+  return result;
+}
+
+export function handleExecutionError(
+  context: ExecutionContext,
+  error: unknown,
+  requestAudited: boolean
+): CallToolResult {
+  if (requestAudited) {
+    emitResponseAudit(
+      context.toolName,
+      context.tool,
+      buildFailureAuditResponse(error),
+      context.requestId,
+      'error'
+    );
+  }
+  const toolError =
+    error instanceof ToolExecutionError ? error : mapApiErrorToToolError(error);
+  logEvent('error', 'tool_execution_failed', {
+    requestId: context.requestId,
+    toolName: context.toolName,
+    durationMs: Date.now() - context.startedAt,
+    errorCode: toolError.meta.code,
+    errorSource: toolError.meta.source,
+    retryable: toolError.meta.retryable,
+    httpStatus: toolError.meta.httpStatus,
+  });
+  return buildToolErrorResult(toolError, context.requestId);
+}
+
+function buildFailureAuditResponse(error: unknown): UpstreamResponse {
+  if (axios.isAxiosError(error) && error.response) {
+    return {
+      responseData: error.response.data,
+      contentType: error.response.headers['content-type'],
+      status: error.response.status,
+    };
+  }
+  const toolError =
+    error instanceof ToolExecutionError ? error : mapApiErrorToToolError(error);
+  return {
+    responseData: undefined,
+    contentType: undefined,
+    errorCode: toolError.meta.code,
+    errorSource: toolError.meta.source,
+    status: toolError.meta.httpStatus ?? null,
+  };
+}

@@ -50,6 +50,12 @@ openapi-to-mcp run [OPTIONS]
 | `--tool-access-default` | No | None | Override `MCP_TOOL_ACCESS_DEFAULT` (`allow` or `deny`) |
 | `--tool-identity-header` | No | None | Override `MCP_TOOL_IDENTITY_HEADER` for streamable-http caller identity |
 | `--tool-allowlists` | No | None | Override `MCP_TOOL_ALLOWLISTS` with a JSON object mapping identities to tool names |
+| `--audit-mode` | No | None | Override `MCP_AUDIT_MODE` (`off` or `logs`) |
+| `--audit-redact-headers` | No | None | Override `MCP_AUDIT_REDACT_HEADERS` with comma-separated header names |
+| `--audit-redact-query-params` | No | None | Override `MCP_AUDIT_REDACT_QUERY_PARAMS` with comma-separated query names |
+| `--audit-redact-cookie-names` | No | None | Override `MCP_AUDIT_REDACT_COOKIE_NAMES` with comma-separated cookie names |
+| `--audit-redact-request-body-paths` | No | None | Override `MCP_AUDIT_REDACT_REQUEST_BODY_PATHS` with comma-separated dot paths |
+| `--audit-redact-response-body-paths` | No | None | Override `MCP_AUDIT_REDACT_RESPONSE_BODY_PATHS` with comma-separated dot paths |
 
 ## Examples
 
@@ -165,6 +171,26 @@ Identity values are exact, case-sensitive matches against `MCP_TOOL_ALLOWLISTS`.
 For `streamable-http`, identity is resolved from each incoming request. Sessions are not
 bound to the identity observed during initialization.
 
+### Emit redacted audit logs
+
+```bash
+openapi-to-mcp run \
+  --openapi-json ./openapi.yaml \
+  --target-api-base-url https://example.com/api \
+  --audit-mode logs \
+  --audit-redact-headers authorization,x-api-key \
+  --audit-redact-query-params token \
+  --audit-redact-request-body-paths credentials.token,profile.email \
+  --audit-redact-response-body-paths echoed.credentials.token
+```
+
+Audit events are emitted on stderr as structured JSON. Header, query, and cookie names
+are matched case-insensitively, and auth-derived cookie values are redacted by default.
+Body-path redaction only applies to JSON object or array payloads and uses dot notation
+with optional `*` array wildcards. Cached successes still emit paired audit events with
+`cacheHit: true`. Network and runtime failures emit `tool_audit_response` with
+`status: null` when there is no upstream HTTP response.
+
 ## `--env-source` formats
 
 Accepted values:
@@ -178,6 +204,7 @@ CLI runtime-control flags are written as the corresponding `MCP_*` env vars befo
 `MCP_CACHE_TTL_MS` and `MCP_RATE_LIMIT_PER_MINUTE` both default to `0` (disabled).
 `MCP_CACHE_MAX_ENTRIES` defaults to `1000`.
 `MCP_TOOL_ACCESS_MODE` defaults to `off`, and `MCP_TOOL_ACCESS_DEFAULT` defaults to `allow`.
+`MCP_AUDIT_MODE` defaults to `off`.
 
 ## Base URL resolution
 

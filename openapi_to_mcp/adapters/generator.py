@@ -11,18 +11,21 @@ from openapi_to_mcp.common.exceptions import GenerationError
 logger = logging.getLogger(__name__)
 
 RUNTIME_TEMPLATE_NAMES = (
+    "audit",
     "request_context",
     "auth",
     "cache",
     "config",
     "errors",
     "executor",
+    "executor_support",
     "generated",
     "http_transport",
     "limiter",
     "observability",
     "rate_limit",
     "request",
+    "redaction",
     "response",
     "serialization",
     "tool_access",

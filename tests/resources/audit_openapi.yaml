@@ -1,0 +1,54 @@
+openapi: 3.0.0
+info:
+  title: Audit Test
+  version: '1.0'
+paths:
+  /audit-body:
+    post:
+      summary: Audit request and response bodies.
+      operationId: postAuditBody
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                credentials:
+                  type: object
+                  properties:
+                    token:
+                      type: string
+                profile:
+                  type: object
+                  properties:
+                    email:
+                      type: string
+                tokens:
+                  type: array
+                  items:
+                    type: string
+                note:
+                  type: string
+      responses:
+        '200':
+          description: Audit success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  query:
+                    type: object
+                  echoed:
+                    type: object
+                  request_id:
+                    type: string

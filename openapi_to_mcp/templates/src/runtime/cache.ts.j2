@@ -6,6 +6,7 @@ interface CachedResponse {
   contentType: unknown;
   expiresAt: number;
   responseData: unknown;
+  status: number;
 }
 
 export function resolveCacheTtlMs(tool: ToolRuntimeMetadata): number {
@@ -38,6 +39,7 @@ export class ToolResponseCache {
       contentType: entry.contentType,
       expiresAt: entry.expiresAt,
       responseData: structuredClone(entry.responseData),
+      status: entry.status,
     };
   }
 
@@ -45,6 +47,7 @@ export class ToolResponseCache {
     cacheKey: string,
     responseData: unknown,
     contentType: unknown,
+    status: number,
     ttlMs: number
   ): void {
     if (ttlMs <= 0) {
@@ -59,6 +62,7 @@ export class ToolResponseCache {
       contentType,
       expiresAt: Date.now() + ttlMs,
       responseData: structuredClone(responseData),
+      status,
     });
   }
 
