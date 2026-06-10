@@ -14,7 +14,7 @@ dependencies = [
     "mcp==1.27.2",
     "rich==15.0.0",
     "rich-click==1.9.8",
-    "structlog==25.5.0",
+    "structlog==26.1.0",
 ]
 
 [project.scripts]
