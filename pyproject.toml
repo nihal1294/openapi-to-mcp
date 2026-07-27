@@ -22,15 +22,15 @@ openapi-to-mcp = "openapi_to_mcp.cli:cli"
 
 [dependency-groups]
 dev = [
-    "pre-commit==4.6.0",
+    "pre-commit==4.6.1",
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
     "pytest-cov==7.1.0",
     "pytest-mock==3.15.1",
     "pytest-instafail==0.5.0",
-    "ruff==0.15.20",
+    "ruff==0.16.0",
     "mkdocs==1.6.1",
-    "mkdocs-material==9.7.6",
+    "mkdocs-material==9.7.7",
 ]
 
 [tool.ruff]
@@ -84,7 +84,7 @@ testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
 
 [build-system]
-requires = ["hatchling>=1.30.1"]
+requires = ["hatchling>=1.31.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
