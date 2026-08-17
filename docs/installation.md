@@ -2,9 +2,28 @@
 
 Treat `openapi-to-mcp` as a standalone CLI first.
 
-## Preferred install path today
+## Install from PyPI
 
-Because the project is not yet published to PyPI, the cleanest end-user path today is a tagged Git install with `uv tool install`.
+New releases are published to PyPI.
+
+Run the CLI without a permanent install:
+
+```bash
+uvx openapi-to-mcp --help
+```
+
+Install it permanently:
+
+```bash
+uv tool install openapi-to-mcp
+# or
+pip install openapi-to-mcp
+openapi-to-mcp --help
+```
+
+## Tagged Git fallback
+
+If a specific release is not yet available on PyPI, use a tagged Git install instead:
 
 ```bash
 uv tool install git+https://github.com/nihal1294/openapi-to-mcp@vX.Y.Z
@@ -24,17 +43,18 @@ Then verify:
 openapi-to-mcp --help
 ```
 
-## Why this is the preferred user path
+## Why the PyPI path is preferred
 
-- it installs the CLI as an isolated tool,
-- it avoids mixing project and development dependencies into your shell,
-- it keeps the public docs aligned with the installable CLI experience.
+- it keeps installation on the standard Python packaging path,
+- it works with both `uv` and `pip`,
+- it keeps source-checkout workflows separate from end-user installs.
 
 ## GitHub Release artifacts
 
 Each GitHub Release also publishes a wheel and source tarball.
 
-Treat those artifacts as the canonical release outputs for packaging and pinned manual installs. The public docs still prefer `uv tool install` from a tagged release because it is the simplest end-user flow until PyPI publishing exists.
+Treat those artifacts as the canonical build outputs for packaging verification and
+pinned manual installs. They are no longer the default user path.
 
 ## Source checkout and development install
 

@@ -5,6 +5,17 @@ description = "Generate, run, and test Node.js/TypeScript MCP servers from OpenA
 readme = "README.md"
 requires-python = ">=3.14"
 authors = [{ name = "Nihal Rao", email = "nihaliddya@gmail.com" }]
+license = { file = "LICENSE" }
+keywords = ["openapi", "mcp", "model-context-protocol", "typescript", "codegen", "server", "cli", "python", "openapi-to-mcp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Utilities",
+]
 dependencies = [
     "click==8.4.2",
     "requests==2.34.2",
@@ -16,6 +27,13 @@ dependencies = [
     "rich-click==1.9.8",
     "structlog==26.1.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/nihal1294/openapi-to-mcp"
+Documentation = "https://nihal1294.github.io/openapi-to-mcp/"
+Repository = "https://github.com/nihal1294/openapi-to-mcp"
+Issues = "https://github.com/nihal1294/openapi-to-mcp/issues"
+Changelog = "https://github.com/nihal1294/openapi-to-mcp/blob/master/CHANGELOG.md"
 
 [project.scripts]
 openapi-to-mcp = "openapi_to_mcp.cli:cli"

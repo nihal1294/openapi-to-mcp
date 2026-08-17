@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -135,6 +136,11 @@ jobs:
             echo "Tag ${TAG_NAME} already exists on a different commit: ${existing_ref}" >&2
             exit 1
           fi
+
+      - name: Publish distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
 
       - name: Create or update GitHub Release
         env:

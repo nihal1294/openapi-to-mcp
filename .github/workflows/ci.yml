@@ -46,6 +46,9 @@ jobs:
       - name: Run Python test suite
         run: uv run pytest
 
+      - name: Build Python distribution
+        run: uv build
+
   e2e-generated-server:
     name: e2e-generated-server (node-${{ matrix.node-version }})
     needs: quality-py314

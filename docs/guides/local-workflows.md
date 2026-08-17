@@ -142,6 +142,12 @@ Release behavior:
 
 - releases are automated from `master`
 - a release runs when the version changes or the matching version tag is missing
-- the release workflow builds the wheel and sdist, ensures the version tag exists, and creates or updates the GitHub Release
+- the release workflow builds the wheel and sdist, publishes them to PyPI, ensures
+  the version tag exists, and creates or updates the GitHub Release
+
+One-time PyPI setup outside the repo:
+
+- configure a trusted publisher for `nihal1294/openapi-to-mcp`
+- point it at `.github/workflows/release.yml` on the default branch
 
 Code scanning is expected through GitHub default CodeQL setup, not a workflow in the repo.
