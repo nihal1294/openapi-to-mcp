@@ -82,10 +82,10 @@ The `conservative` preset leaves caching off by default, but if you later enable
         *   Generated tool input validation is set to `{{ runtime_validation }}`.
         *   When set to `input`, tool arguments are validated against the generated `inputSchema` before the upstream API call.
     *   **Structured Tool Errors:**
-        *   Tool failures return machine-readable metadata under `meta.error`.
-        *   `meta.error.retryable` is advisory only and does not define any retry interval or backoff policy.
+        *   Tool failures return machine-readable metadata under `_meta.error`.
+        *   `_meta.error.retryable` is advisory only and does not define any retry interval or backoff policy.
     *   **Request IDs and Logs:**
-        *   Tool results include `meta.requestId`.
+        *   Tool results include `_meta.requestId`.
         *   The generated runtime forwards that value upstream as `X-Request-Id`.
         *   Tool start, success, and failure events are emitted as JSON logs on stderr.
         *   Audit logs stay local to stderr and do not depend on any external sink.
