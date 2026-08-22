@@ -13,12 +13,21 @@ DEFAULT_PROTOCOL_VERSION = "2025-11-25"
 class StreamableHttpSession:
     """Keep one MCP streamable-http session alive across a test suite."""
 
-    def __init__(self, endpoint_url: str, client_name: str) -> None:
+    def __init__(
+        self,
+        endpoint_url: str,
+        client_name: str,
+        identity_header: str | None = None,
+        identity_value: str | None = None,
+    ) -> None:
         self.client_name = client_name
         self.endpoint_url = endpoint_url
+        self.identity_header = identity_header
+        self.identity_value = identity_value
         self.session_id: str | None = None
 
     def initialize(self) -> None:
+        """Initialize the streamable-HTTP MCP session."""
         response = requests.post(
             self.endpoint_url,
             json={
@@ -49,11 +58,23 @@ class StreamableHttpSession:
         initialized.raise_for_status()
 
     def list_tools(self) -> dict[str, Any]:
+        """List tools while preserving the raw MCP wire response."""
         return self.post_jsonrpc("tools/list", {}, 1)
+
+    def call_tool(
+        self, tool_name: str, arguments: dict[str, Any], req_id: int
+    ) -> dict[str, Any]:
+        """Call one tool and preserve its raw MCP wire response."""
+        return self.post_jsonrpc(
+            "tools/call",
+            {"name": tool_name, "arguments": arguments},
+            req_id,
+        )
 
     def post_jsonrpc(
         self, method: str, params: dict[str, Any], req_id: int
     ) -> dict[str, Any]:
+        """Post one JSON-RPC request and preserve the raw MCP wire response."""
         response = requests.post(
             self.endpoint_url,
             json={"jsonrpc": "2.0", "id": req_id, "method": method, "params": params},
@@ -71,6 +92,8 @@ class StreamableHttpSession:
         }
         if self.session_id:
             headers["Mcp-Session-Id"] = self.session_id
+        if self.identity_header and self.identity_value:
+            headers[self.identity_header] = self.identity_value
         return headers
 
 
@@ -83,6 +106,14 @@ def extract_result_payload(response: dict[str, Any]) -> dict[str, Any]:
     """Return the JSON-RPC result payload when present."""
     result = response.get("result")
     return result if isinstance(result, dict) else response
+
+
+def extract_wire_meta(response: dict[str, Any]) -> dict[str, Any]:
+    """Return metadata from the MCP wire `_meta` result property."""
+    meta = extract_result_payload(response).get("_meta")
+    if not isinstance(meta, dict):
+        payload_error(response)
+    return meta
 
 
 def extract_text(payload: dict[str, Any]) -> str:

@@ -11,7 +11,7 @@ dependencies = [
     "pyyaml==6.0.3",
     "jinja2==3.1.6",
     "openapi-spec-validator==0.9.0",
-    "mcp==1.28.1",
+    "mcp==2.0.0",
     "rich==15.0.0",
     "rich-click==1.9.8",
     "structlog==26.1.0",
@@ -22,15 +22,15 @@ openapi-to-mcp = "openapi_to_mcp.cli:cli"
 
 [dependency-groups]
 dev = [
-    "pre-commit==4.6.0",
+    "pre-commit==4.6.2",
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
     "pytest-cov==7.1.0",
     "pytest-mock==3.15.1",
     "pytest-instafail==0.5.0",
-    "ruff==0.15.20",
+    "ruff==0.16.4",
     "mkdocs==1.6.1",
-    "mkdocs-material==9.7.6",
+    "mkdocs-material==9.7.7",
 ]
 
 [tool.ruff]
@@ -43,6 +43,7 @@ select = [
     "ALL", 
 ]
 ignore = [
+    "CPY001",   # Project does not require per-file copyright headers
     "D",        # Documentation rules
     "A003",     # Builtin Attribute shadowing
     "PTH118",   # os.path.join - pathlib is preferred
@@ -79,13 +80,20 @@ quote-style = "double"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-ra -q --cov-report=term-missing --cov-fail-under=80 --cov-report=xml:dist/test/coverage.xml --instafail -p no:cacheprovider"
+addopts = "-ra -q --cov-report=term-missing --cov-fail-under=80 --cov-report=xml:coverage.xml --instafail -p no:cacheprovider"
 testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
 
 [build-system]
-requires = ["hatchling>=1.30.1"]
+requires = ["hatchling==1.32.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["openapi_to_mcp"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/AGENTS.md",
+    "/docs/plans/**",
+    "/.superpowers/**",
+]

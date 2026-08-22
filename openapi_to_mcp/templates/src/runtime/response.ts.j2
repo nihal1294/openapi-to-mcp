@@ -24,9 +24,9 @@ export function buildToolSuccessResult(
   if (isJsonContentType(contentType) && isStructuredObject(responseData)) {
     return {
       content: [{ type: 'text', text: responseText }],
-      meta: { requestId },
+      _meta: { requestId },
       structuredContent: responseData,
     };
   }
-  return { content: [{ type: 'text', text: responseText }], meta: { requestId } };
+  return { content: [{ type: 'text', text: responseText }], _meta: { requestId } };
 }

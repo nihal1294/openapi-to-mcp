@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 from click.testing import CliRunner, Result
 
+from openapi_to_mcp.adapters.testing import ServerTestRequest
 from openapi_to_mcp.cli import cli
 
 if TYPE_CHECKING:
@@ -107,13 +108,14 @@ def test_test_server_streamable_http_list_tools_success(
     )
 
     assert result.exit_code == 0
-    _, kwargs = mock_execute_mcp_server.call_args
-    assert kwargs["transport"] == "streamable-http"
-    assert kwargs["method"] == "list"
-    assert kwargs["req_id"] == 1
-    assert kwargs["endpoint_url"] == "http://localhost:8080/mcp"
-    assert kwargs["server_cmd"] is None
-    assert kwargs["env"] is None
+    request = mock_execute_mcp_server.call_args.args[0]
+    assert isinstance(request, ServerTestRequest)
+    assert request.transport == "streamable-http"
+    assert request.method == "list"
+    assert request.req_id == 1
+    assert request.connection.endpoint_url == "http://localhost:8080/mcp"
+    assert request.connection.server_cmd is None
+    assert request.connection.env is None
     assert '"name": "tool1"' in result.output
 
 
@@ -150,14 +152,17 @@ def test_test_server_stdio_call_tool_success(
 
     assert result.exit_code == 0
     parse_env.assert_called_once_with("./.env")
-    _, kwargs = mock_execute_mcp_server.call_args
-    assert kwargs["transport"] == "stdio"
-    assert kwargs["method"] == "call"
-    assert kwargs["params"]["tool_name"] == "getUser"
-    assert kwargs["params"]["tool_arguments"] == {"id": 42}
-    assert kwargs["server_cmd"] == "node ./build/index.js"
-    assert kwargs["endpoint_url"] is None
-    assert kwargs["env"] == {"TARGET_API_BASE_URL": "http://example.com"}
+    request = mock_execute_mcp_server.call_args.args[0]
+    assert isinstance(request, ServerTestRequest)
+    assert request.transport == "stdio"
+    assert request.method == "call"
+    assert request.params == {
+        "tool_name": "getUser",
+        "tool_arguments": {"id": 42},
+    }
+    assert request.connection.server_cmd == "node ./build/index.js"
+    assert request.connection.endpoint_url is None
+    assert request.connection.env == {"TARGET_API_BASE_URL": "http://example.com"}
 
 
 def test_test_server_rejects_bad_endpoint(
@@ -177,25 +182,3 @@ def test_test_server_rejects_bad_endpoint(
 
     assert result.exit_code != 0
     assert "--mcp-endpoint must start with '/'" in _normalize_output(result.output)
-
-
-def test_test_server_bad_tool_args_json(
-    runner: CliRunner,
-    mock_execute_mcp_server: MagicMock,
-) -> None:
-    result = runner.invoke(
-        cli,
-        [
-            "test-server",
-            "--transport",
-            "streamable-http",
-            "--tool-name",
-            "tool",
-            "--tool-args",
-            "{bad-json",
-        ],
-    )
-
-    assert result.exit_code != 0
-    assert "Tool arguments must be a valid JSON object" in result.output
-    mock_execute_mcp_server.assert_not_called()

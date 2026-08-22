@@ -15,9 +15,38 @@ updates:
       include: "scope"
     open-pull-requests-limit: 10
     groups:
-      python-dependencies:
+      mcp-major:
         patterns:
-          - "*"
+          - "mcp"
+        update-types:
+          - "major"
+      python-runtime:
+        patterns:
+          - "click"
+          - "jinja2"
+          - "mcp"
+          - "openapi-spec-validator"
+          - "pyyaml"
+          - "requests"
+          - "rich"
+          - "rich-click"
+          - "structlog"
+        update-types:
+          - "minor"
+          - "patch"
+      python-development:
+        patterns:
+          - "pre-commit"
+          - "pytest"
+          - "pytest-*"
+          - "ruff"
+      documentation:
+        patterns:
+          - "mkdocs"
+          - "mkdocs-material"
+      build-system:
+        patterns:
+          - "hatchling"
 
   - package-ecosystem: "github-actions"
     directory: "/"

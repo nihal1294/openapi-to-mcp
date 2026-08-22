@@ -41,7 +41,7 @@ def handle_exceptions(  # noqa: UP047
             except OpenApiMcpError as e:
                 logger.log(log_level, "%s: %s", error_message, str(e))
                 return return_value
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.log(log_level, "%s: %s", error_message, str(e), exc_info=True)
                 return return_value
 

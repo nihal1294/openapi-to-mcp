@@ -8,7 +8,7 @@ You need:
 
 - Python 3.14+
 - `uv`
-- Node.js 20+
+- Node.js 22+
 - `npm`
 - Git
 
@@ -100,9 +100,11 @@ Each pull request should:
 Required checks currently include:
 
 - `quality-py314`
-- `e2e-generated-server (node-20)`
 - `e2e-generated-server (node-22)`
+- `e2e-generated-server (node-24)`
 - `e2e-cli-matrix`
+- `docs`
+- `package`
 - `dependency-review`
 
 ## Code standards

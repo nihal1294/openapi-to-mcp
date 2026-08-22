@@ -60,8 +60,8 @@ SSE generation is intentionally gone.
 - bounded cache size via `MCP_CACHE_MAX_ENTRIES`
 - object-shaped response schemas emitted as MCP `outputSchema`
 - structured JSON object results returned as `structuredContent`
-- structured tool-error results with machine-readable metadata under `meta.error`
-- per-tool request IDs exposed under `meta.requestId` and forwarded upstream as `X-Request-Id`
+- structured tool-error results with machine-readable metadata under `_meta.error`
+- per-tool request IDs exposed under `_meta.requestId` and forwarded upstream as `X-Request-Id`
 - structured JSON runtime logs for tool start, success, and failure events
 - optional `tool_audit_request` and `tool_audit_response` events with redacted payloads
 - auth-derived cookie values redacted by default in audit events
@@ -77,9 +77,9 @@ When access control is enabled:
 - `streamable-http` resolves identity per request, and sessions are not bound to the
   identity observed during initialization
 
-`meta.error.retryable` is advisory only. It tells callers whether an immediate retry is
+`_meta.error.retryable` is advisory only. It tells callers whether an immediate retry is
 reasonable, but it does not guarantee success on retry and does not imply any backoff policy.
-When retry budgets or circuit breakers reject a call, `meta.error` also includes
+When retry budgets or circuit breakers reject a call, `_meta.error` also includes
 structured runtime metadata such as `retryAfterMs` and `attempts` when available.
 Circuit-breaker cooldown only applies when the configured failure threshold is positive.
 

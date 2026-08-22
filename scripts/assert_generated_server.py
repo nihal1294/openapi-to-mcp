@@ -5,106 +5,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-from dataclasses import dataclass
 from typing import Any
 
+from openapi_to_mcp.adapters.testing import ConnectionSettings, ServerTestRequest
 from openapi_to_mcp.adapters.testing.server_tester import execute_mcp_server
 from openapi_to_mcp.common.utils import parse_env_source
-
-
-@dataclass(frozen=True)
-class ToolExpectation:
-    """Expected behavior for one generated MCP tool."""
-
-    name: str
-    arguments: dict[str, Any]
-    expected: dict[str, Any] | None = None
-    expected_error: str | None = None
-    expected_error_meta: dict[str, Any] | None = None
-
-
-SUITES = {
-    "basic": [
-        ToolExpectation(
-            name="testConversionTool",
-            arguments={"status": "available"},
-            expected={"status": "available"},
-        )
-    ],
-    "auth": [
-        ToolExpectation(
-            name="getHeaderAuth",
-            arguments={},
-            expected={"auth": "header", "credential": "header-secret"},
-        ),
-        ToolExpectation(
-            name="getQueryAuth",
-            arguments={},
-            expected={"auth": "query", "credential": "query-secret"},
-        ),
-        ToolExpectation(
-            name="getCookieAuth",
-            arguments={},
-            expected={"auth": "cookie", "credential": "cookie-secret"},
-        ),
-        ToolExpectation(
-            name="getBearerAuth",
-            arguments={},
-            expected={"auth": "bearer", "credential": "bearer-secret"},
-        ),
-    ],
-    "auth-missing-bearer": [
-        ToolExpectation(
-            name="getBearerAuth",
-            arguments={},
-            expected_error="AUTH_BEARERAUTH_TOKEN",
-            expected_error_meta={
-                "code": "missing_credentials",
-                "source": "auth",
-                "retryable": False,
-            },
-        )
-    ],
-    "validation-failure": [
-        ToolExpectation(
-            name="testConversionTool",
-            arguments={"status": 123},
-            expected_error="Input validation failed",
-            expected_error_meta={
-                "code": "input_validation_failed",
-                "source": "validation",
-                "retryable": False,
-            },
-        )
-    ],
-    "validation-disabled": [
-        ToolExpectation(
-            name="testConversionTool",
-            arguments={"status": 123},
-            expected={"status": "123"},
-        )
-    ],
-    "grouped": [
-        ToolExpectation(
-            name="test_testConversionTool",
-            arguments={"status": "available"},
-            expected={"status": "available"},
-        )
-    ],
-    "upstream-server-error": [
-        ToolExpectation(
-            name="testConversionTool",
-            arguments={"status": "server_error"},
-            expected_error="API server error (503)",
-            expected_error_meta={
-                "code": "api_server_error",
-                "source": "upstream",
-                "retryable": True,
-                "httpStatus": 503,
-            },
-        )
-    ],
-}
+from scripts.assert_generated_server_suites import SUITES, ToolExpectation
 
 
 def _extract_result_payload(response: dict[str, Any]) -> dict[str, Any]:
@@ -132,13 +38,13 @@ def _extract_json_content(response: dict[str, Any]) -> dict[str, Any]:
     return json.loads(text)
 
 
-def _build_transport_kwargs(args: argparse.Namespace) -> dict[str, Any]:
+def _build_connection_settings(args: argparse.Namespace) -> ConnectionSettings:
     if args.transport == "stdio":
-        return {
-            "server_cmd": args.server_cmd,
-            "env": parse_env_source(args.env_source),
-        }
-    return {"endpoint_url": args.endpoint_url}
+        return ConnectionSettings(
+            server_cmd=args.server_cmd,
+            env=parse_env_source(args.env_source),
+        )
+    return ConnectionSettings(endpoint_url=args.endpoint_url)
 
 
 async def _run_request(
@@ -148,11 +54,13 @@ async def _run_request(
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return await execute_mcp_server(
-        transport=args.transport,
-        method=method,
-        req_id=req_id,
-        params=params,
-        **_build_transport_kwargs(args),
+        ServerTestRequest(
+            transport=args.transport,
+            method=method,
+            params=params,
+            req_id=req_id,
+            connection=_build_connection_settings(args),
+        )
     )
 
 
@@ -248,6 +156,7 @@ async def _run_suite(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    """Parse CLI arguments and run the selected generated-server suite."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--suite", choices=sorted(SUITES), required=True)
     parser.add_argument(
