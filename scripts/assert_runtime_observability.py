@@ -7,6 +7,7 @@ import asyncio
 import json
 from typing import Any
 
+from openapi_to_mcp.adapters.testing import ConnectionSettings, ServerTestRequest
 from openapi_to_mcp.adapters.testing.server_tester import execute_mcp_server
 from openapi_to_mcp.common.utils import parse_env_source
 
@@ -15,13 +16,13 @@ def _payload_error(payload: dict[str, Any]) -> None:
     raise AssertionError(json.dumps(payload, indent=2))
 
 
-def _transport_kwargs(args: argparse.Namespace) -> dict[str, Any]:
+def _connection_settings(args: argparse.Namespace) -> ConnectionSettings:
     if args.transport == "stdio":
-        return {
-            "server_cmd": args.server_cmd,
-            "env": parse_env_source(args.env_source),
-        }
-    return {"endpoint_url": args.endpoint_url}
+        return ConnectionSettings(
+            server_cmd=args.server_cmd,
+            env=parse_env_source(args.env_source),
+        )
+    return ConnectionSettings(endpoint_url=args.endpoint_url)
 
 
 def _extract_payload(response: dict[str, Any]) -> dict[str, Any]:
@@ -60,14 +61,16 @@ def _assert_error_request_id(payload: dict[str, Any]) -> None:
 
 async def _main(args: argparse.Namespace) -> None:
     response = await execute_mcp_server(
-        transport=args.transport,
-        method="call",
-        req_id=1,
-        params={
-            "tool_name": args.tool_name,
-            "tool_arguments": json.loads(args.tool_arguments),
-        },
-        **_transport_kwargs(args),
+        ServerTestRequest(
+            transport=args.transport,
+            method="call",
+            params={
+                "tool_name": args.tool_name,
+                "tool_arguments": json.loads(args.tool_arguments),
+            },
+            req_id=1,
+            connection=_connection_settings(args),
+        )
     )
     payload = _extract_payload(response)
     request_id = _extract_request_id(payload)
@@ -78,6 +81,7 @@ async def _main(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    """Parse CLI arguments and assert runtime request correlation."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--transport", choices=["stdio", "streamable-http"], required=True

@@ -4,6 +4,8 @@ repo_url: https://github.com/nihal1294/openapi-to-mcp
 repo_name: nihal1294/openapi-to-mcp
 docs_dir: docs
 site_dir: site
+exclude_docs: |
+  /plans/
 
 theme:
   name: material

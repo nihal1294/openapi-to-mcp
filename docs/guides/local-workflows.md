@@ -6,6 +6,8 @@ It is not the primary end-user installation path.
 
 ## Clone and install for development
 
+Development requires Python 3.14+, `uv`, Node.js 22+, `npm`, and Git.
+
 ```bash
 git clone https://github.com/nihal1294/openapi-to-mcp.git
 cd openapi-to-mcp
@@ -125,9 +127,11 @@ just hooks-run-push
 Required checks on `master` currently include:
 
 - `quality-py314`
-- `e2e-generated-server (node-20)`
 - `e2e-generated-server (node-22)`
+- `e2e-generated-server (node-24)`
 - `e2e-cli-matrix`
+- `docs`
+- `package`
 - `dependency-review`
 
 Relevant workflow files:

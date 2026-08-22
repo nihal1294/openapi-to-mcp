@@ -12,6 +12,7 @@ from assert_generated_server_common import (
     assert_list_contains,
     extract_result_payload,
     extract_text,
+    extract_wire_meta,
     payload_error,
 )
 
@@ -99,9 +100,7 @@ def _assert_error(
     message = extract_text(payload)
     if expected_error not in message:
         raise AssertionError(json.dumps(response, indent=2))
-    meta = payload.get("meta")
-    if not isinstance(meta, dict):
-        payload_error(response)
+    meta = extract_wire_meta(response)
     error_meta = meta.get("error")
     if not isinstance(error_meta, dict):
         payload_error(response)

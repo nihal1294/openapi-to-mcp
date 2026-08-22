@@ -30,7 +30,7 @@ jobs:
           python-version: "3.14"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
 
@@ -46,15 +46,11 @@ jobs:
       - name: Run Python test suite
         run: uv run pytest
 
-  e2e-generated-server:
-    name: e2e-generated-server (node-${{ matrix.node-version }})
+  docs:
+    name: docs
     needs: quality-py314
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: ["20", "22"]
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
@@ -66,7 +62,64 @@ jobs:
           python-version: "3.14"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --dev --frozen
+
+      - name: Build docs strictly
+        run: NO_MKDOCS_2_WARNING=1 uv run mkdocs build --strict
+
+  package:
+    name: package
+    needs: quality-py314
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.0.1
+
+      - name: Build distribution artifacts
+        run: uv build
+
+      - name: Check distribution metadata
+        run: uvx --from twine==7.0.0 twine check dist/*
+
+      - name: Check installed wheel CLI
+        run: uvx --from dist/*.whl openapi-to-mcp --help
+
+  e2e-generated-server:
+    name: e2e-generated-server (node-${{ matrix.node-version }})
+    needs: quality-py314
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["22", "24"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
 
@@ -112,7 +165,7 @@ jobs:
           python-version: "3.14"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
 

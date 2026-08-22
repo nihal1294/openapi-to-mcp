@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 from click.testing import CliRunner
 
+from openapi_to_mcp.adapters.testing import ServerTestRequest
 from openapi_to_mcp.cli import cli
 
 if TYPE_CHECKING:
@@ -49,8 +50,9 @@ def test_test_server_tool_name_without_args_sends_empty_args(
     )
 
     assert result.exit_code == 0
-    _, kwargs = mock_execute_mcp_server.call_args
-    assert kwargs["params"]["tool_arguments"] == {}
+    request = mock_execute_mcp_server.call_args.args[0]
+    assert isinstance(request, ServerTestRequest)
+    assert request.params == {"tool_name": "tool", "tool_arguments": {}}
 
 
 def test_test_server_rejects_non_object_tool_args_json(
@@ -73,6 +75,27 @@ def test_test_server_rejects_non_object_tool_args_json(
     assert "Tool arguments must be a valid JSON object" in _normalize_output(
         result.output
     )
+    mock_execute_mcp_server.assert_not_called()
+
+
+def test_test_server_rejects_invalid_tool_args_json(
+    runner: CliRunner, mock_execute_mcp_server: MagicMock
+) -> None:
+    result = runner.invoke(
+        cli,
+        [
+            "test-server",
+            "--transport",
+            "streamable-http",
+            "--tool-name",
+            "tool",
+            "--tool-args",
+            "{bad-json",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Tool arguments must be a valid JSON object" in result.output
     mock_execute_mcp_server.assert_not_called()
 
 
