@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/openapi-to-mcp.png" alt="OpenAPI to MCP logo" width="200"/>
+  <img src="https://raw.githubusercontent.com/nihal1294/openapi-to-mcp/master/docs/images/openapi-to-mcp.png" alt="OpenAPI to MCP logo" width="200"/>
 </p>
 
 <h1 align="center">OpenAPI → MCP Server</h1>
@@ -10,23 +10,29 @@
   <a href="https://github.com/nihal1294/openapi-to-mcp/actions/workflows/release.yml?query=branch%3Amaster"><img alt="Release workflow" src="https://github.com/nihal1294/openapi-to-mcp/actions/workflows/release.yml/badge.svg?branch=master"></a>
   <a href="https://github.com/nihal1294/openapi-to-mcp/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nihal1294/openapi-to-mcp"></a>
   <a href="https://github.com/nihal1294/openapi-to-mcp/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/nihal1294/openapi-to-mcp/total"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/nihal1294/openapi-to-mcp"></a>
+  <a href="https://github.com/nihal1294/openapi-to-mcp/blob/master/LICENSE"><img alt="License" src="https://img.shields.io/github/license/nihal1294/openapi-to-mcp"></a>
 </p>
 
 Standalone CLI for diagnosing, diffing, generating, running, and testing Node.js/TypeScript MCP servers from OpenAPI specifications.
 
 ## Install
 
-Treat `openapi-to-mcp` as an installable CLI first.
+Install the `openapi-to-mcp-cli` distribution from PyPI. Requires Python 3.14+;
+building and running generated servers also requires Node.js 22+ and npm.
 
 ```bash
-uv tool install git+https://github.com/nihal1294/openapi-to-mcp@vX.Y.Z
+uv tool install openapi-to-mcp-cli
 openapi-to-mcp --help
 ```
 
-Until the project is published to PyPI, this is the cleanest end-user install path.
+The installed command remains `openapi-to-mcp`. For one-off use:
 
-GitHub Releases also publish a wheel and source tarball for each version. Those artifacts are useful for pinned manual installs and packaging verification, but the docs treat them as an advanced path rather than the default user experience.
+```bash
+uvx --from openapi-to-mcp-cli openapi-to-mcp --help
+```
+
+See the [installation guide](https://nihal1294.github.io/openapi-to-mcp/installation/)
+for upgrades, tagged Git installs, and release artifacts.
 
 ## Quickstart
 
@@ -81,15 +87,15 @@ Public product documentation lives on GitHub Pages:
 - generated runtime controls for concurrency, queueing, timeout, bounded caching, rate limiting, retries, and circuit breakers
 - generated-server E2E coverage against a local mock API
 - CLI E2E coverage for `generate`, `run`, and `test-server`
-- version-aware GitHub Releases automation on `master`
+- version-aware PyPI and GitHub Releases automation on `master`
 
 ## Development
 
 For repository-local workflows, use the repo docs directly:
 
-- source and local workflows: [docs/guides/local-workflows.md](docs/guides/local-workflows.md)
-- contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+- source and local workflows: [Local Workflows](https://nihal1294.github.io/openapi-to-mcp/guides/local-workflows/)
+- contribution guide: [Contributing](https://github.com/nihal1294/openapi-to-mcp/blob/master/CONTRIBUTING.md)
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](https://github.com/nihal1294/openapi-to-mcp/blob/master/LICENSE).

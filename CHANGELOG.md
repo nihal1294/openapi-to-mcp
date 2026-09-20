@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2026-09-20
+
+### Added
+
+- Publish the Python distribution as `openapi-to-mcp-cli` while retaining the `openapi-to-mcp` command and `openapi_to_mcp` import package.
+- Publish validated distributions to PyPI with GitHub Trusted Publishing and reuse the same files for GitHub Releases.
+
+### Changed
+
+- Update MCP client compatibility and preserve CLI result field names, including metadata.
+- Require Node.js 22+ for generated servers and update generated TypeScript dependencies.
+- Update AnyIO and HTTPX2 to address dependency security advisories.
+- Simplify generated compiler configuration and retain behavior-focused tests.
+
 ## [0.9.0] - 2026-03-22
 
 ### Added

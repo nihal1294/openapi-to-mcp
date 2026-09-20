@@ -124,28 +124,37 @@ just hooks-run-push
 
 ## CI and releases
 
-Required checks on `master` currently include:
-
-- `quality-py314`
-- `e2e-generated-server (node-22)`
-- `e2e-generated-server (node-24)`
-- `e2e-cli-matrix`
-- `docs`
-- `package`
-- `dependency-review`
-
-Relevant workflow files:
-
-- `ci.yml`
-- `security.yml`
-- `docs.yml`
-- `release.yml`
-- `claude.yml`
+The [repository workflows](https://github.com/nihal1294/openapi-to-mcp/tree/master/.github/workflows)
+define CI checks, dependency review, documentation deployment, and releases.
+GitHub shows the required checks and their results on each pull request.
 
 Release behavior:
 
 - releases are automated from `master`
 - a release runs when the version changes or the matching version tag is missing
-- the release workflow builds the wheel and sdist, ensures the version tag exists, and creates or updates the GitHub Release
+- the release workflow validates the wheel and sdist, publishes them to PyPI,
+  then creates the version tag and GitHub Release from those same artifacts
+
+### PyPI publishing setup
+
+The distribution name is `openapi-to-mcp-cli`; its command is `openapi-to-mcp`.
+Before the first release, configure a [pending Trusted Publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)
+in the maintainer's PyPI account with:
+
+- PyPI project: `openapi-to-mcp-cli`
+- GitHub owner: `nihal1294`
+- Repository: `openapi-to-mcp`
+- Workflow filename: `release.yml`
+- Environment: `pypi`
+
+Create the matching GitHub environment with deployments restricted to `master`.
+Only the publish job can request the OIDC token; tests and builds run in a separate
+job without publishing permissions. No long-lived PyPI token is required.
+
+Choose a new version in `pyproject.toml`, update the changelog, and regenerate
+`uv.lock` before merging a release. An existing version tag cannot be reused.
+If publishing fails, rerun the failed job after correcting the cause. If PyPI
+publishing succeeded but GitHub release creation failed, rerun only the failed
+GitHub release job. Duplicate PyPI uploads fail instead of silently replacing files.
 
 Code scanning is expected through GitHub default CodeQL setup, not a workflow in the repo.

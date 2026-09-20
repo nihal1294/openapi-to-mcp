@@ -97,15 +97,9 @@ Each pull request should:
 - include tests when behavior changes
 - pass the required GitHub checks on `master`
 
-Required checks currently include:
-
-- `quality-py314`
-- `e2e-generated-server (node-22)`
-- `e2e-generated-server (node-24)`
-- `e2e-cli-matrix`
-- `docs`
-- `package`
-- `dependency-review`
+The [CI workflow](.github/workflows/ci.yml) defines the quality, generated-server,
+CLI, documentation, and package checks. [Dependency review](.github/workflows/security.yml)
+checks dependency changes. GitHub shows which checks are required for each pull request.
 
 ## Code standards
 
