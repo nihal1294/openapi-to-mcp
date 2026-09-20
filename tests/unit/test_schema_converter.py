@@ -389,3 +389,17 @@ def test_schema_conversion_preserves_boolean_not_operands() -> None:
     assert not Draft202012Validator(rejects_all).is_valid("any value")
     assert allows_all == {"not": {"not": {}}}
     assert Draft202012Validator(allows_all).is_valid("any value")
+
+
+def test_schema_conversion_preserves_referenced_boolean_schemas() -> None:
+    """References to boolean schemas retain their accept-all or reject-all meaning."""
+    full_spec = {"components": {"schemas": {"RejectAll": False, "AcceptAll": True}}}
+    rejects_all = openapi_schema_to_json_schema(
+        {"$ref": "#/components/schemas/RejectAll"}, full_spec
+    )
+    allows_all = openapi_schema_to_json_schema(
+        {"$ref": "#/components/schemas/AcceptAll"}, full_spec
+    )
+
+    assert not Draft202012Validator(rejects_all).is_valid("any value")
+    assert Draft202012Validator(allows_all).is_valid("any value")
