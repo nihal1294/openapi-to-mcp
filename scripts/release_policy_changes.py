@@ -181,7 +181,9 @@ def _git_output(arguments: list[str]) -> str:
 
 
 def _repository_only(path: str) -> bool:
-    return path.startswith((".github/", "docs/", "tests/", "scripts/")) or path in {
+    return path.startswith(
+        (".github/", "docs/", "tests/", "scripts/", "examples/container/")
+    ) or path in {
         "CHANGELOG.md",
         "CONTRIBUTING.md",
         "README.md",
