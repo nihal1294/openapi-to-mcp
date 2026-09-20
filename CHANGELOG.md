@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.2](https://github.com/nihal1294/openapi-to-mcp/compare/v0.9.1...v0.9.2) (2026-09-20)
+
+
+### Bug Fixes
+
+* **deps:** migrate generated servers to MCP SDK v2 ([8c41be3](https://github.com/nihal1294/openapi-to-mcp/commit/8c41be389bd1110dd6c4ac3b0997f3cc564da504))
+
 ## [0.9.1] - 2026-09-20
 
 ### Added
