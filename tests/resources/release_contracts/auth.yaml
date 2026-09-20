@@ -1,0 +1,22 @@
+openapi: 3.0.0
+info:
+  title: Release auth contract fixture
+  version: "1.0.0"
+paths:
+  /auth:
+    get:
+      operationId: contractBearerAuth
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Authenticated response.
+          content:
+            application/json:
+              schema:
+                type: object
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
