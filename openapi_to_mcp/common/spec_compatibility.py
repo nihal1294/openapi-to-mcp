@@ -134,9 +134,11 @@ def _security_findings(
 def _scheme_findings(
     spec: dict[str, Any], operation: dict[str, Any], base: str, method: str
 ) -> list[SwaggerFinding]:
+    selected_scheme = _document_scheme(spec)
+    if selected_scheme not in {"http", "https"}:
+        return [SwaggerFinding("schemes", "schemes[0]")]
     if "schemes" not in operation:
         return []
-    selected_scheme = _document_scheme(spec)
     operation_schemes = operation.get("schemes")
     if isinstance(operation_schemes, list) and selected_scheme in operation_schemes:
         return []

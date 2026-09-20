@@ -77,7 +77,22 @@ def test_swagger_auth_policy_can_supply_runtime_security(
 
 @pytest.mark.parametrize(
     "scheme",
-    [{}, {"type": "basic"}, {"type": "http", "scheme": "basic"}, {"type": "http"}],
+    [
+        {},
+        {"type": "basic"},
+        {"type": "http", "scheme": "basic"},
+        {"type": "http"},
+        {"type": "apiKey", "in": "body", "name": "key"},
+        {"type": "apiKey", "in": "path", "name": "key"},
+        {"type": "apiKey", "name": "key"},
+        {"type": "apiKey", "in": None, "name": "key"},
+        {"type": "apiKey", "in": 42, "name": "key"},
+        {"type": "apiKey", "in": "header"},
+        {"type": "apiKey", "in": "header", "name": ""},
+        {"type": "apiKey", "in": "query", "name": None},
+        {"type": "apiKey", "in": "cookie", "name": 42},
+        {"type": "apiKey", "in": "cookie", "name": " "},
+    ],
 )
 @pytest.mark.parametrize("strict", [True, False])
 def test_swagger_auth_policy_rejects_unsupported_runtime_security(

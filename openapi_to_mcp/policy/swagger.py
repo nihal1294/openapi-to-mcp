@@ -52,4 +52,13 @@ def _runtime_supports_scheme(scheme: object) -> bool:
     scheme_type = str(scheme.get("type", "")).lower()
     if scheme_type == "http":
         return str(scheme.get("scheme", "")).lower() == "bearer"
-    return scheme_type in {"apikey", "oauth2", "openidconnect"}
+    if scheme_type == "apikey":
+        location = scheme.get("in")
+        name = scheme.get("name")
+        return (
+            isinstance(location, str)
+            and location.lower() in {"header", "query", "cookie"}
+            and isinstance(name, str)
+            and bool(name.strip())
+        )
+    return scheme_type in {"oauth2", "openidconnect"}

@@ -56,6 +56,39 @@ def test_swagger_findings_preserve_supported_response_only_operation() -> None:
     assert swagger_operation_findings(spec, "get", "/status", {}, {}) == []
 
 
+def test_swagger_findings_reject_unsupported_global_protocols() -> None:
+    for scheme in ("ws", "wss"):
+        findings = swagger_operation_findings(
+            {"swagger": "2.0", "schemes": [scheme]}, "get", "/status", {}, {}
+        )
+
+        assert {(finding.field, finding.location) for finding in findings} == {
+            ("schemes", "schemes[0]")
+        }
+
+
+def test_swagger_findings_use_first_global_protocol() -> None:
+    supported_first = swagger_operation_findings(
+        {"swagger": "2.0", "schemes": ["https", "wss"]},
+        "get",
+        "/status",
+        {},
+        {},
+    )
+    unsupported_first = swagger_operation_findings(
+        {"swagger": "2.0", "schemes": ["ws", "https"]},
+        "get",
+        "/status",
+        {},
+        {},
+    )
+
+    assert supported_first == []
+    assert {(finding.field, finding.location) for finding in unsupported_first} == {
+        ("schemes", "schemes[0]")
+    }
+
+
 def test_swagger_findings_reject_operation_protocol_override() -> None:
     spec = {"swagger": "2.0", "schemes": ["http"]}
 
