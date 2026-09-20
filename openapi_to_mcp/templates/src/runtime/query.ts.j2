@@ -1,6 +1,7 @@
 export interface QueryEntry {
   allowReserved: boolean;
   name: string;
+  sourceName: string;
   value: string;
 }
 
@@ -10,9 +11,10 @@ export function addQueryEntry(
   entries: QueryEntry[],
   name: string,
   value: unknown,
-  allowReserved = false
+  allowReserved = false,
+  sourceName = name
 ): void {
-  entries.push({ name, value: stringifyQueryValue(value), allowReserved });
+  entries.push({ name, sourceName, value: stringifyQueryValue(value), allowReserved });
 }
 
 export function clearQueryEntries(entries: QueryEntry[], name: string): void {
@@ -37,7 +39,7 @@ export function replaceSafeQueryEntries(
     clearQueryEntries(entries, name);
     if (Array.isArray(value)) {
       for (const item of value) {
-        addQueryEntry(entries, `${name}[]`, item);
+        addQueryEntry(entries, `${name}[]`, item, false, name);
       }
     } else {
       addQueryEntry(entries, name, value);
@@ -87,7 +89,7 @@ function encodeStandard(value: string): string {
 function removeNamedEntries(entries: QueryEntry[], name: string): void {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
-    if (entry && (entry.name === name || entry.name === `${name}[]`)) {
+    if (entry?.sourceName === name) {
       entries.splice(index, 1);
     }
   }

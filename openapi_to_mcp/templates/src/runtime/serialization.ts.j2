@@ -125,7 +125,7 @@ export function applyQueryParam(
     clearQueryEntries(queryEntries, parameter.name);
     if (explode) {
       for (const item of value) {
-        addQueryEntry(queryEntries, `${parameter.name}[]`, item, allowReserved);
+        addQueryEntry(queryEntries, `${parameter.name}[]`, item, allowReserved, parameter.name);
       }
     } else {
       addQueryEntry(queryEntries, parameter.name, queryParams[parameter.name], allowReserved);

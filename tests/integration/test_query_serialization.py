@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import shutil
 import subprocess
 import threading
@@ -16,6 +15,7 @@ from openapi_to_mcp.adapters.testing import (
     execute_mcp_server,
 )
 from openapi_to_mcp.cli import cli
+from tests.integration.query_serialization_spec import write_query_spec
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -41,7 +41,7 @@ def test_generated_runtime_serializes_query_values_per_parameter(
     tmp_path: Path,
 ) -> None:
     _QueryCaptureHandler.paths = []
-    spec_path = _write_spec(tmp_path / "query.json")
+    spec_path = write_query_spec(tmp_path / "query.json")
     output_dir = tmp_path / "generated"
     result = CliRunner().invoke(
         cli,
@@ -81,6 +81,8 @@ def test_generated_runtime_serializes_query_values_per_parameter(
     assert "deep[name]=a%2Fb" in request_target
     assert request_target.count("q=final") == 1
     assert "q=from-object" not in request_target
+    assert "foo[]=literal&foo=plain" in request_target
+    assert "auth[]=visible" in request_target
     assert "auth=token%2Fwith%26delimiters%3Dhere%23" in request_target
 
 
@@ -119,79 +121,11 @@ async def _call_generated_server(output_dir: Path, port: int) -> dict[str, Any]:
                     "deep": {"name": "a/b"},
                     "qObject": {"q": "from-object"},
                     "q": "final",
+                    "foo[]": "literal",
+                    "foo": "plain",
+                    "auth[]": "visible",
                 },
             },
             connection=connection,
         )
     )
-
-
-def _write_spec(path: Path) -> Path:
-    parameters = [
-        _parameter("preserved", allow_reserved=True),
-        _parameter("encoded"),
-        _parameter("percent", allow_reserved=True),
-        _parameter("space", allow_reserved=True),
-        _parameter("danger", allow_reserved=True),
-        {
-            "name": "tags",
-            "in": "query",
-            "style": "form",
-            "explode": True,
-            "schema": {"type": "array", "items": {"type": "string"}},
-        },
-        {
-            "name": "filters",
-            "in": "query",
-            "style": "form",
-            "explode": True,
-            "allowReserved": True,
-            "schema": {"type": "object", "additionalProperties": {"type": "string"}},
-        },
-        {
-            "name": "deep",
-            "in": "query",
-            "style": "deepObject",
-            "schema": {"type": "object", "properties": {"name": {"type": "string"}}},
-        },
-        {
-            "name": "qObject",
-            "in": "query",
-            "style": "form",
-            "explode": True,
-            "schema": {"type": "object", "properties": {"q": {"type": "string"}}},
-        },
-        _parameter("q"),
-    ]
-    spec = {
-        "openapi": "3.0.0",
-        "info": {"title": "Query", "version": "1.0.0"},
-        "components": {
-            "securitySchemes": {
-                "queryAuth": {"type": "apiKey", "in": "query", "name": "auth"}
-            }
-        },
-        "paths": {
-            "/search": {
-                "get": {
-                    "operationId": "search",
-                    "parameters": parameters,
-                    "security": [{"queryAuth": []}],
-                    "responses": {"200": {"description": "OK"}},
-                }
-            }
-        },
-    }
-    path.write_text(json.dumps(spec), encoding="utf-8")
-    return path
-
-
-def _parameter(name: str, *, allow_reserved: bool = False) -> dict[str, object]:
-    parameter: dict[str, object] = {
-        "name": name,
-        "in": "query",
-        "schema": {"type": "string"},
-    }
-    if allow_reserved:
-        parameter["allowReserved"] = True
-    return parameter
