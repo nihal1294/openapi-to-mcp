@@ -399,7 +399,7 @@ class Mapper:
             return None
 
         primary_content_type: str | None = None
-        body_schema_openapi: dict[str, Any] | None = None
+        body_schema_openapi: dict[str, Any] | bool | None = None
         primary_media: dict[str, Any] | None = None
 
         if "application/json" in content and isinstance(
@@ -419,7 +419,7 @@ class Mapper:
                     primary_content_type,
                 )
 
-        if primary_content_type and isinstance(body_schema_openapi, dict):
+        if primary_content_type and isinstance(body_schema_openapi, (bool, dict)):
             body_schema_json = openapi_schema_to_json_schema(
                 body_schema_openapi, self.spec, raise_on_error=True
             )
