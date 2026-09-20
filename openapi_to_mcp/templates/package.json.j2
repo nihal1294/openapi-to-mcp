@@ -20,19 +20,20 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    {% if transport == 'streamable-http' %}"@modelcontextprotocol/node": "^2.0.0",
+    {% endif %}"@modelcontextprotocol/server": "^2.0.0",
     {%- if runtime_validation == 'input' %}
     "ajv": "^8.20.0",
     {%- endif %}
-    "axios": "^1.19.0",
-    "dotenv": "^17.4.2"{% if transport == 'streamable-http' %},
+    "axios": "^1.20.0",
+    "dotenv": "^18.0.1"{% if transport == 'streamable-http' %},
     "express": "^5.2.1"
     {% endif %}
   },
   "devDependencies": {
     {% if transport == 'streamable-http' %}"@types/express": "^5.0.6",
     {% endif %}
-    "@types/node": "^22.20.1",
+    "@types/node": "^22.20.4",
     "nodemon": "^3.1.14",
     "typescript": "^7.0.2"
   }

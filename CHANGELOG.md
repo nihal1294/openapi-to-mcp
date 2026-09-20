@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.2] - 2026-09-20
+
+### Changed
+
+- Generate servers with the MCP TypeScript SDK v2 server and Node transport packages while preserving stdio, Streamable HTTP, and MCP result fields.
+- Refresh Python and generated-server dependencies and restrict Python dependency resolution to stable releases.
+
+### Fixed
+
+- Prevent Streamable HTTP test requests from forwarding payloads or session identifiers through unsafe redirects while retaining same-origin redirects and same-host HTTP-to-HTTPS upgrades on default ports.
+
 ## [0.9.1] - 2026-09-20
 
 ### Added
