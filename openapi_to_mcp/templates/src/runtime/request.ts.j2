@@ -4,11 +4,17 @@ import { resolveAuthForTool } from './auth.js';
 import { TARGET_API_AUTH_HEADER, TOOL_TIMEOUT_MS } from './config.js';
 import { createToolExecutionError } from './errors.js';
 import type { ToolRuntimeMetadata } from './generated.js';
+import {
+  replaceSafeQueryEntries,
+  serializeQueryEntries,
+  type QueryEntry,
+} from './query.js';
 import { applyCookieParam, applyQueryParam, serializeHeaderValue, serializePathValue } from './serialization.js';
 
 export interface RequestContext {
   cookies: Record<string, string>;
   headers: Record<string, string>;
+  queryEntries: QueryEntry[];
   queryParams: Record<string, unknown>;
   requestData: unknown;
   sensitiveCookieNames: string[];
@@ -38,6 +44,7 @@ export function buildRequestContext(
   requestContext.sensitiveCookieNames = applyAuthContext(
     tool,
     requestContext.headers,
+    requestContext.queryEntries,
     requestContext.queryParams,
     requestContext.cookies
   );
@@ -63,6 +70,9 @@ export async function executeHttpRequest(
       method: tool.method,
       url: requestContext.targetPath,
       params: requestContext.queryParams,
+      paramsSerializer: {
+        serialize: () => serializeQueryEntries(requestContext.queryEntries),
+      },
       headers: requestContext.headers,
       data: requestContext.requestData,
       signal: abortController.signal,
@@ -83,6 +93,7 @@ function applyParameterValues(
   args: Record<string, unknown>
 ): RequestContext {
   let targetPath = tool.path;
+  const queryEntries: QueryEntry[] = [];
   const queryParams: Record<string, unknown> = {};
   const headers: Record<string, string> = { Accept: 'application/json' };
   const cookies: Record<string, string> = {};
@@ -100,7 +111,7 @@ function applyParameterValues(
       continue;
     }
     if (parameter.in === 'query') {
-      applyQueryParam(queryParams, parameter, paramValue);
+      applyQueryParam(queryParams, queryEntries, parameter, paramValue);
       continue;
     }
     if (parameter.in === 'header') {
@@ -114,6 +125,7 @@ function applyParameterValues(
   return {
     cookies,
     headers,
+    queryEntries,
     queryParams,
     requestData: undefined,
     sensitiveCookieNames: [],
@@ -124,6 +136,7 @@ function applyParameterValues(
 function applyAuthContext(
   tool: ToolRuntimeMetadata,
   headers: Record<string, string>,
+  queryEntries: QueryEntry[],
   queryParams: Record<string, unknown>,
   cookies: Record<string, string>
 ): string[] {
@@ -138,6 +151,7 @@ function applyAuthContext(
   }
   Object.assign(headers, resolvedAuth.headers);
   Object.assign(queryParams, resolvedAuth.query);
+  replaceSafeQueryEntries(queryEntries, resolvedAuth.query);
   Object.assign(cookies, resolvedAuth.cookies);
   return Object.keys(resolvedAuth.cookies);
 }

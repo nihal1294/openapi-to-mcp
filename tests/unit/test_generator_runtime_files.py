@@ -88,6 +88,7 @@ def test_generator_generate_files_success(mocker: MagicMock) -> None:
             "src/runtime/performance_preset.ts.j2",
             output_files["src/runtime/performance_preset.ts"],
         ),
+        ("src/runtime/query.ts.j2", output_files["src/runtime/query.ts"]),
         ("src/runtime/rate_limit.ts.j2", output_files["src/runtime/rate_limit.ts"]),
         ("src/runtime/resilience.ts.j2", output_files["src/runtime/resilience.ts"]),
         ("src/runtime/retry.ts.j2", output_files["src/runtime/retry.ts"]),
@@ -147,6 +148,7 @@ def _output_files() -> dict[str, MagicMock]:
         "src/runtime/performance_preset.ts": MagicMock(
             spec=Path, name="performance_preset"
         ),
+        "src/runtime/query.ts": MagicMock(spec=Path, name="runtime_query"),
         "src/runtime/rate_limit.ts": MagicMock(spec=Path, name="runtime_rate_limit"),
         "src/runtime/resilience.ts": MagicMock(spec=Path, name="runtime_resilience"),
         "src/runtime/retry.ts": MagicMock(spec=Path, name="runtime_retry"),

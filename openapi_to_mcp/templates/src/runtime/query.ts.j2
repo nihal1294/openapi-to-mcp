@@ -1,0 +1,106 @@
+export interface QueryEntry {
+  allowReserved: boolean;
+  name: string;
+  sourceName: string;
+  value: string;
+}
+
+const PERCENT_TRIPLE = /%[0-9a-f]{2}/i;
+
+export function addQueryEntry(
+  entries: QueryEntry[],
+  name: string,
+  value: unknown,
+  allowReserved = false,
+  sourceName = name
+): void {
+  entries.push({ name, sourceName, value: stringifyQueryValue(value), allowReserved });
+}
+
+export function clearQueryEntries(entries: QueryEntry[], name: string): void {
+  removeNamedEntries(entries, name);
+}
+
+export function replaceQueryEntry(
+  entries: QueryEntry[],
+  name: string,
+  value: unknown,
+  allowReserved = false
+): void {
+  clearQueryEntries(entries, name);
+  addQueryEntry(entries, name, value, allowReserved);
+}
+
+export function replaceSafeQueryEntries(
+  entries: QueryEntry[],
+  values: Record<string, unknown>
+): void {
+  for (const [name, value] of Object.entries(values)) {
+    clearQueryEntries(entries, name);
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        addQueryEntry(entries, `${name}[]`, item, false, name);
+      }
+    } else {
+      addQueryEntry(entries, name, value);
+    }
+  }
+}
+
+export function serializeQueryEntries(entries: QueryEntry[]): string {
+  return entries
+    .map((entry) => `${encodeStandard(entry.name)}=${encodeValue(entry)}`)
+    .join('&');
+}
+
+function encodeValue(entry: QueryEntry): string {
+  return entry.allowReserved ? encodeReserved(entry.value) : encodeStandard(entry.value);
+}
+
+function encodeReserved(value: string): string {
+  return value
+    .split(/(%[0-9a-f]{2})/i)
+    .map((part) => (PERCENT_TRIPLE.test(part) ? part : encodeReservedSegment(part)))
+    .join('');
+}
+
+function encodeReservedSegment(value: string): string {
+  return encodeURIComponent(value)
+    .replace(/%2f/gi, '/')
+    .replace(/%3a/gi, ':')
+    .replace(/%3b/gi, ';')
+    .replace(/%3f/gi, '?')
+    .replace(/%40/gi, '@')
+    .replace(/%24/gi, '$')
+    .replace(/%2c/gi, ',')
+    .replace(/%20/g, '+');
+}
+
+function encodeStandard(value: string): string {
+  return encodeURIComponent(value)
+    .replace(/%3a/gi, ':')
+    .replace(/%24/gi, '$')
+    .replace(/%2c/gi, ',')
+    .replace(/%20/g, '+')
+    .replace(/%5b/gi, '[')
+    .replace(/%5d/gi, ']');
+}
+
+function removeNamedEntries(entries: QueryEntry[], name: string): void {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry?.sourceName === name) {
+      entries.splice(index, 1);
+    }
+  }
+}
+
+function stringifyQueryValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
