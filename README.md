@@ -6,11 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/nihal1294/openapi-to-mcp/actions/workflows/ci.yml?query=branch%3Amaster"><img alt="CI" src="https://github.com/nihal1294/openapi-to-mcp/actions/workflows/ci.yml/badge.svg?branch=master"></a>
-  <a href="https://github.com/nihal1294/openapi-to-mcp/actions/workflows/docs.yml?query=branch%3Amaster"><img alt="Docs" src="https://github.com/nihal1294/openapi-to-mcp/actions/workflows/docs.yml/badge.svg?branch=master"></a>
-  <a href="https://github.com/nihal1294/openapi-to-mcp/actions/workflows/release.yml?query=branch%3Amaster"><img alt="Release workflow" src="https://github.com/nihal1294/openapi-to-mcp/actions/workflows/release.yml/badge.svg?branch=master"></a>
-  <a href="https://github.com/nihal1294/openapi-to-mcp/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nihal1294/openapi-to-mcp"></a>
   <a href="https://pypi.org/project/openapi-to-mcp-cli/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/openapi-to-mcp-cli"></a>
-  <a href="https://github.com/nihal1294/openapi-to-mcp/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/nihal1294/openapi-to-mcp/total"></a>
   <a href="https://github.com/nihal1294/openapi-to-mcp/blob/master/LICENSE"><img alt="License" src="https://img.shields.io/github/license/nihal1294/openapi-to-mcp"></a>
 </p>
 
