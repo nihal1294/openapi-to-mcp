@@ -1,7 +1,9 @@
 """Maps OpenAPI operations to MCP tool definitions."""
 
+from __future__ import annotations
+
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from openapi_to_mcp.common import MappingError, SchemaError
 from openapi_to_mcp.common.error_policy import ErrorMode, resolve_error_mode
@@ -17,11 +19,15 @@ from openapi_to_mcp.mapping.tool_examples import (
     build_input_examples,
 )
 from openapi_to_mcp.mapping.utils import generate_tool_name
+from openapi_to_mcp.policy.swagger import effective_swagger_findings
 from openapi_to_mcp.schema.converter import (
     SchemaConverter,
     openapi_schema_to_json_schema,
 )
 from openapi_to_mcp.schema.handlers.reference import ReferenceHandler
+
+if TYPE_CHECKING:
+    from openapi_to_mcp.policy.models import PolicyConfig
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +42,7 @@ class Mapper:
         strict: bool = True,
         on_mapping_error: ErrorMode | None = None,
         on_schema_error: ErrorMode | None = None,
+        policy_config: PolicyConfig | None = None,
     ) -> None:
         """
         Initialize the mapper with the loaded OpenAPI spec.
@@ -52,6 +59,7 @@ class Mapper:
             raise MappingError(err_msg)
         self.spec = spec
         self.strict = strict
+        self.policy_config = policy_config
         self.on_mapping_error = resolve_error_mode(on_mapping_error, strict=strict)
         self.on_schema_error = resolve_error_mode(on_schema_error, strict=strict)
         self.mcp_tools: list[dict[str, Any]] = []
@@ -103,9 +111,6 @@ class Mapper:
                     continue
 
                 try:
-                    self._raise_if_unsupported_swagger(
-                        method, path, path_item, operation
-                    )
                     merged_parameters = self._merge_parameters(
                         path_level_parameters,
                         operation.get("parameters", []),
@@ -115,6 +120,9 @@ class Mapper:
                         path,
                         operation,
                         merged_parameters,
+                    )
+                    self._raise_if_unsupported_swagger(
+                        path_item, operation, tool_definition
                     )
                     self.mcp_tools.append(tool_definition)
                 except SchemaError as exc:
@@ -128,15 +136,19 @@ class Mapper:
 
     def _raise_if_unsupported_swagger(
         self,
-        method: str,
-        path: str,
         path_item: dict[str, Any],
         operation: dict[str, Any],
+        tool: dict[str, Any],
     ) -> None:
         """Raise when this operation needs unsupported Swagger 2 behavior."""
         findings = swagger_operation_findings(
-            self.spec, method, path, path_item, operation
+            self.spec,
+            tool["_original_method"],
+            tool["_original_path"],
+            path_item,
+            operation,
         )
+        findings = effective_swagger_findings(findings, tool, self.policy_config)
         if findings:
             raise MappingError(format_swagger_finding(findings[0]))
 

@@ -61,3 +61,7 @@ openapi-to-mcp doctor \
 ## Swagger 2 guidance
 
 Swagger 2 response-only operations and host/base-path defaults can be generated. Convert any operation flagged for body or form parameters, top-level parameter types, used security definitions, or unsupported protocol overrides to OpenAPI 3. An operation with `security: []` remains eligible when it overrides unused global security.
+
+`doctor` analyzes the source specification. During generation, `mcpgen.yaml`
+auth overrides can remove a mistaken security requirement or supply its runtime
+security definitions. Other unsupported Swagger constructs still require conversion.
