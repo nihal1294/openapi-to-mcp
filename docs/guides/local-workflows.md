@@ -155,6 +155,12 @@ Before 1.0, compatible fixes are patches and features or breaking changes are
 minor releases. Promotion to 1.0 is an explicit maintainer decision. Do not add
 `Release-As:` to ordinary pull requests: it cannot force a version.
 
+Documentation changes appear under **Documentation** in the next product
+release's changelog, including guides and deployment examples. They do not
+start a release by themselves or increase the version bump selected for the
+product changes. The release preflight requires a releasable product change
+before creating or updating the rolling release proposal.
+
 The release check compares a bounded fixed corpus of CLI, generated-server,
 custom-tool preservation, and MCP wire behavior. Passing it demonstrates those
 tested contracts only. Missing or conflicting evidence fails the check instead
