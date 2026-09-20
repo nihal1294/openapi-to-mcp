@@ -41,21 +41,26 @@ def test_swagger_auth_policy_can_make_operation_public(
     assert '"security": []' in runtime
 
 
+@pytest.mark.parametrize(
+    ("scheme", "credential"),
+    [
+        ({"type": "apiKey", "in": "header", "name": "X-Key"}, "API_KEY"),
+        ({"type": "apiKey", "in": "query", "name": "key"}, "API_KEY"),
+        ({"type": "apiKey", "in": "cookie", "name": "key"}, "API_KEY"),
+        ({"type": "http", "scheme": "bearer"}, "TOKEN"),
+        ({"type": "oauth2"}, "TOKEN"),
+        ({"type": "openIdConnect"}, "TOKEN"),
+    ],
+)
 def test_swagger_auth_policy_can_supply_runtime_security(
-    runner: CliRunner, tmp_path: Path
+    runner: CliRunner, tmp_path: Path, scheme: dict, credential: str
 ) -> None:
     policy = {
         "auth": {
             "operations": {
                 "GET /status": {
                     "security": [{"Replacement": []}],
-                    "security_schemes": {
-                        "Replacement": {
-                            "type": "apiKey",
-                            "in": "header",
-                            "name": "X-Key",
-                        }
-                    },
+                    "security_schemes": {"Replacement": scheme},
                 }
             }
         }
@@ -64,7 +69,45 @@ def test_swagger_auth_policy_can_supply_runtime_security(
     result = _generate(runner, tmp_path, policy)
 
     assert result.exit_code == 0, result.output
-    assert "AUTH_REPLACEMENT_API_KEY" in (tmp_path / "output/.env.example").read_text()
+    assert (
+        f"AUTH_REPLACEMENT_{credential}"
+        in (tmp_path / "output/.env.example").read_text()
+    )
+
+
+@pytest.mark.parametrize(
+    "scheme",
+    [{}, {"type": "basic"}, {"type": "http", "scheme": "basic"}, {"type": "http"}],
+)
+@pytest.mark.parametrize("strict", [True, False])
+def test_swagger_auth_policy_rejects_unsupported_runtime_security(
+    runner: CliRunner, tmp_path: Path, scheme: dict, *, strict: bool
+) -> None:
+    policy = {
+        "auth": {
+            "operations": {
+                "GET /status": {
+                    "security": [{"Replacement": []}],
+                    "security_schemes": {"Replacement": scheme},
+                }
+            }
+        }
+    }
+    spec = _spec()
+    spec["paths"]["/public"] = {
+        "get": {"security": [], "responses": {"200": {"description": "OK"}}}
+    }
+
+    result = _generate(runner, tmp_path, policy, strict=strict, spec=spec)
+
+    if strict:
+        assert result.exit_code != 0
+        assert "unsupported Swagger 2" in result.output
+    else:
+        assert result.exit_code == 0, result.output
+        report = json.loads((tmp_path / "output/generation_report.json").read_text())
+        assert report["mapped_tools"] == 1
+        assert [entry["path"] for entry in report["skipped_operations"]] == ["/status"]
 
 
 @pytest.mark.parametrize(

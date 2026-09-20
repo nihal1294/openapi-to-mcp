@@ -64,4 +64,6 @@ Swagger 2 response-only operations and host/base-path defaults can be generated.
 
 `doctor` analyzes the source specification. During generation, `mcpgen.yaml`
 auth overrides can remove a mistaken security requirement or supply its runtime
-security definitions. Other unsupported Swagger constructs still require conversion.
+security definitions for API keys, HTTP bearer, or OAuth/OpenID tokens. Unsupported
+replacement scheme types still fail compatibility checks. Other unsupported
+Swagger constructs still require conversion.

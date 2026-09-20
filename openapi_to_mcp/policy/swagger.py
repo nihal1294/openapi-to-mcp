@@ -22,7 +22,7 @@ def effective_swagger_findings(
     selected = apply_policy([tool], policy)
     if not selected:
         return []
-    if _has_security_metadata(selected[0]):
+    if _has_supported_security_metadata(selected[0]):
         return [
             finding
             for finding in findings
@@ -31,7 +31,7 @@ def effective_swagger_findings(
     return findings
 
 
-def _has_security_metadata(tool: dict[str, Any]) -> bool:
+def _has_supported_security_metadata(tool: dict[str, Any]) -> bool:
     requirements = tool.get("_original_security")
     if requirements is None or requirements == []:
         return True
@@ -40,6 +40,16 @@ def _has_security_metadata(tool: dict[str, Any]) -> bool:
         return False
     return all(
         isinstance(requirement, dict)
-        and all(isinstance(schemes.get(name), dict) for name in requirement)
+        and all(_runtime_supports_scheme(schemes.get(name)) for name in requirement)
         for requirement in requirements
     )
+
+
+def _runtime_supports_scheme(scheme: object) -> bool:
+    """Match the scheme types handled by the generated auth resolver."""
+    if not isinstance(scheme, dict):
+        return False
+    scheme_type = str(scheme.get("type", "")).lower()
+    if scheme_type == "http":
+        return str(scheme.get("scheme", "")).lower() == "bearer"
+    return scheme_type in {"apikey", "oauth2", "openidconnect"}

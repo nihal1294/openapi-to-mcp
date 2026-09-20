@@ -124,6 +124,11 @@ class Mapper:
                     self._raise_if_unsupported_swagger(
                         path_item, operation, tool_definition
                     )
+                    self._register_tool_name(
+                        operation.get("operationId")
+                        or generate_tool_name(method, path),
+                        tool_definition["name"],
+                    )
                     self.mcp_tools.append(tool_definition)
                 except SchemaError as exc:
                     self._handle_schema_error(method, path, exc)
@@ -318,13 +323,9 @@ class Mapper:
 
         return (name, location)
 
-    def _ensure_unique_tool_name(self, candidate_name: str) -> str:
-        """Ensure mapped tool names are unique."""
+    def _resolve_unique_tool_name(self, candidate_name: str) -> str:
+        """Return a unique tool name without reserving it."""
         if candidate_name not in self._used_tool_names:
-            self._used_tool_names.add(candidate_name)
-            self._tool_name_counts[candidate_name] = max(
-                self._tool_name_counts.get(candidate_name, 0), 1
-            )
             return candidate_name
 
         if self.on_mapping_error == "fail":
@@ -339,12 +340,26 @@ class Mapper:
             if deduped_name not in self._used_tool_names:
                 break
 
-        self._tool_name_counts[candidate_name] = count
-        self._used_tool_names.add(deduped_name)
-        self._diagnostics.append(
-            f"Duplicate tool name '{candidate_name}' deduped to '{deduped_name}'."
-        )
         return deduped_name
+
+    def _register_tool_name(
+        self,
+        candidate_name: str,
+        tool_name: str,
+    ) -> None:
+        """Reserve a tool name after the operation has been accepted."""
+        self._used_tool_names.add(tool_name)
+        if tool_name == candidate_name:
+            self._tool_name_counts[candidate_name] = max(
+                self._tool_name_counts.get(candidate_name, 0), 1
+            )
+            return
+
+        suffix = tool_name.removeprefix(f"{candidate_name}_")
+        self._tool_name_counts[candidate_name] = int(suffix)
+        self._diagnostics.append(
+            f"Duplicate tool name '{candidate_name}' deduped to '{tool_name}'."
+        )
 
     def _process_parameters(
         self, parameters: list[dict[str, Any]], input_schema: dict[str, Any]
@@ -502,7 +517,7 @@ class Mapper:
         candidate_name = operation.get("operationId") or generate_tool_name(
             method, path
         )
-        tool_name = self._ensure_unique_tool_name(candidate_name)
+        tool_name = self._resolve_unique_tool_name(candidate_name)
         description = build_tool_description(method, path, operation)
 
         input_schema: dict[str, Any] = {
