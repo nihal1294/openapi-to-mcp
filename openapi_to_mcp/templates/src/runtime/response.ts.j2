@@ -1,4 +1,4 @@
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult } from '@modelcontextprotocol/server';
 
 function isJsonContentType(contentType: unknown): contentType is string {
   return typeof contentType === 'string' && contentType.includes('json');

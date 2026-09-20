@@ -1,7 +1,7 @@
 import express from 'express';
 import { randomUUID } from 'node:crypto';
-import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import { isInitializeRequest } from '@modelcontextprotocol/server';
 import { OpenApiMcpServer } from './server.js';
 import * as console from 'console';
 import { TOOL_IDENTITY_HEADER } from './runtime/config.js';
@@ -31,7 +31,7 @@ const ALLOWED_HOSTS = (process.env.MCP_ALLOWED_HOSTS || '127.0.0.1,localhost')
 
 type SessionContext = {
   serverInstance: OpenApiMcpServer;
-  transport: StreamableHTTPServerTransport;
+  transport: NodeStreamableHTTPServerTransport;
 };
 
 const app = express();
@@ -42,7 +42,7 @@ app.use(express.json({ limit: '1mb' }));
 
 async function createSessionContext(): Promise<SessionContext> {
   let context: SessionContext | undefined;
-  const transport = new StreamableHTTPServerTransport({
+  const transport = new NodeStreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
     enableJsonResponse: true,
     onsessioninitialized: (sessionId) => {

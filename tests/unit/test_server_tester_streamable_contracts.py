@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import requests
+from mcp.types.version import LATEST_HANDSHAKE_VERSION
 
 from openapi_to_mcp.adapters.testing.server_tester import (
     DEFAULT_PROTOCOL_VERSION,
@@ -17,6 +18,7 @@ from openapi_to_mcp.adapters.testing.stdio_transport import perform_mcp_request
 
 def _json_response(payload: object, headers: dict[str, str] | None = None) -> MagicMock:
     response = MagicMock()
+    response.status_code = 200
     response.raise_for_status.return_value = None
     response.json.return_value = payload
     response.headers = headers or {}
@@ -67,7 +69,7 @@ def test_streamable_post_jsonrpc_initializes_session() -> None:
     )
 
     with patch(
-        "openapi_to_mcp.adapters.testing.streamable_http_transport.requests.post",
+        "openapi_to_mcp.adapters.testing.http_redirects.requests.post",
         side_effect=[init_response, notification_response, list_response],
     ) as mock_post:
         response = transport._post_jsonrpc("list", None, 1)
@@ -80,7 +82,9 @@ def test_streamable_post_jsonrpc_initializes_session() -> None:
     )
     assert notification_call.kwargs["headers"]["Mcp-Session-Id"] == "session-123"
     assert list_call.kwargs["json"]["method"] == "tools/list"
-    assert list_call.kwargs["headers"]["MCP-Protocol-Version"] == "2025-11-25"
+    assert list_call.kwargs["headers"]["MCP-Protocol-Version"] == (
+        LATEST_HANDSHAKE_VERSION
+    )
 
 
 def test_streamable_initialize_error_raises() -> None:
@@ -95,7 +99,7 @@ def test_streamable_initialize_error_raises() -> None:
 
     with (
         patch(
-            "openapi_to_mcp.adapters.testing.streamable_http_transport.requests.post",
+            "openapi_to_mcp.adapters.testing.http_redirects.requests.post",
             return_value=init_error,
         ),
         pytest.raises(ServerConnectionError, match="Initialize request failed"),

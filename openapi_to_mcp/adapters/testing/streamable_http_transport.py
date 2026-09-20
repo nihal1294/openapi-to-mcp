@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import requests
 from mcp.types import CallToolResult, ListToolsResult
+from mcp.types.version import LATEST_HANDSHAKE_VERSION
 
+from openapi_to_mcp.adapters.testing.http_redirects import post_with_safe_redirects
 from openapi_to_mcp.adapters.testing.models import (
     ServerConnectionError,
     TransportStrategy,
@@ -17,8 +18,11 @@ from openapi_to_mcp.adapters.testing.models import (
 )
 from openapi_to_mcp.adapters.testing.response_formatting import format_mcp_response
 
+if TYPE_CHECKING:
+    import requests
+
 logger = logging.getLogger(__name__)
-DEFAULT_PROTOCOL_VERSION = "2025-11-25"
+DEFAULT_PROTOCOL_VERSION = LATEST_HANDSHAKE_VERSION
 
 
 def _normalize_result(
@@ -80,6 +84,15 @@ class StreamableHttpTransport(TransportStrategy):
             headers["Mcp-Session-Id"] = self._session_id
         return headers
 
+    def _post(self, payload: dict[str, Any]) -> requests.Response:
+        response, endpoint_url = post_with_safe_redirects(
+            self.endpoint_url,
+            payload,
+            self._build_headers(),
+        )
+        self.endpoint_url = endpoint_url
+        return response
+
     def _parse_json_response(self, response: requests.Response) -> dict[str, Any]:
         try:
             response_data = response.json()
@@ -107,12 +120,7 @@ class StreamableHttpTransport(TransportStrategy):
                 },
             },
         }
-        response = requests.post(
-            self.endpoint_url,
-            json=payload,
-            timeout=30,
-            headers=self._build_headers(),
-        )
+        response = self._post(payload)
         response.raise_for_status()
         self._session_id = response.headers.get("Mcp-Session-Id")
         response_data = self._parse_json_response(response)
@@ -123,15 +131,12 @@ class StreamableHttpTransport(TransportStrategy):
         self._send_initialized_notification()
 
     def _send_initialized_notification(self) -> None:
-        response = requests.post(
-            self.endpoint_url,
-            json={
+        response = self._post(
+            {
                 "jsonrpc": "2.0",
                 "method": "notifications/initialized",
                 "params": {},
-            },
-            timeout=30,
-            headers=self._build_headers(),
+            }
         )
         response.raise_for_status()
 
@@ -139,12 +144,7 @@ class StreamableHttpTransport(TransportStrategy):
         self, method: str, params: dict[str, Any] | None, req_id: int
     ) -> dict[str, Any]:
         self._initialize(req_id=req_id * 1000 + 1)
-        response = requests.post(
-            self.endpoint_url,
-            json=self._build_jsonrpc_payload(method, params, req_id),
-            timeout=30,
-            headers=self._build_headers(),
-        )
+        response = self._post(self._build_jsonrpc_payload(method, params, req_id))
         response.raise_for_status()
         response_data = self._parse_json_response(response)
         return _normalize_result(response_data, method, req_id)

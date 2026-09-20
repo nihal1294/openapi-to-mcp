@@ -50,6 +50,9 @@ dev = [
     "mkdocs-material==9.7.7",
 ]
 
+[tool.uv]
+prerelease = "disallow"
+
 [tool.ruff]
 # Common settings
 line-length = 88
@@ -102,7 +105,7 @@ testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
 
 [build-system]
-requires = ["hatchling==1.32.0"]
+requires = ["hatchling==1.32.3"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]

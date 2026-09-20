@@ -1,11 +1,9 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import {
-  CallToolRequestSchema,
   type CallToolResult,
-  ErrorCode,
-  ListToolsRequestSchema,
-  McpError,
-} from '@modelcontextprotocol/sdk/types.js';
+  ProtocolError,
+  ProtocolErrorCode,
+  Server,
+} from '@modelcontextprotocol/server';
 import * as console from 'console';
 
 import { getCustomTools } from './custom/tools.js';
@@ -101,25 +99,29 @@ export class OpenApiMcpServer {
   }
 
   private setupRequestHandlers(): void {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    this.server.setRequestHandler('tools/list', async () => ({
       tools: filterToolsForCaller(this.allTools),
     }));
     this.server.setRequestHandler(
-      CallToolRequestSchema,
+      'tools/call',
       async (request): Promise<CallToolResult> => {
         const toolName = request.params.name;
         const args = (request.params.arguments || {}) as Record<string, unknown>;
         const customTool = this.customToolMap.get(toolName);
         const tool = toolRuntimeMap.get(toolName);
+        const outputSchema = this.allTools.find(({ name }) => name === toolName)?.outputSchema;
         if (!customTool && !tool) {
-          throw new McpError(ErrorCode.MethodNotFound, `Tool '${toolName}' not found.`);
+          throw new ProtocolError(
+            ProtocolErrorCode.MethodNotFound,
+            `Tool '${toolName}' not found.`
+          );
         }
         try {
           assertToolAllowed(toolName);
-          if (customTool) {
-            return customTool.handler(args);
-          }
-          return this.executor.execute(toolName, tool!, args);
+          const result = customTool
+            ? await customTool.handler(args)
+            : await this.executor.execute(toolName, tool!, args);
+          return this.server.projectCallToolResult(result, outputSchema);
         } catch (error) {
           if (!(error instanceof ToolExecutionError)) {
             throw error;

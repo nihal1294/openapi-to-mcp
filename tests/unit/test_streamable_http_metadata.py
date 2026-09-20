@@ -8,6 +8,7 @@ from openapi_to_mcp.adapters.testing.server_tester import StreamableHttpTranspor
 
 def _json_response(payload: object) -> MagicMock:
     response = MagicMock()
+    response.status_code = 200
     response.raise_for_status.return_value = None
     response.json.return_value = payload
     response.headers = {}
@@ -29,7 +30,7 @@ def _post_response(
         else {"tool_name": "echo", "tool_arguments": {"value": 1}}
     )
     with patch(
-        "openapi_to_mcp.adapters.testing.streamable_http_transport.requests.post",
+        "openapi_to_mcp.adapters.testing.http_redirects.requests.post",
         side_effect=[
             init_response,
             notification_response,
@@ -48,6 +49,7 @@ def test_streamable_list_normalizes_only_mcp_model_metadata() -> None:
             "_meta": {"envelope": {"_meta": {"source": "proxy"}}},
             "result": {
                 "_meta": {"trace": {"_meta": {"source": "server"}}},
+                "nextCursor": "next-page",
                 "tools": [
                     {
                         "name": "echo",
@@ -65,6 +67,7 @@ def test_streamable_list_normalizes_only_mcp_model_metadata() -> None:
     assert response["_meta"] == {"envelope": {"_meta": {"source": "proxy"}}}
     result = response["result"]
     assert result["meta"] == {"trace": {"_meta": {"source": "server"}}}
+    assert result["nextCursor"] == "next-page"
     assert result["tools"][0]["meta"] == {"tool": {"_meta": {"safe": True}}}
     assert result["tools"][0]["inputSchema"]["_meta"] == {"source": "schema"}
 

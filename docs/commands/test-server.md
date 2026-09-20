@@ -81,6 +81,10 @@ openapi-to-mcp test-server \
 
 For quick local smoke tests, this is intentionally low-friction rather than highly normalized.
 
+For Streamable HTTP, the command follows only same-origin `307` or `308` redirects, plus
+an upgrade from HTTP port 80 to HTTPS port 443 on the same host. Other redirects fail
+before the request or session identifier is forwarded.
+
 ## `--env-source` formats
 
 Accepted values:
