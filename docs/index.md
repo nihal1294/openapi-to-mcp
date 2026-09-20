@@ -1,14 +1,22 @@
 # OpenAPI to MCP
 
+[![PyPI version](https://img.shields.io/pypi/v/openapi-to-mcp-cli)](https://pypi.org/project/openapi-to-mcp-cli/)
+
 Standalone CLI for diagnosing, diffing, generating, running, and testing Node.js/TypeScript MCP servers from OpenAPI specifications.
 
 ## Install first
 
-Start with [Installation](installation.md), then confirm the binary is available:
+Install [`openapi-to-mcp-cli`](https://pypi.org/project/openapi-to-mcp-cli/) from PyPI.
+The installed command is `openapi-to-mcp`.
 
 ```bash
+uv tool install openapi-to-mcp-cli
 openapi-to-mcp --help
 ```
+
+Requires Python 3.14+; building and running generated servers also requires
+Node.js 22+ and npm. See [Installation](installation.md) for setup, upgrades,
+and one-off use without a persistent installation.
 
 ## Choose a workflow
 
@@ -80,5 +88,5 @@ openapi-to-mcp test-server \
 - generated runtime controls for concurrency, queueing, timeout, bounded caching, rate limiting, retries, and circuit breakers
 - generated-server E2E coverage against a local mock API
 - CLI E2E coverage for `generate`, `run`, and `test-server`
-- version-aware GitHub Releases automation on `master`
+- version-aware PyPI and GitHub Releases automation on `master`
 - repeatable generation policy with `mcpgen.yaml`

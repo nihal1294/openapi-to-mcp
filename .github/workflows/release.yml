@@ -10,6 +10,7 @@ permissions:
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   detect-version-bump:
@@ -19,7 +20,6 @@ jobs:
       should_release: ${{ steps.detect.outputs.should_release }}
       tag_name: ${{ steps.detect.outputs.tag_name }}
       version: ${{ steps.detect.outputs.version }}
-      release_reason: ${{ steps.detect.outputs.release_reason }}
 
     steps:
       - name: Check out repository
