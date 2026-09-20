@@ -87,7 +87,7 @@ class SchemaConverter:
 
     def convert(
         self,
-        openapi_schema: dict[str, Any] | None,
+        openapi_schema: object,
         *,
         include_internal_markers: bool = False,
     ) -> dict[str, Any]:
@@ -101,6 +101,8 @@ class SchemaConverter:
         Returns:
             The converted JSON Schema.
         """
+        if isinstance(openapi_schema, bool):
+            return {} if openapi_schema else {"not": {}}
         if not isinstance(openapi_schema, dict):
             logger.debug(
                 "Invalid schema input provided to converter (expected dict). Returning empty schema."
@@ -177,7 +179,7 @@ class SchemaConverter:
 
 
 def openapi_schema_to_json_schema(
-    openapi_schema: dict[str, Any] | None,
+    openapi_schema: object,
     full_spec: dict[str, Any],
     *,
     raise_on_error: bool = False,

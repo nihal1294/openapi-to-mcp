@@ -218,3 +218,35 @@ def test_mapper_omits_output_schema_for_mixed_anyof_response() -> None:
     tool = Mapper(spec=spec).map_tools()[0]
 
     assert "outputSchema" not in tool
+
+
+def test_mapper_omits_output_schema_for_nullable_object_response() -> None:
+    """Nullable object responses do not fit the object-only output contract."""
+    spec = {
+        "openapi": "3.1.0",
+        "info": {"title": "Nullable Output", "version": "1.0.0"},
+        "paths": {
+            "/status": {
+                "get": {
+                    "operationId": "getStatus",
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": ["object", "null"],
+                                        "properties": {"ok": {"type": "boolean"}},
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            }
+        },
+    }
+
+    tool = Mapper(spec=spec).map_tools()[0]
+
+    assert "outputSchema" not in tool

@@ -1,5 +1,7 @@
 from typing import Any
 
+from jsonschema import Draft202012Validator
+
 from openapi_to_mcp.mapping.mapper import Mapper
 
 
@@ -113,3 +115,32 @@ def test_mapper_records_required_request_body_without_schema() -> None:
         "required": True,
         "content_type": None,
     }
+
+
+def test_mapper_preserves_required_boolean_request_body_schema() -> None:
+    """A false request-body schema remains a required reject-all input."""
+    spec: dict[str, Any] = {
+        "openapi": "3.1.0",
+        "info": {"title": "Boolean Body", "version": "1.0.0"},
+        "paths": {
+            "/submit": {
+                "post": {
+                    "operationId": "submit",
+                    "requestBody": {
+                        "required": True,
+                        "content": {"application/json": {"schema": False}},
+                    },
+                    "responses": {"200": {"description": "OK"}},
+                }
+            }
+        },
+    }
+
+    tool = Mapper(spec=spec).map_tools()[0]
+    input_schema = tool["inputSchema"]
+
+    assert input_schema["required"] == ["requestBody"]
+    assert input_schema["properties"]["requestBody"] == {"not": {}}
+    assert not Draft202012Validator(input_schema).is_valid(
+        {"requestBody": {"name": "example"}}
+    )

@@ -66,3 +66,44 @@ def test_generate_runtime_validation_none_omits_ajv_and_validator(
 
     assert "ajv" not in package_json["dependencies"]
     assert "Ajv" not in validation_source
+
+
+def test_generate_accepts_boolean_request_body_schema(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """OpenAPI 3.1 boolean request-body schemas reach generated input schemas."""
+    spec_path = tmp_path / "boolean-request-body.json"
+    output_dir = tmp_path / "generated-boolean-request-body"
+    spec_path.write_text(
+        json.dumps(
+            {
+                "openapi": "3.1.0",
+                "info": {"title": "Boolean Body", "version": "1.0.0"},
+                "paths": {
+                    "/submit": {
+                        "post": {
+                            "operationId": "submit",
+                            "requestBody": {
+                                "required": True,
+                                "content": {"application/json": {"schema": False}},
+                            },
+                            "responses": {"200": {"description": "OK"}},
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        cli,
+        ["generate", "--openapi-json", str(spec_path), "--output-dir", str(output_dir)],
+    )
+
+    assert result.exit_code == 0, result.output
+    generated = (output_dir / "src" / "runtime" / "generated.ts").read_text(
+        encoding="utf-8"
+    )
+    assert '"requestBody"' in generated
+    assert '"not": {}' in generated

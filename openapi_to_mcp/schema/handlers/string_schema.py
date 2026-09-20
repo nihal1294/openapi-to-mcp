@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from openapi_to_mcp.schema.handlers.base import SchemaHandler
+from openapi_to_mcp.schema.handlers.base import SchemaHandler, schema_has_type
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ class StringSchemaHandler(SchemaHandler):
 
     def can_handle(self, schema: dict[str, Any]) -> bool:
         """Check if this handler can process the given schema."""
-        return isinstance(schema, dict) and schema.get("type") == "string"
+        return isinstance(schema, dict) and schema_has_type(schema, "string")
 
     def handle(
         self, openapi_schema: dict[str, Any], json_schema: dict[str, Any]

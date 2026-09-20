@@ -136,6 +136,8 @@ class ReferenceHandler(SchemaHandler):
             )
             return {"description": f"Unresolved reference: {ref}"}
         else:
+            if isinstance(current, bool):
+                return self.converter.convert(current)
             if not isinstance(current, dict):
                 logger.warning("Resolved reference '%s' is not a dictionary.", ref)
                 return {"description": f"Resolved reference is not an object: {ref}"}
