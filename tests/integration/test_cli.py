@@ -39,6 +39,69 @@ def test_generate_strict_generated_name_collision_fails(
     assert not (output_dir / "generation_report.json").exists()
 
 
+def test_generate_swagger_body_operation_fails_strict_and_skips_non_strict(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    spec_path = tmp_path / "swagger.json"
+    spec_path.write_text(
+        json.dumps(
+            {
+                "swagger": "2.0",
+                "info": {"title": "Swagger", "version": "1.0.0"},
+                "host": "api.example.com",
+                "paths": {
+                    "/status": {"get": {"responses": {"200": {"description": "OK"}}}},
+                    "/pets": {
+                        "post": {
+                            "parameters": [
+                                {
+                                    "name": "pet",
+                                    "in": "body",
+                                    "schema": {"type": "object"},
+                                }
+                            ],
+                            "responses": {"200": {"description": "OK"}},
+                        }
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    strict_output = tmp_path / "strict"
+    skipped_output = tmp_path / "skipped"
+
+    strict = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--openapi-json",
+            str(spec_path),
+            "--output-dir",
+            str(strict_output),
+        ],
+    )
+    skipped = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--openapi-json",
+            str(spec_path),
+            "--output-dir",
+            str(skipped_output),
+            "--no-strict",
+        ],
+    )
+
+    assert strict.exit_code != 0
+    assert "unsupported Swagger 2 construct" in strict.output
+    assert not (strict_output / "generation_report.json").exists()
+    assert skipped.exit_code == 0
+    report = json.loads((skipped_output / "generation_report.json").read_text())
+    assert report["mapped_tools"] == 1
+    assert report["skipped_operations"][0]["path"] == "/pets"
+
+
 def test_generate_no_strict_generated_name_collision_dedupes_and_reports(
     runner: CliRunner, tmp_path: Path
 ) -> None:

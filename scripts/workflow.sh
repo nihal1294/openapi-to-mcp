@@ -4,14 +4,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-OPENAPI_JSON="${OPENAPI_JSON:-https://petstore.swagger.io/v2/swagger.json}"
+OPENAPI_JSON="${OPENAPI_JSON:-https://petstore3.swagger.io/api/v3/openapi.json}"
 OUTPUT_DIR="${OUTPUT_DIR:-/tmp/mcp-smoke}"
 MCP_SERVER_NAME="${MCP_SERVER_NAME:-petstore-mcp}"
 TRANSPORT="${TRANSPORT:-streamable-http}"
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8091}"
 MCP_ENDPOINT="${MCP_ENDPOINT:-/mcp}"
-TARGET_API_BASE_URL="${TARGET_API_BASE_URL:-https://petstore.swagger.io/v2}"
+TARGET_API_BASE_URL="${TARGET_API_BASE_URL:-https://petstore3.swagger.io/api/v3}"
 
 usage() {
   cat <<'EOF'

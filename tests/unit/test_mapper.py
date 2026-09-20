@@ -391,3 +391,101 @@ def test_mapper_invalid_paths_object_raises() -> None:
 
     with pytest.raises(MappingError, match="Invalid 'paths' object"):
         mapper.map_tools()
+
+
+def test_mapper_rejects_unsupported_swagger_operation_in_strict_mode() -> None:
+    mapper = Mapper(
+        spec={
+            "swagger": "2.0",
+            "paths": {
+                "/pets": {
+                    "post": {
+                        "operationId": "createPet",
+                        "parameters": [
+                            {
+                                "name": "pet",
+                                "in": "body",
+                                "required": True,
+                                "schema": {"type": "object"},
+                            }
+                        ],
+                        "responses": {"200": {"description": "OK"}},
+                    }
+                }
+            },
+        }
+    )
+
+    with pytest.raises(MappingError, match="unsupported Swagger 2 construct"):
+        mapper.map_tools()
+
+
+def test_mapper_skips_unsupported_swagger_operation_in_non_strict_mode() -> None:
+    mapper = Mapper(
+        spec={
+            "swagger": "2.0",
+            "paths": {
+                "/status": {
+                    "get": {
+                        "operationId": "getStatus",
+                        "responses": {"200": {"description": "OK"}},
+                    }
+                },
+                "/pets": {
+                    "post": {
+                        "operationId": "createPet",
+                        "parameters": [
+                            {
+                                "name": "pet",
+                                "in": "body",
+                                "required": True,
+                                "schema": {"type": "object"},
+                            }
+                        ],
+                        "responses": {"200": {"description": "OK"}},
+                    }
+                },
+            },
+        },
+        strict=False,
+    )
+
+    tools = mapper.map_tools()
+
+    assert [tool["name"] for tool in tools] == ["getStatus"]
+    assert (
+        "unsupported Swagger 2 construct"
+        in mapper.get_report()["skipped_operations"][0]["reason"]
+    )
+
+
+def test_mapper_rejects_or_skips_unresolved_swagger_parameter_reference() -> None:
+    spec = {
+        "swagger": "2.0",
+        "paths": {
+            "/status": {
+                "get": {
+                    "operationId": "getStatus",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+            "/pets": {
+                "get": {
+                    "operationId": "listPets",
+                    "parameters": [
+                        {"$ref": "https://example.com/parameters.yaml#/limit"}
+                    ],
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+        },
+    }
+
+    with pytest.raises(MappingError, match="unsupported Swagger 2 construct"):
+        Mapper(spec=spec).map_tools()
+
+    skipped = Mapper(spec=spec, strict=False)
+    tools = skipped.map_tools()
+
+    assert [tool["name"] for tool in tools] == ["getStatus"]
+    assert skipped.get_report()["skipped_operations"][0]["path"] == "/pets"

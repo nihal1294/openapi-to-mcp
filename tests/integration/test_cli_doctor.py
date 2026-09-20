@@ -130,6 +130,39 @@ def test_doctor_error_report_exits_three(runner: CliRunner, tmp_path: Path) -> N
     assert "unsupported_http_auth" in result.output
 
 
+def test_doctor_reports_swagger_parameter_as_blocking_error(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    spec = {
+        "swagger": "2.0",
+        "info": {"title": "Swagger", "version": "1.0.0"},
+        "host": "api.example.com",
+        "paths": {
+            "/pets": {
+                "get": {
+                    "operationId": "listPets",
+                    "parameters": [{"name": "limit", "in": "query", "type": "integer"}],
+                    "responses": {"200": {"description": "OK"}},
+                }
+            }
+        },
+    }
+    spec_path = _write_json(tmp_path / "swagger.json", spec)
+
+    result = runner.invoke(
+        cli,
+        ["doctor", "--openapi-json", str(spec_path), "--format", "json"],
+    )
+
+    report = _extract_json(result.stdout)
+    assert result.exit_code == 3
+    assert any(
+        issue["code"] == "unsupported_swagger_construct"
+        and issue["location"] == "paths./pets.get.parameters[0].type"
+        for issue in report["issues"]
+    )
+
+
 def test_doctor_json_output_is_structured(runner: CliRunner, tmp_path: Path) -> None:
     spec = {
         "openapi": "3.0.0",

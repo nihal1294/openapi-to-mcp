@@ -5,6 +5,10 @@ from typing import Any
 
 from openapi_to_mcp.common import MappingError, SchemaError
 from openapi_to_mcp.common.error_policy import ErrorMode, resolve_error_mode
+from openapi_to_mcp.common.spec_compatibility import (
+    format_swagger_finding,
+    swagger_operation_findings,
+)
 from openapi_to_mcp.mapping.output_schema import extract_output_schema
 from openapi_to_mcp.mapping.tool_description import build_tool_description
 from openapi_to_mcp.mapping.tool_examples import (
@@ -99,6 +103,9 @@ class Mapper:
                     continue
 
                 try:
+                    self._raise_if_unsupported_swagger(
+                        method, path, path_item, operation
+                    )
                     merged_parameters = self._merge_parameters(
                         path_level_parameters,
                         operation.get("parameters", []),
@@ -118,6 +125,20 @@ class Mapper:
                     self._handle_mapping_error(method, path, exc)
 
         return self.mcp_tools
+
+    def _raise_if_unsupported_swagger(
+        self,
+        method: str,
+        path: str,
+        path_item: dict[str, Any],
+        operation: dict[str, Any],
+    ) -> None:
+        """Raise when this operation needs unsupported Swagger 2 behavior."""
+        findings = swagger_operation_findings(
+            self.spec, method, path, path_item, operation
+        )
+        if findings:
+            raise MappingError(format_swagger_finding(findings[0]))
 
     def get_report(self) -> dict[str, Any]:
         """Get mapper warnings and skipped operations for generation report."""

@@ -13,10 +13,12 @@ if TYPE_CHECKING:
 def security_schemes(spec: dict[str, Any]) -> dict[str, Any]:
     """Return normalized OpenAPI security scheme definitions."""
     components = spec.get("components", {})
-    if not isinstance(components, dict):
-        return {}
-    schemes = components.get("securitySchemes", {})
-    return schemes if isinstance(schemes, dict) else {}
+    if isinstance(components, dict):
+        schemes = components.get("securitySchemes")
+        if isinstance(schemes, dict):
+            return schemes
+    definitions = spec.get("securityDefinitions", {})
+    return definitions if isinstance(definitions, dict) else {}
 
 
 def referenced_scheme_names(source: object) -> list[str]:

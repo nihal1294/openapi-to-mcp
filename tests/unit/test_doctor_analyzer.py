@@ -1,6 +1,115 @@
 from openapi_to_mcp.doctor import DoctorAnalyzer
 
 
+def test_doctor_reports_unsupported_swagger_constructs_per_operation() -> None:
+    spec = {
+        "swagger": "2.0",
+        "info": {"title": "Swagger", "version": "1.0.0"},
+        "host": "api.example.com",
+        "paths": {
+            "/pets": {
+                "parameters": [{"name": "limit", "in": "query", "type": "integer"}],
+                "get": {
+                    "operationId": "listPets",
+                    "responses": {"200": {"description": "OK"}},
+                },
+            }
+        },
+    }
+
+    report = DoctorAnalyzer(spec).analyze("inline")
+    issue = next(
+        issue
+        for issue in report.issues
+        if issue.code == "unsupported_swagger_construct"
+    )
+
+    assert report.exit_code() == 3
+    assert issue.location == "paths./pets.parameters[0].type"
+    assert "OpenAPI 3" in issue.hint
+
+
+def test_doctor_accepts_swagger_security_empty_override() -> None:
+    spec = {
+        "swagger": "2.0",
+        "info": {"title": "Swagger", "version": "1.0.0"},
+        "host": "api.example.com",
+        "securityDefinitions": {
+            "apiKey": {"type": "apiKey", "in": "header", "name": "X-Key"}
+        },
+        "security": [{"apiKey": []}],
+        "paths": {
+            "/public": {
+                "get": {
+                    "operationId": "getPublic",
+                    "security": [],
+                    "responses": {"200": {"description": "OK"}},
+                }
+            }
+        },
+    }
+
+    report = DoctorAnalyzer(spec).analyze("inline")
+
+    assert report.exit_code() == 0
+
+
+def test_doctor_uses_swagger_security_definition_before_reporting_compatibility() -> (
+    None
+):
+    spec = {
+        "swagger": "2.0",
+        "info": {"title": "Swagger", "version": "1.0.0"},
+        "host": "api.example.com",
+        "securityDefinitions": {
+            "apiKey": {"type": "apiKey", "in": "header", "name": "X-Key"}
+        },
+        "security": [{"apiKey": []}],
+        "paths": {
+            "/secure": {
+                "get": {
+                    "operationId": "getSecure",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            }
+        },
+    }
+
+    report = DoctorAnalyzer(spec).analyze("inline")
+    codes = {issue.code for issue in report.issues}
+
+    assert "unsupported_swagger_construct" in codes
+    assert "undefined_security_scheme" not in codes
+
+
+def test_doctor_reports_unresolved_swagger_parameter_reference() -> None:
+    spec = {
+        "swagger": "2.0",
+        "info": {"title": "Swagger", "version": "1.0.0"},
+        "host": "api.example.com",
+        "paths": {
+            "/pets": {
+                "get": {
+                    "operationId": "listPets",
+                    "parameters": [
+                        {"$ref": "https://example.com/parameters.yaml#/limit"}
+                    ],
+                    "responses": {"200": {"description": "OK"}},
+                }
+            }
+        },
+    }
+
+    report = DoctorAnalyzer(spec).analyze("inline")
+    issue = next(
+        issue
+        for issue in report.issues
+        if issue.code == "unsupported_swagger_construct"
+    )
+
+    assert issue.location == "paths./pets.get.parameters[0].$ref"
+
+
 def test_doctor_analyzer_reports_unsupported_security_and_collisions() -> None:
     spec = {
         "openapi": "3.0.0",
