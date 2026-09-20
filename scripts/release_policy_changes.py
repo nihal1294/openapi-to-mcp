@@ -166,7 +166,7 @@ def _analyze_remaining(
             )
             _add(impacts, reasons, impact, f"{reason}: {path}")
             continue
-        _add(impacts, reasons, "patch", f"unclassified repository change: {path}")
+        raise ValueError(f"Unclassified path {path!r} needs release-policy review.")
 
 
 def _file_at(ref: str, path: str) -> str:

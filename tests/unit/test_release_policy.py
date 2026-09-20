@@ -285,3 +285,9 @@ def test_migration_notes_cover_the_reviewed_squash_change() -> None:
 def test_empty_migration_notes_are_not_release_evidence() -> None:
     with pytest.raises(ValueError, match="migration notes"):
         release_policy.parse_intent("feat!: change configuration\n\nMigration:  \n")
+
+
+def test_unknown_repository_change_requires_classification(monkeypatch) -> None:
+    _stub_git(monkeypatch, "A\tnew-runtime-surface.json\n", {})
+    with pytest.raises(ValueError, match="needs release-policy review"):
+        release_policy.analyze_changes("base", "head")
