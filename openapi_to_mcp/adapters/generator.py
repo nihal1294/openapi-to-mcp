@@ -25,6 +25,7 @@ RUNTIME_TEMPLATE_NAMES = (
     "limiter",
     "observability",
     "performance_preset",
+    "query",
     "rate_limit",
     "resilience",
     "retry",

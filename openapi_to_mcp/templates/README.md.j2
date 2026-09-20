@@ -126,6 +126,15 @@ npm run dev
 - Generated files like `src/server.ts`, `src/runtime/*.ts`, and `src/transport.ts`
   should be treated as replaceable output.
 
+## Query parameter encoding
+
+Generated requests follow each OpenAPI query parameter's `style`, `explode`,
+and `allowReserved` metadata. With `allowReserved: true`, values preserve safe
+reserved URI characters such as `/`, `:`, `;`, `?`, and `@`. Fragment and query
+delimiters (`#`, `&`, `=`, `+`, `[`, and `]`) remain percent encoded so a value
+cannot create another query field or fragment. Parameter names continue to use
+safe standard encoding.
+
 ## MCP Tools
 
 This server exposes the following tools based on the OpenAPI specification:

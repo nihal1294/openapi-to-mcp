@@ -1,4 +1,10 @@
 import type { ToolParameterMetadata } from './generated.js';
+import {
+  addQueryEntry,
+  clearQueryEntries,
+  replaceQueryEntry,
+  type QueryEntry,
+} from './query.js';
 
 function stringifyValue(value: unknown): string {
   if (value === null || value === undefined) {
@@ -85,29 +91,45 @@ export function serializePathValue(
 
 export function applyQueryParam(
   queryParams: Record<string, unknown>,
+  queryEntries: QueryEntry[],
   parameter: ToolParameterMetadata,
   value: unknown
 ): void {
   const style = parameter.style ?? 'form';
   const explode = parameter.explode ?? true;
+  const allowReserved = parameter.allow_reserved === true;
   if (style === 'deepObject' && value && typeof value === 'object' && !Array.isArray(value)) {
     for (const [key, objectValue] of Object.entries(value as Record<string, unknown>)) {
-      queryParams[`${parameter.name}[${key}]`] = stringifyValue(objectValue);
+      const name = `${parameter.name}[${key}]`;
+      queryParams[name] = stringifyValue(objectValue);
+      replaceQueryEntry(queryEntries, name, objectValue, allowReserved);
     }
     return;
   }
   if (style === 'spaceDelimited' && Array.isArray(value)) {
-    queryParams[parameter.name] = value.map((item) => stringifyValue(item)).join(' ');
+    const serialized = value.map((item) => stringifyValue(item)).join(' ');
+    queryParams[parameter.name] = serialized;
+    replaceQueryEntry(queryEntries, parameter.name, serialized, allowReserved);
     return;
   }
   if (style === 'pipeDelimited' && Array.isArray(value)) {
-    queryParams[parameter.name] = value.map((item) => stringifyValue(item)).join('|');
+    const serialized = value.map((item) => stringifyValue(item)).join('|');
+    queryParams[parameter.name] = serialized;
+    replaceQueryEntry(queryEntries, parameter.name, serialized, allowReserved);
     return;
   }
   if (Array.isArray(value)) {
     queryParams[parameter.name] = explode
       ? value.map((item) => stringifyValue(item))
       : value.map((item) => stringifyValue(item)).join(',');
+    clearQueryEntries(queryEntries, parameter.name);
+    if (explode) {
+      for (const item of value) {
+        addQueryEntry(queryEntries, `${parameter.name}[]`, item, allowReserved);
+      }
+    } else {
+      addQueryEntry(queryEntries, parameter.name, queryParams[parameter.name], allowReserved);
+    }
     return;
   }
   if (value && typeof value === 'object') {
@@ -115,15 +137,19 @@ export function applyQueryParam(
     if (explode) {
       for (const [key, objectItem] of Object.entries(objectValue)) {
         queryParams[key] = stringifyValue(objectItem);
+        replaceQueryEntry(queryEntries, key, objectItem, allowReserved);
       }
     } else {
-      queryParams[parameter.name] = Object.entries(objectValue)
+      const serialized = Object.entries(objectValue)
         .flatMap(([key, objectItem]) => [key, stringifyValue(objectItem)])
         .join(',');
+      queryParams[parameter.name] = serialized;
+      replaceQueryEntry(queryEntries, parameter.name, serialized, allowReserved);
     }
     return;
   }
   queryParams[parameter.name] = stringifyValue(value);
+  replaceQueryEntry(queryEntries, parameter.name, value, allowReserved);
 }
 
 export function serializeHeaderValue(
