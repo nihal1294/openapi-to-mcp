@@ -131,6 +131,9 @@ GitHub shows the required checks and their results on each pull request.
 Release behavior:
 
 - releases are automated from `master`
+- release runs are serialized with up to 100 pending runs queued, so later pushes
+  do not replace waiting version-bump runs; additional runs are canceled if the
+  queue is full
 - a release runs only when the version changes; a missing tag does not trigger
   rebuilding or republishing an unchanged version
 - the release workflow validates the wheel and sdist, publishes them to PyPI,

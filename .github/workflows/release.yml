@@ -10,6 +10,7 @@ permissions:
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   detect-version-bump:
