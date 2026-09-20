@@ -11,8 +11,8 @@ from openapi_to_mcp.adapters.testing.server_tester import (
     ServerConnectionError,
     StreamableHttpTransport,
     UnsupportedMethodError,
-    _perform_mcp_request,
 )
+from openapi_to_mcp.adapters.testing.stdio_transport import perform_mcp_request
 
 
 def _json_response(payload: object, headers: dict[str, str] | None = None) -> MagicMock:
@@ -148,4 +148,4 @@ async def test_perform_mcp_request_rejects_unsupported_method() -> None:
     session = AsyncMock()
 
     with pytest.raises(UnsupportedMethodError, match="Unsupported method"):
-        await _perform_mcp_request(session, "ping", None)
+        await perform_mcp_request(session, "ping", None)

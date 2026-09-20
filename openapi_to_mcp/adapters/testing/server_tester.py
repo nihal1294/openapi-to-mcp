@@ -16,11 +16,9 @@ from openapi_to_mcp.adapters.testing.models import (
 )
 from openapi_to_mcp.adapters.testing.response_formatting import (
     format_mcp_error,
-    format_mcp_response,
 )
 from openapi_to_mcp.adapters.testing.stdio_transport import (
     StdioTransport,
-    perform_mcp_request,
 )
 from openapi_to_mcp.adapters.testing.streamable_http_transport import (
     DEFAULT_PROTOCOL_VERSION,
@@ -28,10 +26,6 @@ from openapi_to_mcp.adapters.testing.streamable_http_transport import (
 )
 
 logger = logging.getLogger(__name__)
-
-_format_response = format_mcp_response
-_format_mcp_error = format_mcp_error
-_perform_mcp_request = perform_mcp_request
 
 
 def _create_transport_strategy(request: ServerTestRequest) -> TransportStrategy:

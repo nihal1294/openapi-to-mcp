@@ -1,16 +1,16 @@
 # Installation
 
-Treat `openapi-to-mcp` as a standalone CLI first.
+The Python distribution is `openapi-to-mcp-cli`; the installed command is
+`openapi-to-mcp`. Requires Python 3.14+. Running generated servers also requires
+Node.js 22+ and npm.
 
-## Preferred install path today
+## Install from PyPI
 
-Because the project is not yet published to PyPI, the cleanest end-user path today is a tagged Git install with `uv tool install`.
+Install the CLI in an isolated tool environment:
 
 ```bash
-uv tool install git+https://github.com/nihal1294/openapi-to-mcp@vX.Y.Z
+uv tool install openapi-to-mcp-cli
 ```
-
-Replace `vX.Y.Z` with the release tag you want.
 
 If the executable is not on your `PATH`, run:
 
@@ -24,17 +24,42 @@ Then verify:
 openapi-to-mcp --help
 ```
 
-## Why this is the preferred user path
+For one-off use without a persistent installation:
 
-- it installs the CLI as an isolated tool,
-- it avoids mixing project and development dependencies into your shell,
-- it keeps the public docs aligned with the installable CLI experience.
+```bash
+uvx --from openapi-to-mcp-cli openapi-to-mcp --help
+```
+
+## Upgrade
+
+```bash
+uv tool upgrade openapi-to-mcp-cli
+```
+
+If you installed an older Git-based distribution named `openapi-to-mcp`, remove it
+before installing the renamed distribution so both do not claim the same command:
+
+```bash
+uv tool uninstall openapi-to-mcp
+uv tool install openapi-to-mcp-cli
+```
+
+## Tagged Git install
+
+To install directly from a specific GitHub release:
+
+```bash
+uv tool install git+https://github.com/nihal1294/openapi-to-mcp@vX.Y.Z
+```
+
+Replace `vX.Y.Z` with the release tag you want.
 
 ## GitHub Release artifacts
 
 Each GitHub Release also publishes a wheel and source tarball.
 
-Treat those artifacts as the canonical release outputs for packaging and pinned manual installs. The public docs still prefer `uv tool install` from a tagged release because it is the simplest end-user flow until PyPI publishing exists.
+These are the same distribution artifacts uploaded to PyPI and can also be used
+for pinned manual installs.
 
 ## Source checkout and development install
 

@@ -1,10 +1,20 @@
 [project]
-name = "openapi-to-mcp"
-version = "0.9.0"
+name = "openapi-to-mcp-cli"
+version = "0.9.1"
 description = "Generate, run, and test Node.js/TypeScript MCP servers from OpenAPI specifications."
 readme = "README.md"
 requires-python = ">=3.14"
 authors = [{ name = "Nihal Rao", email = "nihaliddya@gmail.com" }]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+keywords = ["openapi", "mcp", "code-generation", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Code Generators",
+]
 dependencies = [
     "click==8.5.0",
     "requests==2.34.2",
@@ -16,6 +26,13 @@ dependencies = [
     "rich-click==1.9.9",
     "structlog==26.1.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/nihal1294/openapi-to-mcp"
+Documentation = "https://nihal1294.github.io/openapi-to-mcp/"
+Repository = "https://github.com/nihal1294/openapi-to-mcp"
+Issues = "https://github.com/nihal1294/openapi-to-mcp/issues"
+Changelog = "https://github.com/nihal1294/openapi-to-mcp/blob/master/CHANGELOG.md"
 
 [project.scripts]
 openapi-to-mcp = "openapi_to_mcp.cli:cli"
@@ -92,8 +109,4 @@ build-backend = "hatchling.build"
 packages = ["openapi_to_mcp"]
 
 [tool.hatch.build.targets.sdist]
-exclude = [
-    "/AGENTS.md",
-    "/docs/plans/**",
-    "/.superpowers/**",
-]
+include = ["/openapi_to_mcp", "/tests", "/scripts", "/uv.lock"]
