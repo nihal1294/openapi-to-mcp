@@ -131,7 +131,8 @@ GitHub shows the required checks and their results on each pull request.
 Release behavior:
 
 - releases are automated from `master`
-- a release runs when the version changes or the matching version tag is missing
+- a release runs only when the version changes; a missing tag does not trigger
+  rebuilding or republishing an unchanged version
 - the release workflow validates the wheel and sdist, publishes them to PyPI,
   then creates the version tag and GitHub Release from those same artifacts
 
@@ -153,8 +154,21 @@ job without publishing permissions. No long-lived PyPI token is required.
 
 Choose a new version in `pyproject.toml`, update the changelog, and regenerate
 `uv.lock` before merging a release. An existing version tag cannot be reused.
-If publishing fails, rerun the failed job after correcting the cause. If PyPI
-publishing succeeded but GitHub release creation failed, rerun only the failed
-GitHub release job. Duplicate PyPI uploads fail instead of silently replacing files.
+If publishing fails, check PyPI before retrying: a failed or interrupted upload
+may have already published some files. If any files for that version are already
+published, do not rerun `pypi-publish`; manually reconcile them against the original
+build artifacts before continuing. Duplicate PyPI uploads fail instead of silently
+replacing files. Never rebuild the same version to recover an upload.
+
+If the PyPI job succeeded but GitHub release creation failed,
+[rerun only the failed GitHub release job](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-a-specific-job-in-a-workflow)
+from the original workflow run. This reuses that run's commit and artifacts without
+publishing to PyPI again. Do not rerun all jobs or push an unrelated commit to
+repair a release. GitHub permits reruns for 30 days, and the build artifacts must
+still be available.
+
+A deleted tag or a release whose original run can no longer be retried requires
+manual recovery from the published release's original commit and distributions.
+Never retag a later commit or rebuild an already-published version to repair it.
 
 Code scanning is expected through GitHub default CodeQL setup, not a workflow in the repo.

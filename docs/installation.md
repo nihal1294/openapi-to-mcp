@@ -1,12 +1,13 @@
 # Installation
 
-The Python distribution is `openapi-to-mcp-cli`; the installed command is
+The Python distribution is [`openapi-to-mcp-cli`](https://pypi.org/project/openapi-to-mcp-cli/); the installed command is
 `openapi-to-mcp`. Requires Python 3.14+. Running generated servers also requires
 Node.js 22+ and npm.
 
 ## Install from PyPI
 
-Install the CLI in an isolated tool environment:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if needed,
+then install the CLI in an isolated tool environment:
 
 ```bash
 uv tool install openapi-to-mcp-cli
