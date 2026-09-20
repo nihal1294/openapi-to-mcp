@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.3](https://github.com/nihal1294/openapi-to-mcp/compare/v0.9.2...v0.9.3) (2026-09-20)
+
+
+### Bug Fixes
+
+* diagnose unsupported Swagger 2 constructs ([#115](https://github.com/nihal1294/openapi-to-mcp/issues/115)) ([5f57c87](https://github.com/nihal1294/openapi-to-mcp/commit/5f57c87f90648a9553f83d1d06987108cfbf9607))
+* honor reserved query parameter encoding ([#118](https://github.com/nihal1294/openapi-to-mcp/issues/118)) ([027ba7c](https://github.com/nihal1294/openapi-to-mcp/commit/027ba7c2953850e156067b7504ec53960e36530c))
+* preserve nullable schema constraints ([#116](https://github.com/nihal1294/openapi-to-mcp/issues/116)) ([112779c](https://github.com/nihal1294/openapi-to-mcp/commit/112779cfb6cf5aa5b8ed8f1d44a75b31c917f36d))
+
+
+### Documentation
+
+* add a tested container deployment reference ([#117](https://github.com/nihal1294/openapi-to-mcp/issues/117)) ([3c771be](https://github.com/nihal1294/openapi-to-mcp/commit/3c771bea9a57c17863ad36bd20ed2841e366fe04))
+
 ## [0.9.2](https://github.com/nihal1294/openapi-to-mcp/compare/v0.9.1...v0.9.2) (2026-09-20)
 
 
