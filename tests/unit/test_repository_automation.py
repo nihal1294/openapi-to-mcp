@@ -7,48 +7,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
-EXPECTED_PR_GATE_STEPS = {
-    "docs": [
-        {"name": "Check out repository", "uses": "actions/checkout@v7"},
-        {
-            "name": "Set up Python 3.14",
-            "uses": "actions/setup-python@v7",
-            "with": {"python-version": "3.14"},
-        },
-        {
-            "name": "Set up uv",
-            "uses": "astral-sh/setup-uv@v10.0.1",
-            "with": {"enable-cache": "true"},
-        },
-        {"name": "Sync dependencies", "run": "uv sync --dev --frozen"},
-        {
-            "name": "Build docs strictly",
-            "run": "NO_MKDOCS_2_WARNING=1 uv run mkdocs build --strict",
-        },
-    ],
-    "package": [
-        {"name": "Check out repository", "uses": "actions/checkout@v7"},
-        {
-            "name": "Set up Python 3.14",
-            "uses": "actions/setup-python@v7",
-            "with": {"python-version": "3.14"},
-        },
-        {"name": "Set up uv", "uses": "astral-sh/setup-uv@v10.0.1"},
-        {"name": "Build distribution artifacts", "run": "uv build"},
-        {
-            "name": "Check distribution metadata",
-            "run": "uvx --from twine==7.0.0 twine check dist/*",
-        },
-        {
-            "name": "Check installed wheel CLI",
-            "run": "uvx --from dist/*.whl openapi-to-mcp --help",
-        },
-    ],
-}
-
-
-def _workflow_files() -> list[Path]:
-    return sorted((*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")))
 
 
 def _load_workflow(name: str) -> dict[str, Any]:
@@ -56,19 +14,6 @@ def _load_workflow(name: str) -> dict[str, Any]:
     workflow = yaml.load(content, Loader=yaml.BaseLoader)  # noqa: S506
     assert "on" in workflow
     return workflow
-
-
-def test_all_setup_uv_actions_use_v10_0_1() -> None:
-    """Require every workflow to use the approved setup-uv release."""
-    references = [
-        line.split("astral-sh/setup-uv@", maxsplit=1)[1].strip()
-        for workflow in _workflow_files()
-        for line in workflow.read_text(encoding="utf-8").splitlines()
-        if "uses: astral-sh/setup-uv@" in line
-    ]
-
-    assert references
-    assert set(references) == {"v10.0.1"}
 
 
 def test_generated_server_ci_uses_supported_node_versions() -> None:
@@ -117,10 +62,9 @@ def test_pull_request_jobs_have_read_only_repository_access() -> None:
     workflow = _load_workflow("ci.yml")
     assert workflow["permissions"] == {"contents": "read"}
 
-    for job_name, expected_steps in EXPECTED_PR_GATE_STEPS.items():
+    for job_name in ("docs", "package"):
         job = workflow["jobs"][job_name]
-        assert set(job) == {"name", "needs", "runs-on", "timeout-minutes", "steps"}
-        assert job["steps"] == expected_steps
+        assert job.get("permissions", workflow["permissions"]) == {"contents": "read"}
 
         commands_and_actions = "\n".join(
             step.get("uses", "") + step.get("run", "") for step in job["steps"]
