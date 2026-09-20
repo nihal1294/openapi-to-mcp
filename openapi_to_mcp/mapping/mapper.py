@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from openapi_to_mcp.common import MappingError, SchemaError
 from openapi_to_mcp.common.error_policy import ErrorMode, resolve_error_mode
+from openapi_to_mcp.common.exceptions import PolicyConfigError
 from openapi_to_mcp.common.spec_compatibility import (
     format_swagger_finding,
     swagger_operation_findings,
@@ -132,8 +133,8 @@ class Mapper:
                     self.mcp_tools.append(tool_definition)
                 except SchemaError as exc:
                     self._handle_schema_error(method, path, exc)
-                except MappingError as exc:
-                    self._handle_mapping_error(method, path, exc)
+                except PolicyConfigError:
+                    raise
                 except Exception as exc:  # noqa: BLE001
                     self._handle_mapping_error(method, path, exc)
 
