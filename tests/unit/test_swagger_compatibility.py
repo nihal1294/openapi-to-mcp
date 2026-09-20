@@ -1,0 +1,115 @@
+from openapi_to_mcp.common.spec_compatibility import swagger_operation_findings
+
+
+def test_swagger_findings_resolve_referenced_inherited_parameters_and_security() -> (
+    None
+):
+    spec = {
+        "swagger": "2.0",
+        "parameters": {
+            "SharedLimit": {"name": "limit", "in": "query", "type": "integer"},
+            "Payload": {"name": "payload", "in": "body", "schema": {"type": "object"}},
+            "Attachment": {"name": "file", "in": "formData", "type": "string"},
+        },
+        "securityDefinitions": {
+            "apiKey": {"type": "apiKey", "in": "header", "name": "X-Key"}
+        },
+        "security": [{"apiKey": []}],
+    }
+    path_item = {"parameters": [{"$ref": "#/parameters/SharedLimit"}]}
+    operation = {
+        "parameters": [
+            {"$ref": "#/parameters/Payload"},
+            {"$ref": "#/parameters/Attachment"},
+        ]
+    }
+
+    findings = swagger_operation_findings(spec, "get", "/pets", path_item, operation)
+
+    assert {(finding.field, finding.location) for finding in findings} == {
+        ("type", "paths./pets.parameters[0].type"),
+        ("in: body", "paths./pets.get.parameters[0].in"),
+        ("in: formData", "paths./pets.get.parameters[1].in"),
+        ("securityDefinitions", "security"),
+    }
+
+
+def test_swagger_findings_ignore_unused_security_definitions_and_empty_override() -> (
+    None
+):
+    spec = {
+        "swagger": "2.0",
+        "securityDefinitions": {
+            "apiKey": {"type": "apiKey", "in": "header", "name": "X-Key"}
+        },
+        "security": [{"apiKey": []}],
+    }
+
+    assert (
+        swagger_operation_findings(spec, "get", "/public", {}, {"security": []}) == []
+    )
+
+
+def test_swagger_findings_preserve_supported_response_only_operation() -> None:
+    spec = {"swagger": "2.0"}
+
+    assert swagger_operation_findings(spec, "get", "/status", {}, {}) == []
+
+
+def test_swagger_findings_reject_unsupported_global_protocols() -> None:
+    for scheme in ("ws", "wss"):
+        findings = swagger_operation_findings(
+            {"swagger": "2.0", "schemes": [scheme]}, "get", "/status", {}, {}
+        )
+
+        assert {(finding.field, finding.location) for finding in findings} == {
+            ("schemes", "schemes[0]")
+        }
+
+
+def test_swagger_findings_use_first_global_protocol() -> None:
+    supported_first = swagger_operation_findings(
+        {"swagger": "2.0", "schemes": ["https", "wss"]},
+        "get",
+        "/status",
+        {},
+        {},
+    )
+    unsupported_first = swagger_operation_findings(
+        {"swagger": "2.0", "schemes": ["ws", "https"]},
+        "get",
+        "/status",
+        {},
+        {},
+    )
+
+    assert supported_first == []
+    assert {(finding.field, finding.location) for finding in unsupported_first} == {
+        ("schemes", "schemes[0]")
+    }
+
+
+def test_swagger_findings_reject_operation_protocol_override() -> None:
+    spec = {"swagger": "2.0", "schemes": ["http"]}
+
+    findings = swagger_operation_findings(
+        spec, "get", "/secure", {}, {"schemes": ["https"]}
+    )
+
+    assert {(finding.field, finding.location) for finding in findings} == {
+        ("schemes", "paths./secure.get.schemes")
+    }
+
+
+def test_swagger_findings_allow_operation_protocols_with_document_scheme() -> None:
+    spec = {"swagger": "2.0", "schemes": ["http"]}
+
+    same_scheme = swagger_operation_findings(
+        spec, "get", "/status", {}, {"schemes": ["http"]}
+    )
+    multiple_schemes = swagger_operation_findings(
+        spec, "get", "/status", {}, {"schemes": ["https", "http"]}
+    )
+
+    assert same_scheme == []
+    assert multiple_schemes == []

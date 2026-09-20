@@ -65,6 +65,7 @@ def _map_tools(
         strict=behavior.strict,
         on_mapping_error=behavior.on_mapping_error,
         on_schema_error=behavior.on_schema_error,
+        policy_config=request.policy_config,
     )
     tools = apply_policy(mapper.map_tools(), request.policy_config)
     tools = apply_tool_grouping(tools, behavior.tool_grouping)

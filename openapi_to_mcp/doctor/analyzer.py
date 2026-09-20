@@ -10,6 +10,7 @@ from openapi_to_mcp.doctor.security import (
     referenced_scheme_names,
     security_schemes,
 )
+from openapi_to_mcp.doctor.swagger import report_swagger_compatibility
 from openapi_to_mcp.mapping.utils import generate_tool_name
 
 _HTTP_METHODS = {"get", "post", "put", "delete", "patch", "options", "head", "trace"}
@@ -39,6 +40,7 @@ class DoctorAnalyzer:
         self._check_missing_operation_ids(report, operations)
         self._check_generated_name_collisions(report, operations)
         self._check_security(report, operations)
+        report_swagger_compatibility(report, self.spec, operations)
         self._check_schema_unions(report, operations)
         return report
 
@@ -123,12 +125,13 @@ class DoctorAnalyzer:
         operations: list[tuple[str, str, dict[str, Any]]],
     ) -> None:
         schemes = security_schemes(self.spec)
-        self._check_security_requirements(
-            report,
-            source=self.spec.get("security", []),
-            schemes=schemes,
-            location="security",
-        )
+        if any("security" not in operation for _, _, operation in operations):
+            self._check_security_requirements(
+                report,
+                source=self.spec.get("security", []),
+                schemes=schemes,
+                location="security",
+            )
         for method, path, operation in operations:
             security = operation.get("security")
             if security is None:

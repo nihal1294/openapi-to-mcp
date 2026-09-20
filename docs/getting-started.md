@@ -24,8 +24,8 @@ Use `run` when you want one command to generate, build, and start a server local
 
 ```bash
 openapi-to-mcp run \
-  --openapi-json https://petstore.swagger.io/v2/swagger.json \
-  --target-api-base-url https://petstore.swagger.io/v2
+  --openapi-json https://petstore3.swagger.io/api/v3/openapi.json \
+  --target-api-base-url https://petstore3.swagger.io/api/v3
 ```
 
 Use `test-server` when you want to smoke-test a running server.

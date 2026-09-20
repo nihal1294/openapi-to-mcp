@@ -1,10 +1,17 @@
 """Maps OpenAPI operations to MCP tool definitions."""
 
+from __future__ import annotations
+
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from openapi_to_mcp.common import MappingError, SchemaError
 from openapi_to_mcp.common.error_policy import ErrorMode, resolve_error_mode
+from openapi_to_mcp.common.exceptions import PolicyConfigError
+from openapi_to_mcp.common.spec_compatibility import (
+    format_swagger_finding,
+    swagger_operation_findings,
+)
 from openapi_to_mcp.mapping.output_schema import extract_output_schema
 from openapi_to_mcp.mapping.tool_description import build_tool_description
 from openapi_to_mcp.mapping.tool_examples import (
@@ -13,11 +20,15 @@ from openapi_to_mcp.mapping.tool_examples import (
     build_input_examples,
 )
 from openapi_to_mcp.mapping.utils import generate_tool_name
+from openapi_to_mcp.policy.swagger import effective_swagger_findings
 from openapi_to_mcp.schema.converter import (
     SchemaConverter,
     openapi_schema_to_json_schema,
 )
 from openapi_to_mcp.schema.handlers.reference import ReferenceHandler
+
+if TYPE_CHECKING:
+    from openapi_to_mcp.policy.models import PolicyConfig
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +43,7 @@ class Mapper:
         strict: bool = True,
         on_mapping_error: ErrorMode | None = None,
         on_schema_error: ErrorMode | None = None,
+        policy_config: PolicyConfig | None = None,
     ) -> None:
         """
         Initialize the mapper with the loaded OpenAPI spec.
@@ -48,6 +60,7 @@ class Mapper:
             raise MappingError(err_msg)
         self.spec = spec
         self.strict = strict
+        self.policy_config = policy_config
         self.on_mapping_error = resolve_error_mode(on_mapping_error, strict=strict)
         self.on_schema_error = resolve_error_mode(on_schema_error, strict=strict)
         self.mcp_tools: list[dict[str, Any]] = []
@@ -109,15 +122,41 @@ class Mapper:
                         operation,
                         merged_parameters,
                     )
+                    self._raise_if_unsupported_swagger(
+                        path_item, operation, tool_definition
+                    )
+                    self._register_tool_name(
+                        operation.get("operationId")
+                        or generate_tool_name(method, path),
+                        tool_definition["name"],
+                    )
                     self.mcp_tools.append(tool_definition)
                 except SchemaError as exc:
                     self._handle_schema_error(method, path, exc)
-                except MappingError as exc:
-                    self._handle_mapping_error(method, path, exc)
+                except PolicyConfigError:
+                    raise
                 except Exception as exc:  # noqa: BLE001
                     self._handle_mapping_error(method, path, exc)
 
         return self.mcp_tools
+
+    def _raise_if_unsupported_swagger(
+        self,
+        path_item: dict[str, Any],
+        operation: dict[str, Any],
+        tool: dict[str, Any],
+    ) -> None:
+        """Raise when this operation needs unsupported Swagger 2 behavior."""
+        findings = swagger_operation_findings(
+            self.spec,
+            tool["_original_method"],
+            tool["_original_path"],
+            path_item,
+            operation,
+        )
+        findings = effective_swagger_findings(findings, tool, self.policy_config)
+        if findings:
+            raise MappingError(format_swagger_finding(findings[0]))
 
     def get_report(self) -> dict[str, Any]:
         """Get mapper warnings and skipped operations for generation report."""
@@ -285,13 +324,9 @@ class Mapper:
 
         return (name, location)
 
-    def _ensure_unique_tool_name(self, candidate_name: str) -> str:
-        """Ensure mapped tool names are unique."""
+    def _resolve_unique_tool_name(self, candidate_name: str) -> str:
+        """Return a unique tool name without reserving it."""
         if candidate_name not in self._used_tool_names:
-            self._used_tool_names.add(candidate_name)
-            self._tool_name_counts[candidate_name] = max(
-                self._tool_name_counts.get(candidate_name, 0), 1
-            )
             return candidate_name
 
         if self.on_mapping_error == "fail":
@@ -306,12 +341,26 @@ class Mapper:
             if deduped_name not in self._used_tool_names:
                 break
 
-        self._tool_name_counts[candidate_name] = count
-        self._used_tool_names.add(deduped_name)
-        self._diagnostics.append(
-            f"Duplicate tool name '{candidate_name}' deduped to '{deduped_name}'."
-        )
         return deduped_name
+
+    def _register_tool_name(
+        self,
+        candidate_name: str,
+        tool_name: str,
+    ) -> None:
+        """Reserve a tool name after the operation has been accepted."""
+        self._used_tool_names.add(tool_name)
+        if tool_name == candidate_name:
+            self._tool_name_counts[candidate_name] = max(
+                self._tool_name_counts.get(candidate_name, 0), 1
+            )
+            return
+
+        suffix = tool_name.removeprefix(f"{candidate_name}_")
+        self._tool_name_counts[candidate_name] = int(suffix)
+        self._diagnostics.append(
+            f"Duplicate tool name '{candidate_name}' deduped to '{tool_name}'."
+        )
 
     def _process_parameters(
         self, parameters: list[dict[str, Any]], input_schema: dict[str, Any]
@@ -469,7 +518,7 @@ class Mapper:
         candidate_name = operation.get("operationId") or generate_tool_name(
             method, path
         )
-        tool_name = self._ensure_unique_tool_name(candidate_name)
+        tool_name = self._resolve_unique_tool_name(candidate_name)
         description = build_tool_description(method, path, operation)
 
         input_schema: dict[str, Any] = {

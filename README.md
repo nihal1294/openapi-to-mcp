@@ -45,8 +45,8 @@ Run directly from a spec:
 
 ```bash
 openapi-to-mcp run \
-  --openapi-json https://petstore.swagger.io/v2/swagger.json \
-  --target-api-base-url https://petstore.swagger.io/v2
+  --openapi-json https://petstore3.swagger.io/api/v3/openapi.json \
+  --target-api-base-url https://petstore3.swagger.io/api/v3
 ```
 
 Smoke-test a running server:
@@ -85,6 +85,10 @@ Public product documentation lives on GitHub Pages:
 - generated-server E2E coverage against a local mock API
 - CLI E2E coverage for `generate`, `run`, and `test-server`
 - version-aware PyPI and GitHub Releases automation on `master`
+
+## Swagger 2 support
+
+Swagger 2 response-only operations and base URL fields are supported. Convert operations that use Swagger 2 body or form parameters, top-level parameter types, security definitions, or unsupported protocol overrides to OpenAPI 3 before generating. Run `openapi-to-mcp doctor` to identify the affected operation and field.
 
 ## Development
 

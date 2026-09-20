@@ -92,7 +92,7 @@ Example:
 
 ```bash
 OUTPUT_DIR=/tmp/my-mcp \
-TARGET_API_BASE_URL=https://petstore.swagger.io/v2 \
+TARGET_API_BASE_URL=https://petstore3.swagger.io/api/v3 \
 scripts/workflow.sh generate
 ```
 

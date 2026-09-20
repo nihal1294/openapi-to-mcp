@@ -42,7 +42,7 @@ openapi-to-mcp generate \
 
 ```bash
 openapi-to-mcp generate \
-  --openapi-json https://petstore.swagger.io/v2/swagger.json \
+  --openapi-json https://petstore3.swagger.io/api/v3/openapi.json \
   --output-dir ./generated-http \
   --transport streamable-http \
   --host 127.0.0.1 \

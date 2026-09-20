@@ -30,8 +30,8 @@ openapi-to-mcp generate \
 
 ```bash
 openapi-to-mcp run \
-  --openapi-json https://petstore.swagger.io/v2/swagger.json \
-  --target-api-base-url https://petstore.swagger.io/v2
+  --openapi-json https://petstore3.swagger.io/api/v3/openapi.json \
+  --target-api-base-url https://petstore3.swagger.io/api/v3
 ```
 
 ## Run with inline environment JSON

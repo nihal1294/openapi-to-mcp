@@ -33,6 +33,7 @@ openapi-to-mcp doctor [OPTIONS]
 - undefined referenced security schemes
 - unsupported auth schemes such as HTTP Basic
 - risky `oneOf` or `anyOf` usage in request or response schemas
+- Swagger 2 constructs that cannot be faithfully generated, including body/form parameters, top-level parameter types, used security definitions, and unsupported protocol overrides
 - missing HTTP operations under `paths`
 
 ## Examples
@@ -56,3 +57,16 @@ openapi-to-mcp doctor \
 - Fix `error` issues before treating the spec as generation-ready.
 - Review `warning` issues before relying on the generated tool surface in production.
 - Use `--format json` when you want to feed diagnostics into CI or another script.
+
+## Swagger 2 guidance
+
+Swagger 2 response-only operations and host/base-path defaults can be generated. Convert any operation flagged for body or form parameters, top-level parameter types, used security definitions, or unsupported protocol overrides to OpenAPI 3. An operation with `security: []` remains eligible when it overrides unused global security.
+
+`doctor` analyzes the source specification. During generation, `mcpgen.yaml`
+auth overrides can remove a mistaken security requirement or supply its runtime
+security definitions for API keys, HTTP bearer, or OAuth/OpenID tokens. API-key
+replacements must specify a non-empty `name` and an `in` location of `header`,
+`query`, or `cookie`. Unsupported or incomplete replacements still fail
+compatibility checks. The selected document scheme must be HTTP or HTTPS;
+WebSocket schemes cannot be used by the generated HTTP client. Other unsupported
+Swagger constructs still require conversion.
