@@ -11,7 +11,8 @@ updates:
       - "dependencies"
       - "python"
     commit-message:
-      prefix: "chore"
+      prefix: "fix"
+      prefix-development: "chore"
       include: "scope"
     open-pull-requests-limit: 10
     groups:

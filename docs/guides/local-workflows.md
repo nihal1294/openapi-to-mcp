@@ -130,14 +130,65 @@ GitHub shows the required checks and their results on each pull request.
 
 Release behavior:
 
-- releases are automated from `master`
+- Release Please maintains one rolling release PR from `master`. A human review
+  and merge of that PR authorizes its build, PyPI publication, tag, and GitHub
+  Release; there is no additional publish approval.
 - release runs are serialized with up to 100 pending runs queued, so later pushes
-  do not replace waiting version-bump runs; additional runs are canceled if the
-  queue is full
-- a release runs only when the version changes; a missing tag does not trigger
-  rebuilding or republishing an unchanged version
-- the release workflow validates the wheel and sdist, publishes them to PyPI,
-  then creates the version tag and GitHub Release from those same artifacts
+  do not replace a pending release finalization; additional runs are canceled if
+  the queue is full
+- the release workflow validates the wheel and sdist, then publishes, tags, and
+  creates the GitHub Release from those same artifacts
+
+### Release intent and evidence
+
+Use strict semantic pull request titles:
+
+- `fix:` or `perf:` for compatible fixes
+- `fix(deps):` for runtime dependency updates
+- `feat:` for backward-compatible features
+- `feat!:` or `fix!:` for breaking changes, with a `Migration:` note in the
+  pull request body
+- `chore:`, `docs:`, `test:`, and `ci:` for changes that do not release the
+  product; Dependabot uses `chore(deps-dev):` for development dependencies
+
+Before 1.0, compatible fixes are patches and features or breaking changes are
+minor releases. Promotion to 1.0 is an explicit maintainer decision. Do not add
+`Release-As:` to ordinary pull requests: it cannot force a version.
+
+The release check compares a bounded fixed corpus of CLI, generated-server,
+custom-tool preservation, and MCP wire behavior. Passing it demonstrates those
+tested contracts only. Missing or conflicting evidence fails the check instead
+of being classified as compatible.
+
+For a legacy runtime change that reached `master` without a semantic title,
+add a reviewed native Release Please override to the merged pull request body:
+
+```text
+BEGIN_COMMIT_OVERRIDE
+fix(deps): describe the compatible runtime dependency update
+END_COMMIT_OVERRIDE
+```
+
+Use overrides to correct the effective commit classification, never to force a
+version. They are designed for squash merges and should include a clear reason
+in the pull request discussion.
+
+### Release automation activation
+
+Release Please uses the built-in GitHub token to create or update its release
+PR. The repository owner must enable GitHub's **Allow GitHub Actions to create
+and approve pull requests** setting before activation. This repository has not
+enabled that setting as part of this change, and the workflow never approves or
+merges a pull request.
+
+If the proposal job is denied permission to create a pull request, the
+repository owner must enable that checkbox; workflow credentials cannot enable
+it.
+
+GitHub may require a maintainer to select **Approve workflows to run** for CI
+on a release PR created with the built-in token. That approves CI execution; it
+does not authorize publication. See [GitHub's workflow trigger
+behavior](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
 
 ### PyPI publishing setup
 
@@ -155,23 +206,14 @@ Create the matching GitHub environment with deployments restricted to `master`.
 Only the publish job can request the OIDC token; tests and builds run in a separate
 job without publishing permissions. No long-lived PyPI token is required.
 
-Choose a new version in `pyproject.toml`, update the changelog, and regenerate
-`uv.lock` before merging a release. An existing version tag cannot be reused.
-If publishing fails, check PyPI before retrying: a failed or interrupted upload
-may have already published some files. If any files for that version are already
-published, do not rerun `pypi-publish`; manually reconcile them against the original
-build artifacts before continuing. Duplicate PyPI uploads fail instead of silently
-replacing files. Never rebuild the same version to recover an upload.
+Release Please synchronizes version metadata, the changelog, and the root project
+version in `uv.lock`. An existing version tag cannot be reused.
 
-If the PyPI job succeeded but GitHub release creation failed,
-[rerun only the failed GitHub release job](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-a-specific-job-in-a-workflow)
-from the original workflow run. This reuses that run's commit and artifacts without
-publishing to PyPI again. Do not rerun all jobs or push an unrelated commit to
-repair a release. GitHub permits reruns for 30 days, and the build artifacts must
-still be available.
-
-A deleted tag or a release whose original run can no longer be retried requires
-manual recovery from the published release's original commit and distributions.
-Never retag a later commit or rebuild an already-published version to repair it.
+An `autorelease: pending` label means a merged release is unfinished and blocks
+another release proposal. The finalizer changes it to `autorelease: tagged` only
+after it verifies the original PyPI and GitHub release artifact hashes. If only
+that finalization step fails, retry the finalizer after it verifies the completed
+publication. Do not rerun all jobs, rebuild, reupload, retag a later commit, or
+use replacement artifacts to recover a release.
 
 Code scanning is expected through GitHub default CodeQL setup, not a workflow in the repo.

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "python",
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "separate-pull-requests": true,
+  "always-update": true,
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": false,
+  "bootstrap-sha": "6097c2947a9cc01036f978639e462ce5229c26f4",
+  "pull-request-footer": "Review the release-impact summary and retained evidence in the CI checks before merging. Merging this PR authorizes publication of the tested version to PyPI and GitHub.",
+  "changelog-sections": [
+    { "type": "feat", "section": "Features" },
+    { "type": "feature", "section": "Features" },
+    { "type": "fix", "section": "Bug Fixes" },
+    { "type": "perf", "section": "Performance" },
+    { "type": "deps", "section": "Dependencies" },
+    { "type": "docs", "section": "Documentation", "hidden": true },
+    { "type": "chore", "section": "Maintenance", "hidden": true },
+    { "type": "ci", "section": "CI", "hidden": true },
+    { "type": "build", "section": "Build", "hidden": true },
+    { "type": "test", "section": "Tests", "hidden": true },
+    { "type": "refactor", "section": "Refactoring", "hidden": true },
+    { "type": "style", "section": "Style", "hidden": true }
+  ],
+  "packages": {
+    ".": {
+      "package-name": "openapi-to-mcp-cli",
+      "component": "openapi-to-mcp-cli",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='openapi-to-mcp-cli')].version"
+        }
+      ]
+    }
+  }
+}
