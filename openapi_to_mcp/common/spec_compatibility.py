@@ -34,6 +34,7 @@ def swagger_operation_findings(
         )
     )
     findings.extend(_security_findings(spec, operation, base, method))
+    findings.extend(_scheme_findings(spec, operation, base, method))
     return list(dict.fromkeys(findings))
 
 
@@ -128,3 +129,22 @@ def _security_findings(
         else "security"
     )
     return [SwaggerFinding(field, location)]
+
+
+def _scheme_findings(
+    spec: dict[str, Any], operation: dict[str, Any], base: str, method: str
+) -> list[SwaggerFinding]:
+    if "schemes" not in operation:
+        return []
+    selected_scheme = _document_scheme(spec)
+    operation_schemes = operation.get("schemes")
+    if isinstance(operation_schemes, list) and selected_scheme in operation_schemes:
+        return []
+    return [SwaggerFinding("schemes", f"{base}.{method.lower()}.schemes")]
+
+
+def _document_scheme(spec: dict[str, Any]) -> str:
+    schemes = spec.get("schemes")
+    if isinstance(schemes, list) and schemes and isinstance(schemes[0], str):
+        return schemes[0]
+    return "https"

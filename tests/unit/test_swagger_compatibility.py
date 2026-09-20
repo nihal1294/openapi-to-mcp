@@ -54,3 +54,29 @@ def test_swagger_findings_preserve_supported_response_only_operation() -> None:
     spec = {"swagger": "2.0"}
 
     assert swagger_operation_findings(spec, "get", "/status", {}, {}) == []
+
+
+def test_swagger_findings_reject_operation_protocol_override() -> None:
+    spec = {"swagger": "2.0", "schemes": ["http"]}
+
+    findings = swagger_operation_findings(
+        spec, "get", "/secure", {}, {"schemes": ["https"]}
+    )
+
+    assert {(finding.field, finding.location) for finding in findings} == {
+        ("schemes", "paths./secure.get.schemes")
+    }
+
+
+def test_swagger_findings_allow_operation_protocols_with_document_scheme() -> None:
+    spec = {"swagger": "2.0", "schemes": ["http"]}
+
+    same_scheme = swagger_operation_findings(
+        spec, "get", "/status", {}, {"schemes": ["http"]}
+    )
+    multiple_schemes = swagger_operation_findings(
+        spec, "get", "/status", {}, {"schemes": ["https", "http"]}
+    )
+
+    assert same_scheme == []
+    assert multiple_schemes == []

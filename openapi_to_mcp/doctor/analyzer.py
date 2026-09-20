@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from openapi_to_mcp.common.spec_compatibility import swagger_operation_findings
 from openapi_to_mcp.doctor.models import DoctorReport
 from openapi_to_mcp.doctor.security import (
     check_security_scheme,
     referenced_scheme_names,
     security_schemes,
 )
+from openapi_to_mcp.doctor.swagger import report_swagger_compatibility
 from openapi_to_mcp.mapping.utils import generate_tool_name
 
 _HTTP_METHODS = {"get", "post", "put", "delete", "patch", "options", "head", "trace"}
@@ -40,7 +40,7 @@ class DoctorAnalyzer:
         self._check_missing_operation_ids(report, operations)
         self._check_generated_name_collisions(report, operations)
         self._check_security(report, operations)
-        self._check_swagger_compatibility(report, operations)
+        report_swagger_compatibility(report, self.spec, operations)
         self._check_schema_unions(report, operations)
         return report
 
@@ -172,29 +172,6 @@ class DoctorAnalyzer:
                     f"{method.upper()} {path} uses `oneOf` or `anyOf` in request or response schemas.",
                     location,
                     "Generation can proceed, but review the generated input/output contract carefully.",
-                )
-
-    def _check_swagger_compatibility(
-        self,
-        report: DoctorReport,
-        operations: list[tuple[str, str, dict[str, Any]]],
-    ) -> None:
-        """Report Swagger 2 constructs the mapper cannot faithfully generate."""
-        paths = self.spec.get("paths", {})
-        if not isinstance(paths, dict):
-            return
-        for method, path, operation in operations:
-            path_item = paths.get(path)
-            if not isinstance(path_item, dict):
-                continue
-            for finding in swagger_operation_findings(
-                self.spec, method, path, path_item, operation
-            ):
-                report.add_error(
-                    "unsupported_swagger_construct",
-                    f"Swagger 2 `{finding.field}` cannot be faithfully generated.",
-                    finding.location,
-                    "Convert this operation to OpenAPI 3 before generating an MCP server.",
                 )
 
     def _operation_uses_union_schema(self, operation: dict[str, Any]) -> bool:

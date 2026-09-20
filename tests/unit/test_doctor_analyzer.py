@@ -110,6 +110,44 @@ def test_doctor_reports_unresolved_swagger_parameter_reference() -> None:
     assert issue.location == "paths./pets.get.parameters[0].$ref"
 
 
+def test_doctor_deduplicates_inherited_swagger_findings() -> None:
+    spec = {
+        "swagger": "2.0",
+        "info": {"title": "Swagger", "version": "1.0.0"},
+        "host": "api.example.com",
+        "securityDefinitions": {
+            "apiKey": {"type": "apiKey", "in": "header", "name": "X-Key"}
+        },
+        "security": [{"apiKey": []}],
+        "paths": {
+            "/pets": {
+                "parameters": [{"name": "limit", "in": "query", "type": "integer"}],
+                "get": {
+                    "operationId": "listPets",
+                    "responses": {"200": {"description": "OK"}},
+                },
+                "post": {
+                    "operationId": "createPet",
+                    "responses": {"200": {"description": "OK"}},
+                },
+            }
+        },
+    }
+
+    report = DoctorAnalyzer(spec).analyze("inline")
+    findings = [
+        (issue.message, issue.location)
+        for issue in report.issues
+        if issue.code == "unsupported_swagger_construct"
+    ]
+
+    assert len(findings) == 2
+    assert {location for _, location in findings} == {
+        "paths./pets.parameters[0].type",
+        "security",
+    }
+
+
 def test_doctor_analyzer_reports_unsupported_security_and_collisions() -> None:
     spec = {
         "openapi": "3.0.0",

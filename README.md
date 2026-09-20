@@ -88,7 +88,7 @@ Public product documentation lives on GitHub Pages:
 
 ## Swagger 2 support
 
-Swagger 2 response-only operations and base URL fields are supported. Convert operations that use Swagger 2 body or form parameters, top-level parameter types, or security definitions to OpenAPI 3 before generating. Run `openapi-to-mcp doctor` to identify the affected operation and field.
+Swagger 2 response-only operations and base URL fields are supported. Convert operations that use Swagger 2 body or form parameters, top-level parameter types, security definitions, or unsupported protocol overrides to OpenAPI 3 before generating. Run `openapi-to-mcp doctor` to identify the affected operation and field.
 
 ## Development
 
