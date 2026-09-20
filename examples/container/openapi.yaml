@@ -1,0 +1,38 @@
+openapi: 3.0.3
+info:
+  title: Container example API
+  version: 1.0.0
+servers:
+  - url: http://mock-api:8081
+paths:
+  /widgets/{widgetId}:
+    get:
+      operationId: getWidget
+      summary: Read a synthetic widget from the example API
+      security:
+        - Demo: []
+      parameters:
+        - name: widgetId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Synthetic widget
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  source:
+                    type: string
+                required: [id, source]
+components:
+  securitySchemes:
+    Demo:
+      type: apiKey
+      in: header
+      name: X-API-Key

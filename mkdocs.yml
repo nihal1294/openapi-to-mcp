@@ -30,6 +30,7 @@ nav:
       - Customization Boundary: guides/customization.md
       - mcpgen.yaml: guides/mcpgen-policy.md
       - Generated Project: guides/generated-project.md
+      - Containers: guides/containers.md
       - Local Workflows: guides/local-workflows.md
       - MCP Inspector: guides/mcp-inspector.md
   - Examples: examples.md
