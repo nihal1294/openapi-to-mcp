@@ -29,12 +29,12 @@ class CompositionHandler(SchemaHandler):
         for comp_key in ["allOf", "oneOf", "anyOf", "not"]:
             comp_value = openapi_schema.get(comp_key)
 
-            if comp_key == "not" and isinstance(comp_value, dict):
+            if comp_key == "not" and isinstance(comp_value, (bool, dict)):
                 # 'not' applies to a single schema
                 json_schema[comp_key] = self.converter.convert(comp_value)
             elif comp_key != "not" and isinstance(comp_value, list):
                 # Others apply to an array of schemas
-                valid_items = [s for s in comp_value if isinstance(s, dict)]
+                valid_items = [s for s in comp_value if isinstance(s, (bool, dict))]
                 if valid_items:
                     json_schema[comp_key] = [
                         self.converter.convert(s) for s in valid_items

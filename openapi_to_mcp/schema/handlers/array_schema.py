@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from openapi_to_mcp.schema.handlers.base import SchemaHandler
+from openapi_to_mcp.schema.handlers.base import SchemaHandler, schema_has_type
 
 logger = logging.getLogger(__name__)
 
@@ -13,10 +13,9 @@ class ArraySchemaHandler(SchemaHandler):
 
     def can_handle(self, schema: dict[str, Any]) -> bool:
         """Check if this handler can process the given schema."""
-        schema_type = schema.get("type")
         # Handle explicit type=array or schemas with 'items'
         return isinstance(schema, dict) and (
-            schema_type == "array" or "items" in schema
+            schema_has_type(schema, "array") or "items" in schema
         )
 
     def handle(

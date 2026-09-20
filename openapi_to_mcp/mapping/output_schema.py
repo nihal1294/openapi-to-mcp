@@ -117,6 +117,13 @@ def _supports_structured_output(schema: dict[str, Any]) -> bool:
     schema_type = schema.get("type")
     if schema_type == "object":
         return True
-    if schema_type in {"array", "string", "number", "integer", "boolean"}:
+    if isinstance(schema_type, list):
+        return bool(schema_type) and all(item == "object" for item in schema_type)
+    if isinstance(schema_type, str):
         return False
-    return any(key in schema for key in ("properties", "allOf"))
+    if "properties" in schema:
+        return True
+    all_of = schema.get("allOf")
+    return isinstance(all_of, list) and any(
+        isinstance(item, dict) and _supports_structured_output(item) for item in all_of
+    )

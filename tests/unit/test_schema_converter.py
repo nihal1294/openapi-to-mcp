@@ -1,6 +1,7 @@
 from typing import Any
 
 import pytest
+from jsonschema import Draft202012Validator
 
 from openapi_to_mcp.schema.converter import (
     SchemaConverter,
@@ -336,3 +337,55 @@ def test_schema_conversion_invalid_input() -> None:
     assert openapi_schema_to_json_schema(None, SAMPLE_FULL_SPEC) == {}
     assert openapi_schema_to_json_schema("not a dict", SAMPLE_FULL_SPEC) == {}
     assert openapi_schema_to_json_schema([], SAMPLE_FULL_SPEC) == {}
+
+
+def test_schema_conversion_preserves_constraints_for_nullable_type_unions() -> None:
+    """Type arrays retain scalar constraints while allowing null."""
+    result = openapi_schema_to_json_schema(
+        {
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "maximum": 3,
+            "enum": [1, 2, 3, None],
+            "const": 1,
+        },
+        SAMPLE_FULL_SPEC,
+    )
+
+    assert result == {
+        "type": ["integer", "null"],
+        "minimum": 1,
+        "maximum": 3,
+        "enum": [1, 2, 3, None],
+        "const": 1,
+    }
+
+
+def test_schema_conversion_preserves_const_and_boolean_enums() -> None:
+    """Common constraints apply to every JSON Schema value type."""
+    assert openapi_schema_to_json_schema(
+        {"type": "boolean", "enum": [True], "const": True}, SAMPLE_FULL_SPEC
+    ) == {"type": "boolean", "enum": [True], "const": True}
+
+
+def test_schema_conversion_preserves_boolean_schemas_in_arrays_and_composition() -> (
+    None
+):
+    """Boolean schemas keep their JSON Schema meaning in nested positions."""
+    assert openapi_schema_to_json_schema(
+        {"type": "array", "items": False}, SAMPLE_FULL_SPEC
+    ) == {"type": "array", "items": {"not": {}}}
+    assert openapi_schema_to_json_schema(
+        {"allOf": [True, False]}, SAMPLE_FULL_SPEC
+    ) == {"allOf": [{}, {"not": {}}]}
+
+
+def test_schema_conversion_preserves_boolean_not_operands() -> None:
+    """Negating boolean schemas preserves their accept-all or reject-all meaning."""
+    rejects_all = openapi_schema_to_json_schema({"not": True}, SAMPLE_FULL_SPEC)
+    allows_all = openapi_schema_to_json_schema({"not": False}, SAMPLE_FULL_SPEC)
+
+    assert rejects_all == {"not": {}}
+    assert not Draft202012Validator(rejects_all).is_valid("any value")
+    assert allows_all == {"not": {"not": {}}}
+    assert Draft202012Validator(allows_all).is_valid("any value")

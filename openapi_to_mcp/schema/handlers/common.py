@@ -30,6 +30,8 @@ class CommonSchemaHandler(SchemaHandler):
             "description",
             "title",
             "default",
+            "const",
+            "enum",
             "example",
             "readOnly",
             "writeOnly",

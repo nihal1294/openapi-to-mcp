@@ -70,6 +70,13 @@ SSE generation is intentionally gone.
 - optional per-tool execution overrides for retry counts, retry budgets, and circuit-breaker settings
 - tool list filtering and structured denial errors for disallowed tool calls when access control is enabled
 
+`outputSchema` is emitted only for response schemas whose allowed values are all
+objects. Responses that also allow `null` or another scalar/array shape omit it,
+so the generated tool does not advertise unsupported structured output.
+
+Input schemas retain JSON Schema `const`, `enum`, and scalar constraints for
+nullable type arrays. Boolean schemas are preserved as `{}` or `{"not": {}}`.
+
 When access control is enabled:
 
 - identity values are exact, case-sensitive matches

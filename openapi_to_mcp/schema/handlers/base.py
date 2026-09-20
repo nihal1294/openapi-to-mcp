@@ -8,6 +8,14 @@ logger = logging.getLogger(__name__)
 INTERNAL_CYCLIC_REFERENCE_MARKER = "_is_cyclic_reference"
 
 
+def schema_has_type(schema: dict[str, Any], expected_type: str) -> bool:
+    """Return whether a schema permits the expected JSON Schema type."""
+    schema_type = schema.get("type")
+    return schema_type == expected_type or (
+        isinstance(schema_type, list) and expected_type in schema_type
+    )
+
+
 class SchemaConverterProtocol(Protocol):
     """Protocol defining the interface for SchemaConverter.
 
@@ -17,7 +25,7 @@ class SchemaConverterProtocol(Protocol):
 
     def convert(
         self,
-        openapi_schema: dict[str, Any],
+        openapi_schema: object,
         *,
         include_internal_markers: bool = False,
     ) -> dict[str, Any]:
