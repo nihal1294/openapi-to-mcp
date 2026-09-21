@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0](https://github.com/nihal1294/openapi-to-mcp/compare/v0.9.3...v0.10.0) (2026-09-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* add HTTP health and readiness endpoints ([#121](https://github.com/nihal1294/openapi-to-mcp/issues/121))
+
+### Features
+
+* add HTTP health and readiness endpoints ([#121](https://github.com/nihal1294/openapi-to-mcp/issues/121)) ([25b1aa2](https://github.com/nihal1294/openapi-to-mcp/commit/25b1aa2684b541b7e489b340e41ee39ff9bddacc))
+
 ## [0.9.3](https://github.com/nihal1294/openapi-to-mcp/compare/v0.9.2...v0.9.3) (2026-09-20)
 
 
