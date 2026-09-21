@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from typing import TYPE_CHECKING
 
 from openapi_to_mcp.cli import cli
@@ -102,6 +104,63 @@ def test_generate_stdio_omits_http_dependencies(
     assert package_json["engines"] == {"node": ">=22"}
     assert "quiet: true" in _read_source(output_dir, "src/index.ts")
     assert "StdioServerTransport" in _read_source(output_dir, "src/transport.ts")
+
+
+def test_regenerating_http_output_as_stdio_removes_http_runtime(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    output_dir = tmp_path / "regenerated-stdio"
+    assert _invoke_streamable_generation(runner, output_dir).exit_code == 0
+    health_runtime = output_dir / "src" / "runtime" / "health.ts"
+    custom_tools = output_dir / "src" / "custom" / "tools.ts"
+    assert health_runtime.exists()
+    preserved_custom_tools = custom_tools.read_text(encoding="utf-8")
+    custom_tools.write_text(
+        f"{preserved_custom_tools}\n// Preserved customization.\n", encoding="utf-8"
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--openapi-json",
+            "tests/resources/test_openapi.yaml",
+            "--output-dir",
+            str(output_dir),
+            "--transport",
+            "stdio",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert not health_runtime.exists()
+    assert custom_tools.read_text(encoding="utf-8").endswith(
+        "// Preserved customization.\n"
+    )
+    package_json = json.loads(_read_source(output_dir, "package.json"))
+    assert "express" not in package_json["dependencies"]
+
+    node_modules = output_dir / "node_modules"
+    if node_modules.exists():
+        shutil.rmtree(node_modules)
+    (output_dir / "package-lock.json").unlink(missing_ok=True)
+    npm = shutil.which("npm")
+    assert npm is not None
+    subprocess.run(  # noqa: S603
+        [npm, "install", "--ignore-scripts", "--no-audit", "--no-fund"],
+        cwd=output_dir,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    compiled = subprocess.run(  # noqa: S603
+        [npm, "run", "build"],
+        cwd=output_dir,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
 
 
 def test_generate_auth_fixture_emits_auth_env_vars(

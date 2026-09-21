@@ -1,0 +1,106 @@
+import express, { type Express, type Request, type Response } from 'express';
+
+export const HEALTH_PATH = '/healthz';
+export const READINESS_PATH = '/readyz';
+
+export type Readiness = {
+  isReady: () => boolean;
+  markNotReady: () => void;
+  markReady: () => void;
+};
+
+type RequestGuard = (req: Request, res: Response) => boolean;
+
+export function createReadiness(): Readiness {
+  let ready = false;
+
+  return {
+    isReady: () => ready,
+    markNotReady: () => {
+      ready = false;
+    },
+    markReady: () => {
+      ready = true;
+    },
+  };
+}
+
+export async function assertOperationalRouteSeparation(
+  endpoint: string
+): Promise<void> {
+  const probePaths = [HEALTH_PATH, READINESS_PATH].flatMap((path) => [path, `${path}/`]);
+  for (const path of probePaths) {
+    if (await endpointMatchesPath(endpoint, path)) {
+      throw new Error(
+        `Invalid MCP_HTTP_ENDPOINT '${endpoint}'. It conflicts with reserved operational route '${path}'.`
+      );
+    }
+  }
+}
+
+export function registerOperationalRoutes(
+  app: Express,
+  readiness: Readiness,
+  isRequestAllowed: RequestGuard
+): void {
+  registerOperationalRoute(app, HEALTH_PATH, isRequestAllowed, () => ({
+    status: 200,
+    body: { status: 'ok' },
+  }));
+  registerOperationalRoute(app, READINESS_PATH, isRequestAllowed, () => ({
+    status: readiness.isReady() ? 200 : 503,
+    body: { status: readiness.isReady() ? 'ready' : 'not_ready' },
+  }));
+}
+
+function registerOperationalRoute(
+  app: Express,
+  path: string,
+  isRequestAllowed: RequestGuard,
+  response: () => { status: number; body: { status: string } }
+): void {
+  app.all(path, (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!isRequestAllowed(req, res)) {
+      return;
+    }
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.set('Allow', 'GET, HEAD').status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+    const { status, body } = response();
+    res.status(status).json(body);
+  });
+}
+
+async function endpointMatchesPath(endpoint: string, path: string): Promise<boolean> {
+  const matcher = express();
+  let matched = false;
+  matcher.all(endpoint, (_req, _res, next) => {
+    matched = true;
+    next();
+  });
+
+  const request = {
+    baseUrl: '',
+    headers: {},
+    method: 'GET',
+    originalUrl: path,
+    url: path,
+  } as Request;
+  const response = {
+    setHeader: () => undefined,
+  } as unknown as Response;
+
+  await new Promise<void>((resolve, reject) => {
+    matcher(request, response, (error?: unknown) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+
+  return matched;
+}

@@ -25,6 +25,11 @@ The tool returns `{"id":"42","source":"compose-mock"}`. Set
 Set `EXAMPLE_API_KEY` to override the synthetic key shared by the mock and MCP
 services. Docker receives it at runtime; `.env` files are excluded from builds.
 
+Compose waits for `GET /readyz` before marking the generated server healthy. The
+server also exposes `GET /healthz`; both return bounded JSON with
+`Cache-Control: no-store`, need no MCP session or upstream API, and use the same
+`MCP_ALLOWED_HOSTS` and `MCP_ALLOWED_ORIGINS` checks as the MCP endpoint.
+
 The Dockerfile uses `npm ci` when the generated project has a `package-lock.json`.
 Otherwise it uses `npm install` for the initial build. Keep a lockfile with a
 deployed project to reproduce its dependency resolution.
