@@ -759,7 +759,7 @@ wheels = [
 
 [[package]]
 name = "openapi-to-mcp-cli"
-version = "0.9.2"
+version = "0.9.3"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
