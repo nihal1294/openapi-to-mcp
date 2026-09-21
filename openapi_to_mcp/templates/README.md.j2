@@ -92,6 +92,9 @@ The `conservative` preset leaves caching off by default, but if you later enable
     *   **Streamable HTTP Settings (if transport is `streamable-http`):**
         *   `MCP_HTTP_HOST`, `MCP_HTTP_PORT`, `MCP_HTTP_ENDPOINT`, `MCP_ALLOWED_ORIGINS`, `MCP_ALLOWED_HOSTS`
         *   Invalid `TARGET_API_BASE_URL` values also fail fast at startup. Use an absolute `http` or `https` URL.
+        *   The fixed `/healthz` and `/readyz` paths provide local probes. `GET /healthz` returns `200` with `{"status":"ok"}`; `GET /readyz` returns `200` with `{"status":"ready"}` once the listener is ready, or `503` with `{"status":"not_ready"}` while marked not ready. Before the listener binds, probes are unreachable.
+        *   Probes set `Cache-Control: no-store`, use the same Host and Origin allowlists, and require no MCP session, tool identity, upstream credentials, or dependency availability. `HEAD` follows GET semantics; other methods return `405`.
+        *   `/healthz` and `/readyz` are reserved paths, including case and trailing-slash equivalents. If `MCP_HTTP_ENDPOINT` equals or matches one of them, change it to a separate path such as `/mcp` and update clients before deploying; conflicts fail at startup. Probes stop succeeding when the server shuts down; readiness does not add a draining grace period or promise upstream availability.
 
 3.  **Install Dependencies:**
     ```bash

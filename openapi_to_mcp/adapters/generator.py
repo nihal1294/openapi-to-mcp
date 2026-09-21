@@ -36,6 +36,7 @@ RUNTIME_TEMPLATE_NAMES = (
     "tool_access",
     "validation",
 )
+HTTP_RUNTIME_TEMPLATE_NAMES = ("health",)
 CUSTOM_TEMPLATE_NAMES = ("tools",)
 
 
@@ -119,6 +120,7 @@ class Generator:
         Raises:
             GenerationError: If template rendering or file writing fails.
         """
+        self._remove_unused_http_runtime_files()
         generated_templates = {
             "package.json.j2": self.output_path / "package.json",
             "tsconfig.json.j2": self.output_path / "tsconfig.json",
@@ -134,11 +136,26 @@ class Generator:
         for template_name, output_file in self._custom_templates().items():
             self._render_if_missing(template_name, output_file)
 
+    def _remove_unused_http_runtime_files(self) -> None:
+        """Remove generated HTTP-only runtime files before a stdio regeneration."""
+        if self.context.get("transport") == "streamable-http":
+            return
+        runtime_output = self.output_path / "src" / "runtime"
+        try:
+            for name in HTTP_RUNTIME_TEMPLATE_NAMES:
+                (runtime_output / f"{name}.ts").unlink(missing_ok=True)
+        except OSError as e:
+            err_msg = f"Failed to remove unused HTTP runtime files: {e}"
+            raise GenerationError(err_msg) from e
+
     def _runtime_templates(self) -> dict[str, Path]:
         runtime_output = self.output_path / "src" / "runtime"
+        template_names = RUNTIME_TEMPLATE_NAMES
+        if self.context.get("transport") == "streamable-http":
+            template_names += HTTP_RUNTIME_TEMPLATE_NAMES
         return {
             f"src/runtime/{name}.ts.j2": runtime_output / f"{name}.ts"
-            for name in RUNTIME_TEMPLATE_NAMES
+            for name in template_names
         }
 
     def _custom_templates(self) -> dict[str, Path]:
