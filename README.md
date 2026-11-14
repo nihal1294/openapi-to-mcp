@@ -100,7 +100,7 @@ conformance. The currently tested compatibility surface is:
 | --- | --- | --- | --- | --- |
 | 3.0.4 | Supported | Not applicable | Not applicable | Not applicable |
 | 3.1.2 | Supported | Not applicable | Not applicable | Not applicable |
-| 3.2.1 | Supported | Diagnosed; not generated | Diagnosed; not generated | Diagnosed; not generated |
+| 3.2.1 | Supported | Uppercase HTTP tokens supported; reserved, invalid, mixed-case and CONNECT methods diagnosed | Supported | Diagnosed; not generated |
 
 Use `openapi-to-mcp doctor` before generation to identify constructs outside this
 surface. The generated MCP `outputSchema` remains object-shaped.

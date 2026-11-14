@@ -36,21 +36,31 @@ def openapi_operation_findings(
     """Return unsupported OpenAPI constructs reachable from one operation."""
     findings: list[OpenAPIFinding] = []
     if operation_ref.origin == "additional":
-        findings.append(
-            OpenAPIFinding(
-                "additionalOperations",
-                operation_ref.location,
-                "Additional operations are diagnostic-only. Use a supported fixed HTTP operation before generating an MCP server.",
+        method = operation_ref.method
+        if not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", method, re.ASCII):
+            guidance = "Additional operation methods must be valid ASCII HTTP tokens."
+        elif method != method.upper():
+            guidance = "Additional operation methods must use uppercase ASCII; mixed-case methods cannot be faithfully executed."
+        elif method in {
+            "GET",
+            "PUT",
+            "POST",
+            "DELETE",
+            "OPTIONS",
+            "HEAD",
+            "PATCH",
+            "TRACE",
+            "QUERY",
+        }:
+            guidance = "This method is reserved for a fixed Path Item field."
+        elif method == "CONNECT":
+            guidance = "CONNECT tunnelling is not supported."
+        else:
+            guidance = None
+        if guidance:
+            findings.append(
+                OpenAPIFinding("additionalOperations", operation_ref.location, guidance)
             )
-        )
-    elif operation_ref.method == "QUERY":
-        findings.append(
-            OpenAPIFinding(
-                "query",
-                operation_ref.location,
-                "QUERY operations are diagnostic-only. Use a supported fixed HTTP operation before generating an MCP server.",
-            )
-        )
 
     for parameter_ref in _effective_parameters(spec, operation_ref):
         if parameter_ref.invalid_array_ref:
