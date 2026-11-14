@@ -23,7 +23,7 @@ const upstream = createServer((req, res) => {
     ...(interrupt ? { 'content-length': 100 } : scenario.knownLength ? { 'content-length': body.length } : {}),
   });
   if (interrupt) {
-    res.write('abc');
+    res.write('INTERRUPTED_RESPONSE_BODY_SENTINEL');
     setTimeout(() => res.destroy(), 20);
   } else if (scenario.longStream) {
     const timer = setInterval(() => {
