@@ -1,0 +1,36 @@
+import { Buffer } from 'node:buffer';
+
+interface BasicCredentials {
+  authorization?: string;
+  missing: string[];
+  invalid: string[];
+}
+
+/** Resolve upstream Basic credentials without including their values in errors. */
+export function resolveBasicCredentials(normalizedScheme: string): BasicCredentials {
+  const usernameEnv = `AUTH_${normalizedScheme}_USERNAME`;
+  const passwordEnv = `AUTH_${normalizedScheme}_PASSWORD`;
+  const username = process.env[usernameEnv];
+  const password = process.env[passwordEnv];
+  const missing: string[] = [];
+  const invalid: string[] = [];
+  if (!username) missing.push(usernameEnv);
+  if (password === undefined) missing.push(passwordEnv);
+
+  // RFC 7617 forbids control characters in credentials and ':' in user IDs.
+  const controlCharacters = /[\x00-\x1f\x7f]/;
+  if (username && (username.includes(':') || controlCharacters.test(username))) {
+    invalid.push(`${usernameEnv} (must not contain colons or control characters)`);
+  }
+  if (password !== undefined && controlCharacters.test(password)) {
+    invalid.push(`${passwordEnv} (must not contain control characters)`);
+  }
+  if (missing.length > 0 || invalid.length > 0) {
+    return { missing, invalid };
+  }
+  return {
+    authorization: `Basic ${Buffer.from(`${username}:${password}`, 'utf8').toString('base64')}`,
+    missing,
+    invalid,
+  };
+}

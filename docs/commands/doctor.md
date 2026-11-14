@@ -31,7 +31,8 @@ openapi-to-mcp doctor [OPTIONS]
 - missing `operationId`
 - generated tool-name collisions
 - undefined referenced security schemes
-- unsupported auth schemes such as HTTP Basic
+- unsupported auth schemes such as HTTP Digest (HTTP Basic and Bearer are supported)
+- combined security schemes that share an HTTP header and may require conflicting values
 - risky `oneOf` or `anyOf` usage in request or response schemas
 - Swagger 2 constructs that cannot be faithfully generated, including body/form parameters, top-level parameter types, used security definitions, and unsupported protocol overrides
 - missing HTTP operations under `paths`

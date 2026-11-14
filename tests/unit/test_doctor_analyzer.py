@@ -154,13 +154,13 @@ def test_doctor_analyzer_reports_unsupported_security_and_collisions() -> None:
         "info": {"title": "Doctor Analyzer", "version": "1.0.0"},
         "servers": [{"url": "https://example.com"}],
         "components": {
-            "securitySchemes": {"basicAuth": {"type": "http", "scheme": "basic"}}
+            "securitySchemes": {"digestAuth": {"type": "http", "scheme": "digest"}}
         },
         "paths": {
             "/a-b": {
                 "get": {
                     "responses": {"200": {"description": "OK"}},
-                    "security": [{"basicAuth": []}],
+                    "security": [{"digestAuth": []}],
                 }
             },
             "/a_b": {"get": {"responses": {"200": {"description": "OK"}}}},

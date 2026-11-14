@@ -46,6 +46,11 @@ SUITES: dict[str, list[ToolExpectation]] = {
             arguments={},
             expected={"auth": "bearer", "credential": "bearer-secret"},
         ),
+        ToolExpectation(
+            name="getBasicAuth",
+            arguments={},
+            expected={"auth": "basic"},
+        ),
     ],
     "auth-missing-bearer": [
         ToolExpectation(

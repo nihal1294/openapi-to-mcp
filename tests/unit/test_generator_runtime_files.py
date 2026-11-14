@@ -62,6 +62,7 @@ def test_generator_generate_files_success(mocker: MagicMock) -> None:
             output_files["src/runtime/request_context.ts"],
         ),
         ("src/runtime/auth.ts.j2", output_files["src/runtime/auth.ts"]),
+        ("src/runtime/basic_auth.ts.j2", output_files["src/runtime/basic_auth.ts"]),
         ("src/runtime/cache.ts.j2", output_files["src/runtime/cache.ts"]),
         (
             "src/runtime/circuit_breaker.ts.j2",
@@ -129,6 +130,7 @@ def _output_files() -> dict[str, MagicMock]:
             spec=Path, name="runtime_request_context"
         ),
         "src/runtime/auth.ts": MagicMock(spec=Path, name="runtime_auth"),
+        "src/runtime/basic_auth.ts": MagicMock(spec=Path, name="runtime_basic_auth"),
         "src/runtime/cache.ts": MagicMock(spec=Path, name="runtime_cache"),
         "src/runtime/circuit_breaker.ts": MagicMock(
             spec=Path, name="runtime_circuit_breaker"

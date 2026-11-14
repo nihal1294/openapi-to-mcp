@@ -64,7 +64,7 @@ def derive_auth_env_vars(
             if not isinstance(scheme_name, str) or not isinstance(scheme_def, dict):
                 continue
             normalized = "".join(
-                c if c.isalnum() else "_" for c in scheme_name.upper()
+                c if c.isascii() and c.isalnum() else "_" for c in scheme_name.upper()
             ).strip("_")
             normalized = "_".join(part for part in normalized.split("_") if part)
             if not normalized:
@@ -73,6 +73,10 @@ def derive_auth_env_vars(
             http_scheme = str(scheme_def.get("scheme", "")).lower()
             if scheme_type == "apikey":
                 env_vars.add(f"AUTH_{normalized}_API_KEY")
+            elif scheme_type == "http" and http_scheme == "basic":
+                env_vars.update(
+                    (f"AUTH_{normalized}_USERNAME", f"AUTH_{normalized}_PASSWORD")
+                )
             elif (scheme_type == "http" and http_scheme == "bearer") or scheme_type in {
                 "oauth2",
                 "openidconnect",

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 from collections import Counter
 from http import HTTPStatus
@@ -17,6 +18,7 @@ AUTH_CREDENTIALS = {
     "/auth/query": ("query", "api_key", "query-secret"),
     "/auth/cookie": ("cookie", "session_token", "cookie-secret"),
     "/auth/bearer": ("bearer", "Authorization", "bearer-secret"),
+    "/auth/basic": ("basic", "Authorization", "basic-user:basic-pass"),
 }
 FLAKY_TWICE_FAILURE_COUNT = 2
 REQUEST_COUNTS: Counter[str] = Counter()
@@ -172,6 +174,11 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
         valid = received == expected
         if auth_kind == "bearer":
             valid = received == f"Bearer {expected}"
+        if auth_kind == "basic":
+            expected_header = "Basic " + base64.b64encode(
+                expected.encode("utf-8")
+            ).decode("ascii")
+            valid = received == expected_header
         if not valid:
             self._send_json(
                 HTTPStatus.UNAUTHORIZED,
@@ -179,20 +186,19 @@ class MockTargetApiHandler(BaseHTTPRequestHandler):
                     "ok": False,
                     "auth": auth_kind,
                     "error": "Missing or invalid credential",
-                    "received": received,
+                    **({"received": received} if auth_kind != "basic" else {}),
                     "request_id": self.headers.get("X-Request-Id"),
                 },
             )
             return
-        self._send_json(
-            HTTPStatus.OK,
-            {
-                "ok": True,
-                "auth": auth_kind,
-                "credential": expected,
-                "request_id": self.headers.get("X-Request-Id"),
-            },
-        )
+        success_payload: dict[str, object] = {
+            "ok": True,
+            "auth": auth_kind,
+            "request_id": self.headers.get("X-Request-Id"),
+        }
+        if auth_kind != "basic":
+            success_payload["credential"] = expected
+        self._send_json(HTTPStatus.OK, success_payload)
 
 
 def main() -> None:

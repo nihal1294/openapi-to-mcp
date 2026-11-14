@@ -6,6 +6,7 @@ from typing import Any
 
 from openapi_to_mcp.doctor.models import DoctorReport
 from openapi_to_mcp.doctor.security import (
+    check_security_header_conflicts,
     check_security_scheme,
     referenced_scheme_names,
     security_schemes,
@@ -151,6 +152,12 @@ class DoctorAnalyzer:
         schemes: dict[str, Any],
         location: str,
     ) -> None:
+        check_security_header_conflicts(
+            report,
+            source=source,
+            schemes=schemes,
+            location=location,
+        )
         for scheme_name in referenced_scheme_names(source):
             check_security_scheme(
                 report,

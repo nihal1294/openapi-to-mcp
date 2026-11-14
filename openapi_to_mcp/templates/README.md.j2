@@ -138,6 +138,28 @@ delimiters (`#`, `&`, `=`, `+`, `[`, and `]`) remain percent encoded so a value
 cannot create another query field or fragment. Parameter names continue to use
 safe standard encoding.
 
+## Upstream HTTP Basic authentication
+
+For an OpenAPI 3 `type: http`, `scheme: basic` security scheme, set
+`AUTH_<SCHEME>_USERNAME` and `AUTH_<SCHEME>_PASSWORD` in the server environment or
+`.env`. Use the exact names listed in `.env.example`; for `BasicAuth`, they are
+`AUTH_BASICAUTH_USERNAME` and `AUTH_BASICAUTH_PASSWORD`. These are upstream API
+credentials and do not authenticate incoming MCP clients.
+
+The username must be nonempty, and the password must be defined (an explicitly
+empty password is supported). Spaces are preserved. Usernames cannot contain
+colons, and neither value can contain ASCII control characters. Invalid or
+missing values fail before an upstream request with `invalid_credentials` or
+`missing_credentials` errors that name the affected variables without their values.
+
+The runtime sends UTF-8 Base64 credentials in `Authorization: Basic`, taking
+precedence over `TARGET_API_AUTH_HEADER`. It does not negotiate legacy encodings.
+Use HTTPS upstream because Base64 does not encrypt credentials. Default audit
+logging redacts the Authorization header.
+Combined security schemes cannot send different values in the same HTTP header.
+Conflicts (such as Basic and Bearer both requiring Authorization) fail with
+`invalid_credentials`, unless another security alternative can be satisfied.
+
 ## MCP Tools
 
 This server exposes the following tools based on the OpenAPI specification:
