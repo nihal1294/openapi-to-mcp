@@ -325,7 +325,7 @@ def test_interrupted_response_retries_match_unbounded(
                 },
             },
         )
-        assert "abc" not in logs
+        assert "INTERRUPTED_RESPONSE_BODY_SENTINEL" not in logs
         captures.append(capture)
     expected_attempts = 1 if status == 200 else 2 if interrupt == "once" else 3
     assert [capture["requests"] for capture in captures] == [
