@@ -14,7 +14,7 @@ from openapi_to_mcp.doctor.security import (
     security_schemes,
 )
 from openapi_to_mcp.doctor.swagger import report_swagger_compatibility
-from openapi_to_mcp.mapping.utils import generate_tool_name
+from openapi_to_mcp.mapping.utils import allocate_tool_names, generate_tool_name
 from openapi_to_mcp.policy.openapi import is_openapi_operation_selected
 
 if TYPE_CHECKING:
@@ -93,11 +93,37 @@ class DoctorAnalyzer:
         self, operations: list[OperationRef]
     ) -> list[OperationRef]:
         """Return inventory entries retained by the configured policy selectors."""
+        original_names = self._allocated_operation_names(operations)
         return [
             operation_ref
-            for operation_ref in operations
-            if is_openapi_operation_selected(operation_ref, self.policy_config)
+            for operation_ref, original_name in zip(
+                operations, original_names, strict=True
+            )
+            if is_openapi_operation_selected(
+                operation_ref, self.policy_config, original_name=original_name
+            )
         ]
+
+    def _allocated_operation_names(
+        self, operations: list[OperationRef]
+    ) -> list[str | None]:
+        """Return deterministic mapper-equivalent names for policy selection."""
+        candidate_indexes: list[int] = []
+        candidate_names: list[str] = []
+        original_names: list[str | None] = [None] * len(operations)
+        for index, operation_ref in enumerate(operations):
+            candidate_name = operation_ref.operation.get(
+                "operationId"
+            ) or generate_tool_name(operation_ref.method, operation_ref.path)
+            if not isinstance(candidate_name, str):
+                continue
+            candidate_indexes.append(index)
+            candidate_names.append(candidate_name)
+        for index, allocated_name in zip(
+            candidate_indexes, allocate_tool_names(candidate_names), strict=True
+        ):
+            original_names[index] = allocated_name
+        return original_names
 
     def _check_missing_operation_ids(
         self,

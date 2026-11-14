@@ -24,7 +24,7 @@ from openapi_to_mcp.mapping.tool_examples import (
     add_parameter_example,
     build_input_examples,
 )
-from openapi_to_mcp.mapping.utils import generate_tool_name
+from openapi_to_mcp.mapping.utils import generate_tool_name, next_available_tool_name
 from openapi_to_mcp.policy.openapi import is_openapi_operation_selected
 from openapi_to_mcp.policy.swagger import effective_swagger_findings
 from openapi_to_mcp.schema.converter import (
@@ -339,15 +339,9 @@ class Mapper:
             err_msg = f"Duplicate tool name detected: {candidate_name}"
             raise MappingError(err_msg)
 
-        count = self._tool_name_counts.get(candidate_name, 1)
-        deduped_name = ""
-        while True:
-            count += 1
-            deduped_name = f"{candidate_name}_{count}"
-            if deduped_name not in self._used_tool_names:
-                break
-
-        return deduped_name
+        return next_available_tool_name(
+            candidate_name, self._used_tool_names, self._tool_name_counts
+        )
 
     def _register_tool_name(
         self,

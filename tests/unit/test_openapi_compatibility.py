@@ -121,6 +121,51 @@ def test_mapper_preserves_suffix_name_policy_selection_for_supported_operations(
     assert [tool["name"] for tool in apply_policy(tools, policy)] == ["get_a_b_2"]
 
 
+def test_doctor_config_honors_non_strict_suffixed_name_selection(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """Doctor and non-strict generation agree on allocated policy names."""
+    spec = {
+        "openapi": "3.0.4",
+        "info": {"title": "Suffix doctor selection", "version": "1.0.0"},
+        "servers": [{"url": "https://example.com"}],
+        "paths": {
+            "/a-b": {"get": {"responses": {"200": {"description": "OK"}}}},
+            "/a_b": {"get": {"responses": {"200": {"description": "OK"}}}},
+        },
+    }
+    source = tmp_path / "openapi.json"
+    source.write_text(json.dumps(spec), encoding="utf-8")
+    config = tmp_path / "mcpgen.yaml"
+    config.write_text("tools:\n  include:\n    names: [get_a_b_2]\n", encoding="utf-8")
+
+    doctor_result = runner.invoke(
+        cli,
+        ["doctor", "-o", str(source), "--config", str(config), "--format", "json"],
+    )
+    generated = tmp_path / "generated"
+    generate_result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "-o",
+            str(source),
+            "--config",
+            str(config),
+            "--no-strict",
+            "-d",
+            str(generated),
+        ],
+    )
+
+    assert doctor_result.exit_code == 2
+    assert "no_selected_operations" not in doctor_result.output
+    assert "tool_name_collision" not in doctor_result.output
+    assert generate_result.exit_code == 0
+    report = json.loads((generated / "generation_report.json").read_text())
+    assert report["mapped_tools"] == 1
+
+
 def test_querystring_parameters_follow_effective_override_and_local_references() -> (
     None
 ):

@@ -13,14 +13,19 @@ if TYPE_CHECKING:
 
 
 def is_openapi_operation_selected(
-    operation_ref: OperationRef, policy: PolicyConfig | None
+    operation_ref: OperationRef,
+    policy: PolicyConfig | None,
+    *,
+    original_name: str | None = None,
 ) -> bool:
     """Return whether policy would retain an operation with this original identity."""
     if policy is None:
         return True
-    candidate_name = operation_ref.operation.get("operationId") or generate_tool_name(
-        operation_ref.method, operation_ref.path
-    )
+    candidate_name = original_name
+    if candidate_name is None:
+        candidate_name = operation_ref.operation.get(
+            "operationId"
+        ) or generate_tool_name(operation_ref.method, operation_ref.path)
     if not isinstance(candidate_name, str):
         return True
     provisional_tool: dict[str, Any] = {
