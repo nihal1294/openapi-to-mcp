@@ -40,6 +40,22 @@ def is_tool_selected(tool: dict[str, Any], policy: PolicyConfig | None) -> bool:
     return not _matches_selectors(original_name, operation, policy.exclude)
 
 
+def preview_auth_policy(
+    tool: dict[str, Any], policy: PolicyConfig | None
+) -> dict[str, Any] | None:
+    """Apply only selection, rename and authentication policy to a copied tool."""
+    if not is_tool_selected(tool, policy):
+        return None
+    result = deepcopy(tool)
+    if policy is not None:
+        operation = _tool_operation_key(result)
+        original_name = _tool_name(result)
+        renamed_name = _resolve_rename(operation, original_name, policy)
+        result["name"] = renamed_name
+        _apply_auth_override(result, operation, original_name, renamed_name, policy)
+    return result
+
+
 def _matches_selectors(
     original_name: str, operation: str, selectors: SelectorSet
 ) -> bool:

@@ -19,6 +19,10 @@ from openapi_to_mcp.common.spec_compatibility import (
 )
 from openapi_to_mcp.mapping.annotations import derive_tool_annotations
 from openapi_to_mcp.mapping.output_schema import extract_output_schema
+from openapi_to_mcp.mapping.security import (
+    operation_security,
+    operation_security_schemes,
+)
 from openapi_to_mcp.mapping.tool_description import build_tool_description
 from openapi_to_mcp.mapping.tool_examples import (
     add_media_example,
@@ -216,55 +220,17 @@ class Mapper:
         ref_handler = ReferenceHandler(SchemaConverter(self.spec))
         return ref_handler.resolve_ref(ref)
 
-    def _normalize_security_requirements(
-        self, security_requirements_maybe: object
-    ) -> list[dict[str, Any]] | None:
-        """Normalize security requirements to a list of requirement objects."""
-        if security_requirements_maybe is None:
-            return None
-        if not isinstance(security_requirements_maybe, list):
-            return None
-
-        valid_requirements: list[dict[str, Any]] = [
-            item for item in security_requirements_maybe if isinstance(item, dict)
-        ]
-        return valid_requirements
-
     def _get_operation_security(
         self, operation: dict[str, Any]
     ) -> list[dict[str, Any]] | None:
         """Return operation-level security, else global security requirements."""
-        if "security" in operation:
-            return self._normalize_security_requirements(operation.get("security"))
-        return self._normalize_security_requirements(self.spec.get("security"))
+        return operation_security(self.spec, operation)
 
     def _build_security_schemes_for_operation(
         self, security_requirements: list[dict[str, Any]] | None
     ) -> dict[str, dict[str, Any]]:
         """Build scheme metadata map for schemes referenced by operation security."""
-        if not security_requirements:
-            return {}
-
-        components = self.spec.get("components", {})
-        if not isinstance(components, dict):
-            return {}
-        security_schemes = components.get("securitySchemes", {})
-        if not isinstance(security_schemes, dict):
-            return {}
-
-        referenced_scheme_names: set[str] = set()
-        for requirement in security_requirements:
-            for scheme_name in requirement:
-                if isinstance(scheme_name, str):
-                    referenced_scheme_names.add(scheme_name)
-
-        resolved_schemes: dict[str, dict[str, Any]] = {}
-        for scheme_name in referenced_scheme_names:
-            scheme = security_schemes.get(scheme_name)
-            if isinstance(scheme, dict):
-                resolved_schemes[scheme_name] = scheme
-
-        return resolved_schemes
+        return operation_security_schemes(self.spec, security_requirements)
 
     def _merge_parameters(
         self,
