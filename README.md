@@ -91,6 +91,20 @@ Public product documentation lives on GitHub Pages:
 
 Swagger 2 response-only operations and base URL fields are supported. Convert operations that use Swagger 2 body or form parameters, top-level parameter types, security definitions, or unsupported protocol overrides to OpenAPI 3 before generating. Run `openapi-to-mcp doctor` to identify the affected operation and field.
 
+## OpenAPI compatibility
+
+Common OpenAPI 3.x input is accepted, but this does not imply full OpenAPI 3.x
+conformance. The currently tested compatibility surface is:
+
+| OpenAPI version | Fixed HTTP operations | OpenAPI 3.2 `additionalOperations` | OpenAPI 3.2 `QUERY` | `in: querystring` parameters |
+| --- | --- | --- | --- | --- |
+| 3.0.4 | Supported | Not applicable | Not applicable | Not applicable |
+| 3.1.2 | Supported | Not applicable | Not applicable | Not applicable |
+| 3.2.1 | Supported | Diagnosed; not generated | Diagnosed; not generated | Diagnosed; not generated |
+
+Use `openapi-to-mcp doctor` before generation to identify constructs outside this
+surface. The generated MCP `outputSchema` remains object-shaped.
+
 ## Development
 
 For repository-local workflows, use the repo docs directly:

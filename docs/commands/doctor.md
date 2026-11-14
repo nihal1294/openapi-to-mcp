@@ -13,6 +13,7 @@ openapi-to-mcp doctor [OPTIONS]
 | Option | Required | Default | Meaning |
 | --- | --- | --- | --- |
 | `--openapi-json`, `-o` | Yes | None | Local path or URL to a JSON or YAML OpenAPI spec |
+| `--config` | No | None | Policy file used to select operations for compatibility checks |
 | `--format` | No | `text` | Output format: `text` or `json` |
 
 ## Exit codes
@@ -35,6 +36,7 @@ openapi-to-mcp doctor [OPTIONS]
 - combined security schemes that share an HTTP header and may require conflicting values
 - risky `oneOf` or `anyOf` usage in request or response schemas
 - Swagger 2 constructs that cannot be faithfully generated, including body/form parameters, top-level parameter types, used security definitions, and unsupported protocol overrides
+- OpenAPI 3.2 additional operations, `QUERY` operations, and reachable `in: querystring` parameters that cannot yet be faithfully generated
 - missing HTTP operations under `paths`
 
 ## Examples
@@ -71,3 +73,7 @@ replacements must specify a non-empty `name` and an `in` location of `header`,
 compatibility checks. The selected document scheme must be HTTP or HTTPS;
 WebSocket schemes cannot be used by the generated HTTP client. Other unsupported
 Swagger constructs still require conversion.
+
+Pass `--config` when doctor should apply the same include and exclude selectors as
+generation. OpenAPI compatibility findings are reported only for selected
+operations; auth overrides do not suppress unrelated OpenAPI findings.

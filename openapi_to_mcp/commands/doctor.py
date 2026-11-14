@@ -8,7 +8,7 @@ from typing import Literal
 import rich_click as click
 
 from openapi_to_mcp.adapters.spec_loader import SpecLoader
-from openapi_to_mcp.common.exceptions import SpecLoaderError
+from openapi_to_mcp.common.exceptions import PolicyConfigError, SpecLoaderError
 from openapi_to_mcp.common.terminal import (
     print_error_panel,
     print_section,
@@ -16,6 +16,7 @@ from openapi_to_mcp.common.terminal import (
     print_warning_panel,
 )
 from openapi_to_mcp.doctor import DoctorAnalyzer, DoctorReport
+from openapi_to_mcp.policy import load_policy_config
 
 OutputFormat = Literal["json", "text"]
 
@@ -35,14 +36,19 @@ OutputFormat = Literal["json", "text"]
     show_default=True,
     help="Output format for diagnostics.",
 )
-def doctor(openapi_json: str, output_format: OutputFormat) -> None:
+@click.option(
+    "--config",
+    type=click.Path(dir_okay=False, exists=True),
+    help="Optional policy file used to select operations for compatibility checks.",
+)
+def doctor(openapi_json: str, output_format: OutputFormat, config: str | None) -> None:
     """Inspect an OpenAPI spec for MCP-generation readiness."""
-    report = _build_report(openapi_json)
+    report = _build_report(openapi_json, config)
     _render_report(report, output_format)
     raise click.exceptions.Exit(report.exit_code())
 
 
-def _build_report(source: str) -> DoctorReport:
+def _build_report(source: str, config: str | None = None) -> DoctorReport:
     try:
         spec = SpecLoader(source=source).load_and_validate()
     except SpecLoaderError as exc:
@@ -54,7 +60,18 @@ def _build_report(source: str) -> DoctorReport:
             "Fix the spec source or validation error before generating an MCP server.",
         )
         return report
-    return DoctorAnalyzer(spec).analyze(source)
+    try:
+        policy = load_policy_config(config) if config is not None else None
+    except PolicyConfigError as exc:
+        report = DoctorReport(source=source)
+        report.add_error(
+            "policy_config_failed",
+            str(exc),
+            config or "--config",
+            "Fix the policy file before using it to select diagnostic operations.",
+        )
+        return report
+    return DoctorAnalyzer(spec, policy).analyze(source)
 
 
 def _render_report(report: DoctorReport, output_format: OutputFormat) -> None:
