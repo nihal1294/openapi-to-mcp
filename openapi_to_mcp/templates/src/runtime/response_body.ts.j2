@@ -1,6 +1,6 @@
 import axios, { AxiosError, type AxiosResponseHeaders, type AxiosInstance, type AxiosResponse, type AxiosResponseTransformer } from 'axios';
 import type { Readable } from 'stream';
-import { createToolExecutionError } from './errors.js';
+import { createToolExecutionError, ToolExecutionError } from './errors.js';
 
 export function resolveResponseByteLimit(globalLimit: number, toolLimit: number | undefined): number {
   const limits = [globalLimit, toolLimit ?? 0].filter((value) => value > 0);
@@ -15,15 +15,25 @@ export async function admitResponseBody(
 ): Promise<AxiosResponse> {
   const chunks: Buffer[] = [];
   let size = 0;
-  for await (const chunk of response.data) {
-    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    size += bytes.length;
-    if (size > limit) {
-      response.data.destroy();
-      throw createToolExecutionError('response_too_large', 'upstream', false,
-        'Upstream response exceeds configured byte limit.');
+  try {
+    for await (const chunk of response.data) {
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      size += bytes.length;
+      if (size > limit) {
+        response.data.destroy();
+        throw createToolExecutionError('response_too_large', 'upstream', false,
+          'Upstream response exceeds configured byte limit.');
+      }
+      chunks.push(bytes);
     }
-    chunks.push(bytes);
+  } catch (error) {
+    // Preserve cancellation and the explicit size error. Axios's buffered Node
+    // adapter attaches the response to stream errors; retain its status without
+    // exposing the stream or partially received bytes.
+    if (error instanceof ToolExecutionError || axios.isAxiosError(error)) throw error;
+    const cause = error instanceof Error ? error : new Error(String(error));
+    const sanitized = { ...response, data: undefined };
+    throw AxiosError.from(cause, undefined, response.config, response.request, sanitized);
   }
   // Match the Node adapter's default UTF-8 decoding and BOM stripping, then
   // apply Axios's configured response transforms with the original responseType.

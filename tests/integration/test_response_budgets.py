@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from tests.integration.basic_auth_support import basic_project as basic_project  # noqa: PLC0414
+from tests.integration.basic_auth_support import build_basic_project
 
 
 def run_case(project: Path, scenario: dict) -> tuple[dict, str]:
@@ -244,3 +245,99 @@ def test_bounded_response_follows_existing_redirect(basic_project: Path) -> None
     )
     assert capture["requests"] == 2
     assert capture["results"][0]["structuredContent"] == {"ok": True}
+
+
+@pytest.fixture(scope="module", params=["1.20.0", "1.21.1"])
+def interruption_project(
+    request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory
+) -> Path:
+    output = build_basic_project(
+        tmp_path_factory.mktemp("interrupted-response") / "generated"
+    )
+    from click.testing import CliRunner  # noqa: PLC0415
+
+    from openapi_to_mcp.cli import cli  # noqa: PLC0415
+
+    generated = CliRunner().invoke(
+        cli,
+        [
+            "generate",
+            "-o",
+            str(output.parent / "basic.json"),
+            "--output-dir",
+            str(output),
+            "--transport",
+            "stdio",
+        ],
+    )
+    assert generated.exit_code == 0, generated.output
+    npm = shutil.which("npm")
+    assert npm is not None
+    result = subprocess.run(  # noqa: S603
+        [
+            npm,
+            "install",
+            "--ignore-scripts",
+            "--no-audit",
+            "--no-fund",
+            "--no-save",
+            f"axios@{request.param}",
+        ],
+        cwd=output,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    built = subprocess.run(  # noqa: S603
+        [npm, "run", "build"],
+        cwd=output,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert built.returncode == 0, built.stdout + built.stderr
+    return output
+
+
+@pytest.mark.parametrize(
+    ("interrupt", "status"),
+    [("once", 200), ("always", 200), ("once", 503), ("always", 503)],
+)
+def test_interrupted_response_retries_match_unbounded(
+    interruption_project: Path, interrupt: str, status: int
+) -> None:
+    captures = []
+    for limit in ("0", "100"):
+        capture, logs = run_case(
+            interruption_project,
+            {
+                "body": '{"ok":true}',
+                "interrupt": interrupt,
+                "protocol": True,
+                "interruptStatus": status,
+                "env": {
+                    "MCP_MAX_RESPONSE_BYTES": limit,
+                    "MCP_RETRY_MAX_RETRIES": "2",
+                    "MCP_RETRY_BUDGET_PER_MINUTE": "10",
+                },
+            },
+        )
+        assert "abc" not in logs
+        captures.append(capture)
+    expected_attempts = 1 if status == 200 else 2 if interrupt == "once" else 3
+    assert [capture["requests"] for capture in captures] == [
+        expected_attempts,
+        expected_attempts,
+    ]
+    if status == 503 and interrupt == "once":
+        for capture in captures:
+            assert capture["results"][0]["structuredContent"] == {"ok": True}
+    else:
+        results = [capture["results"][0] for capture in captures]
+        assert results[0]["_meta"]["error"] == results[1]["_meta"]["error"]
+        assert results[0]["isError"]
+        assert results[1]["isError"]
+        assert "structuredContent" not in results[1]
