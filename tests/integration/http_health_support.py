@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 
-def build_http_server(output: Path) -> Path:
+def build_http_server(output: Path, *, runtime_validation: str = "input") -> Path:
     spec = Path(__file__).parents[2] / "examples/container/openapi.yaml"
     result = CliRunner().invoke(
         cli,
@@ -34,6 +34,8 @@ def build_http_server(output: Path) -> Path:
             "health-probe-test",
             "--transport",
             "streamable-http",
+            "--runtime-validation",
+            runtime_validation,
         ],
     )
     assert result.exit_code == 0, result.output

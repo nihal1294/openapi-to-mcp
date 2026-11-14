@@ -81,6 +81,8 @@ The `conservative` preset leaves caching off by default, but if you later enable
     *   **Runtime Validation:**
         *   Generated tool input validation is set to `{{ runtime_validation }}`.
         *   When set to `input`, tool arguments are validated against the generated `inputSchema` before the upstream API call.
+        *   Regardless of this setting, a tool call may contain at most 10,000 nested argument elements. Larger inputs are rejected before schema validation or an upstream call with the standard JSON-RPC `Invalid Params` error (`-32602`). This is a structural count of object properties and array entries, not a byte limit for scalar strings. For `streamable-http`, Express separately rejects request bodies over 1 MiB.
+        *   **Migration:** This guard has no environment override. For legitimate larger structured payloads, split work across tool calls or pass a bounded reference that the upstream API can retrieve.
     *   **Structured Tool Errors:**
         *   Tool failures return machine-readable metadata under `_meta.error`.
         *   `_meta.error.retryable` is advisory only and does not define any retry interval or backoff policy.

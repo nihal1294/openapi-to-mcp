@@ -21,6 +21,46 @@ import {
   filterToolsForCaller,
 } from './runtime/tool_access.js';
 
+const MAX_TOOL_ARGUMENT_ELEMENTS = 10_000;
+
+function assertToolArgumentBounds(args: Record<string, unknown>): void {
+  const pending: unknown[] = [args];
+  let elementCount = 0;
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (Array.isArray(current)) {
+      for (const value of current) {
+        elementCount += 1;
+        if (elementCount > MAX_TOOL_ARGUMENT_ELEMENTS) {
+          throw new ProtocolError(
+            ProtocolErrorCode.InvalidParams,
+            `Tool arguments exceed the ${MAX_TOOL_ARGUMENT_ELEMENTS} element limit.`
+          );
+        }
+        pending.push(value);
+      }
+      continue;
+    }
+    if (current && typeof current === 'object') {
+      const record = current as Record<string, unknown>;
+      for (const key in record) {
+        if (!Object.hasOwn(record, key)) {
+          continue;
+        }
+        elementCount += 1;
+        if (elementCount > MAX_TOOL_ARGUMENT_ELEMENTS) {
+          throw new ProtocolError(
+            ProtocolErrorCode.InvalidParams,
+            `Tool arguments exceed the ${MAX_TOOL_ARGUMENT_ELEMENTS} element limit.`
+          );
+        }
+        pending.push(record[key]);
+      }
+    }
+  }
+}
+
 function buildCustomToolMap(): Map<string, CustomToolDefinition> {
   const customToolMap = new Map<string, CustomToolDefinition>();
   for (const customTool of getCustomTools()) {
@@ -116,6 +156,7 @@ export class OpenApiMcpServer {
             `Tool '${toolName}' not found.`
           );
         }
+        assertToolArgumentBounds(args);
         try {
           assertToolAllowed(toolName);
           const result = customTool
