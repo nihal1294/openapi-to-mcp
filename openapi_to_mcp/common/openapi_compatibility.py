@@ -23,6 +23,10 @@ class OpenAPIFinding:
 class _ParameterRef:
     parameter: dict[str, Any]
     location: str
+    invalid_array_ref: bool = False
+
+
+_INVALID_ARRAY_REF = object()
 
 
 def openapi_operation_findings(
@@ -48,6 +52,15 @@ def openapi_operation_findings(
         )
 
     for parameter_ref in _effective_parameters(spec, operation_ref):
+        if parameter_ref.invalid_array_ref:
+            findings.append(
+                OpenAPIFinding(
+                    "parameter $ref",
+                    f"{parameter_ref.location}.$ref",
+                    "The local parameter reference contains an invalid or out-of-range array index.",
+                )
+            )
+            continue
         if parameter_ref.parameter.get("in") != "querystring":
             continue
         findings.append(
@@ -123,6 +136,8 @@ def _resolve_parameter(
         if not isinstance(ref, str) or not ref.startswith("#/"):
             return None
         resolved = _resolve_local_ref(spec, ref)
+        if resolved is _INVALID_ARRAY_REF:
+            return _ParameterRef({}, current_location, invalid_array_ref=True)
         if not isinstance(resolved, dict):
             return None
         current = resolved
@@ -141,9 +156,20 @@ def _parameter_key(parameter: dict[str, Any]) -> tuple[str, str] | None:
 def _resolve_local_ref(spec: dict[str, Any], ref: str) -> object:
     current: object = spec
     for token in _local_ref_tokens(ref):
-        if not isinstance(current, dict):
+        if isinstance(current, dict):
+            current = current.get(token)
+        elif isinstance(current, list):
+            if not re.fullmatch(r"0|[1-9][0-9]*", token, re.ASCII):
+                return _INVALID_ARRAY_REF
+            try:
+                index = int(token)
+            except ValueError:
+                return _INVALID_ARRAY_REF
+            if index >= len(current):
+                return _INVALID_ARRAY_REF
+            current = current[index]
+        else:
             return None
-        current = current.get(token)
     return current
 
 

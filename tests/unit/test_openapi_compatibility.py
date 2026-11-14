@@ -786,3 +786,131 @@ def test_fixed_get_generation_and_doctor_matrix(
 
     assert doctor_result.exit_code == 0
     assert generate_result.exit_code == 0
+
+
+def test_cli_rejects_array_parameter_reference_to_querystring(
+    runner: CliRunner, tmp_path: Path, encoded_querystring_spec: dict[str, Any]
+) -> None:
+    parameter = encoded_querystring_spec["components"]["parameters"]["wholeQuery"]
+    encoded_querystring_spec["x-parameters"] = [parameter]
+    encoded_querystring_spec["paths"]["/search"]["get"]["parameters"] = [
+        {"$ref": "#/x-parameters/0"}
+    ]
+    source = tmp_path / "spec.json"
+    source.write_text(json.dumps(encoded_querystring_spec), encoding="utf-8")
+
+    doctor = runner.invoke(cli, ["doctor", "-o", str(source), "--format", "json"])
+    assert doctor.exit_code == 3, doctor.output
+    issues = json.loads(doctor.output[doctor.output.index("{\n") :])["issues"]
+    assert [
+        issue["location"]
+        for issue in issues
+        if issue["code"] == "unsupported_openapi_construct"
+    ] == ["x-parameters.0.in"]
+    strict = tmp_path / "strict"
+    result = runner.invoke(cli, ["generate", "-o", str(source), "-d", str(strict)])
+    assert result.exit_code == 1, result.output
+    assert "x-parameters.0.in" in result.output
+    assert not strict.exists()
+    skipped = tmp_path / "skip"
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "-o",
+            str(source),
+            "-d",
+            str(skipped),
+            "--on-mapping-error",
+            "skip",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    report = json.loads((skipped / "generation_report.json").read_text())
+    assert report["mapped_tools"] == 1
+    assert len(report["skipped_operations"]) == 1
+    assert report["skipped_operations"][0]["path"] == "/search"
+    assert "x-parameters.0.in" in report["skipped_operations"][0]["reason"]
+
+
+@pytest.mark.parametrize("index", ["-1", "+1", "01", "2", "-", "\uff11", "9" * 5000])
+def test_querystring_array_reference_invalid_indices_do_not_resolve(
+    encoded_querystring_spec: dict[str, Any], index: str
+) -> None:
+    parameter = encoded_querystring_spec["components"]["parameters"]["wholeQuery"]
+    encoded_querystring_spec["x-parameters"] = [parameter, parameter]
+    encoded_querystring_spec["paths"]["/search"]["get"]["parameters"] = [
+        {"$ref": f"#/x-parameters/{index}"}
+    ]
+    report = DoctorAnalyzer(encoded_querystring_spec).analyze("inline")
+    findings = [
+        issue
+        for issue in report.issues
+        if issue.code == "unsupported_openapi_construct"
+    ]
+    assert [issue.location for issue in findings] == [
+        "paths./search.get.parameters[0].$ref"
+    ]
+    assert "invalid or out-of-range array index" in findings[0].hint
+    with pytest.raises(MappingError, match="invalid or out-of-range array index"):
+        Mapper(encoded_querystring_spec).map_tools()
+
+
+def test_querystring_nested_array_reference_decodes_once_and_follows_chain(
+    encoded_querystring_spec: dict[str, Any],
+) -> None:
+    parameter = encoded_querystring_spec["components"]["parameters"]["wholeQuery"]
+    encoded_querystring_spec["x-parameters"] = [
+        {"query/~": [{"$ref": "#/x-%2570arameters/0"}]}
+    ]
+    encoded_querystring_spec["x-%70arameters"] = [parameter]
+    encoded_querystring_spec["paths"]["/search"]["get"]["parameters"] = [
+        {"$ref": "#/x-parameters/%30/query%7E1%7E0/0"}
+    ]
+    report = DoctorAnalyzer(encoded_querystring_spec).analyze("inline")
+    assert [
+        issue.location
+        for issue in report.issues
+        if issue.code == "unsupported_openapi_construct"
+    ] == ["x-%70arameters.0.in"]
+
+
+def test_cli_rejects_negative_array_reference(
+    runner: CliRunner, tmp_path: Path, encoded_querystring_spec: dict[str, Any]
+) -> None:
+    encoded_querystring_spec["x-parameters"] = [
+        encoded_querystring_spec["components"]["parameters"]["wholeQuery"]
+    ]
+    encoded_querystring_spec["paths"]["/search"]["get"]["parameters"] = [
+        {"$ref": "#/x-parameters/-1"}
+    ]
+    source = tmp_path / "spec.json"
+    source.write_text(json.dumps(encoded_querystring_spec), encoding="utf-8")
+    result = runner.invoke(
+        cli, ["generate", "-o", str(source), "-d", str(tmp_path / "output")]
+    )
+    assert result.exit_code == 1, result.output
+    assert "invalid or out-of-range array index" in result.output
+
+
+def test_array_reference_preserves_effective_overrides_and_cycles(
+    encoded_querystring_spec: dict[str, Any],
+) -> None:
+    parameter = encoded_querystring_spec["components"]["parameters"]["wholeQuery"]
+    encoded_querystring_spec["x-parameters"] = [parameter, {"$ref": "#/x-parameters/1"}]
+    search = encoded_querystring_spec["paths"]["/search"]
+    search["parameters"] = [{"$ref": "#/x-parameters/0"}]
+    search["get"]["parameters"] = [
+        {
+            "name": "filter",
+            "in": "querystring",
+            "content": {"application/json": {"schema": {"type": "string"}}},
+        },
+        {"$ref": "#/x-parameters/1"},
+    ]
+    report = DoctorAnalyzer(encoded_querystring_spec).analyze("inline")
+    assert [
+        issue.location
+        for issue in report.issues
+        if issue.code == "unsupported_openapi_construct"
+    ] == ["paths./search.get.parameters[0].in"]
