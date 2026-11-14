@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from openapi_to_mcp.common.openapi_compatibility import openapi_operation_findings
 from openapi_to_mcp.common.operations import OperationRef, iter_operations
+from openapi_to_mcp.common.spec_compatibility import swagger_parameter_findings
 from openapi_to_mcp.doctor.models import DoctorReport
 from openapi_to_mcp.doctor.openapi import report_openapi_compatibility
 from openapi_to_mcp.doctor.security import (
@@ -15,7 +16,7 @@ from openapi_to_mcp.doctor.security import (
     security_schemes,
 )
 from openapi_to_mcp.doctor.swagger import report_swagger_compatibility
-from openapi_to_mcp.mapping.utils import allocate_tool_names, generate_tool_name
+from openapi_to_mcp.mapping.utils import generate_tool_name, next_available_tool_name
 from openapi_to_mcp.policy.openapi import is_openapi_operation_selected
 
 if TYPE_CHECKING:
@@ -109,26 +110,44 @@ class DoctorAnalyzer:
         self, operations: list[OperationRef]
     ) -> list[str | None]:
         """Return deterministic mapper-equivalent names for policy selection."""
-        candidate_indexes: list[int] = []
-        candidate_names: list[str] = []
-        original_names: list[str | None] = [None] * len(operations)
-        for index, operation_ref in enumerate(operations):
+        used_names: set[str] = set()
+        name_counts: dict[str, int] = {}
+        original_names: list[str | None] = []
+        for operation_ref in operations:
             candidate_name = operation_ref.operation.get(
                 "operationId"
             ) or generate_tool_name(operation_ref.method, operation_ref.path)
             if not isinstance(candidate_name, str):
+                original_names.append(None)
                 continue
             if openapi_operation_findings(self.spec, operation_ref):
-                # Mapper checks these operations before allocating a tool name.
-                # Keep their raw selector identity without reserving a suffix.
-                original_names[index] = candidate_name
+                # OpenAPI compatibility is checked before name allocation.
+                original_names.append(candidate_name)
                 continue
-            candidate_indexes.append(index)
-            candidate_names.append(candidate_name)
-        for index, allocated_name in zip(
-            candidate_indexes, allocate_tool_names(candidate_names), strict=True
-        ):
-            original_names[index] = allocated_name
+            allocated_name = next_available_tool_name(
+                candidate_name, used_names, name_counts
+            )
+            original_names.append(allocated_name)
+            structural_findings = swagger_parameter_findings(
+                self.spec,
+                operation_ref.method,
+                operation_ref.path,
+                operation_ref.path_item,
+                operation_ref.operation,
+            )
+            if structural_findings and is_openapi_operation_selected(
+                operation_ref, self.policy_config, original_name=allocated_name
+            ):
+                # A selected incompatible Swagger operation fails before its name
+                # is registered. Excluded operations retain legacy allocation.
+                continue
+            used_names.add(allocated_name)
+            if allocated_name == candidate_name:
+                name_counts[candidate_name] = max(name_counts.get(candidate_name, 0), 1)
+            else:
+                name_counts[candidate_name] = int(
+                    allocated_name.removeprefix(f"{candidate_name}_")
+                )
         return original_names
 
     def _check_missing_operation_ids(
