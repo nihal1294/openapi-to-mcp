@@ -107,10 +107,12 @@ class Mapper:
                 path_level_parameters = []
 
             try:
-                if is_openapi_operation_selected(operation_ref, self.policy_config):
+                if openapi_operation_findings(self.spec, operation_ref):
+                    if not is_openapi_operation_selected(
+                        operation_ref, self.policy_config
+                    ):
+                        continue
                     self._raise_if_unsupported_openapi(operation_ref)
-                else:
-                    continue
                 merged_parameters = self._merge_parameters(
                     path_level_parameters,
                     operation.get("parameters", []),

@@ -12,6 +12,7 @@ from openapi_to_mcp.cli import cli
 from openapi_to_mcp.common import MappingError
 from openapi_to_mcp.doctor import DoctorAnalyzer
 from openapi_to_mcp.mapping import Mapper
+from openapi_to_mcp.policy import apply_policy
 from openapi_to_mcp.policy.models import PolicyConfig, SelectorSet
 
 if TYPE_CHECKING:
@@ -94,6 +95,30 @@ def test_explicit_mapping_skip_overrides_strict_for_query_operation() -> None:
 
     assert [tool["name"] for tool in mapper.map_tools()] == ["listItems"]
     assert mapper.get_report()["skipped_operations"][0]["method"] == "QUERY"
+
+
+def test_mapper_preserves_suffix_name_policy_selection_for_supported_operations() -> (
+    None
+):
+    """Supported operations retain legacy post-mapping name allocation behavior."""
+    spec = {
+        "openapi": "3.0.4",
+        "info": {"title": "Suffix selection", "version": "1.0.0"},
+        "paths": {
+            "/a-b": {"get": {"responses": {"200": {}}}},
+            "/a_b": {"get": {"responses": {"200": {}}}},
+        },
+    }
+    policy = PolicyConfig(
+        source_path=Path("mcpgen.yaml"),
+        include=SelectorSet(names=frozenset({"get_a_b_2"})),
+    )
+
+    mapper = Mapper(spec, strict=False, policy_config=policy)
+    tools = mapper.map_tools()
+
+    assert [tool["name"] for tool in tools] == ["get_a_b", "get_a_b_2"]
+    assert [tool["name"] for tool in apply_policy(tools, policy)] == ["get_a_b_2"]
 
 
 def test_querystring_parameters_follow_effective_override_and_local_references() -> (
@@ -339,6 +364,139 @@ def test_doctor_config_execution_override_does_not_replace_copy_diagnostic(
     assert result.exit_code == 3
     assert "unsupported_openapi_construct" in result.output
     assert "require a safe HTTP method" not in result.output
+
+
+def test_doctor_config_excludes_unsupported_swagger_sibling(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """Doctor applies explicit selection before Swagger compatibility checks."""
+    spec = {
+        "swagger": "2.0",
+        "info": {"title": "Doctor Swagger policy", "version": "1.0.0"},
+        "host": "api.example.com",
+        "paths": {
+            "/good": {
+                "get": {
+                    "operationId": "getGood",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+            "/bad": {
+                "get": {
+                    "operationId": "getBad",
+                    "parameters": [
+                        {
+                            "name": "payload",
+                            "in": "body",
+                            "schema": {"type": "object"},
+                        }
+                    ],
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+        },
+    }
+    source = tmp_path / "swagger.json"
+    source.write_text(json.dumps(spec), encoding="utf-8")
+    config = tmp_path / "mcpgen.yaml"
+    config.write_text(
+        "tools:\n  exclude:\n    operations: [GET /bad]\n", encoding="utf-8"
+    )
+
+    result = runner.invoke(
+        cli,
+        ["doctor", "-o", str(source), "--config", str(config), "--format", "json"],
+    )
+
+    assert result.exit_code == 0
+    assert "unsupported_swagger_construct" not in result.output
+
+
+def test_doctor_reports_no_selected_operations_but_keeps_global_checks(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """A nonempty document filtered to zero operations is not an empty document."""
+    spec = {
+        "openapi": "3.2.1",
+        "info": {"title": "No selected operations", "version": "1.0.0"},
+        "paths": {
+            "/ping": {
+                "get": {
+                    "operationId": "ping",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            }
+        },
+    }
+    source = tmp_path / "openapi.json"
+    source.write_text(json.dumps(spec), encoding="utf-8")
+    config = tmp_path / "mcpgen.yaml"
+    config.write_text(
+        "tools:\n  exclude:\n    operations: [GET /ping]\n", encoding="utf-8"
+    )
+
+    result = runner.invoke(
+        cli,
+        ["doctor", "-o", str(source), "--config", str(config), "--format", "json"],
+    )
+
+    assert result.exit_code == 3
+    assert "no_selected_operations" in result.output
+    assert "no_http_operations" not in result.output
+    assert "missing_base_url" in result.output
+
+
+def test_doctor_config_filters_operation_security_and_schema_checks(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """Excluded operations do not contribute security or union readiness findings."""
+    spec = {
+        "openapi": "3.2.1",
+        "info": {"title": "Doctor operation checks", "version": "1.0.0"},
+        "servers": [{"url": "https://example.com"}],
+        "paths": {
+            "/good": {
+                "get": {
+                    "operationId": "getGood",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+            "/excluded": {
+                "post": {
+                    "operationId": "postExcluded",
+                    "security": [{"missingAuth": []}],
+                    "requestBody": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "oneOf": [
+                                        {"type": "object", "properties": {"a": {}}},
+                                        {"type": "object", "properties": {"b": {}}},
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+        },
+    }
+    source = tmp_path / "openapi.json"
+    source.write_text(json.dumps(spec), encoding="utf-8")
+    config = tmp_path / "mcpgen.yaml"
+    config.write_text(
+        "tools:\n  exclude:\n    operations: [POST /excluded]\n", encoding="utf-8"
+    )
+
+    result = runner.invoke(
+        cli,
+        ["doctor", "-o", str(source), "--config", str(config), "--format", "json"],
+    )
+
+    assert result.exit_code == 0
+    assert "undefined_security_scheme" not in result.output
+    assert "risky_union_schema" not in result.output
 
 
 @pytest.mark.parametrize("version", ["3.0.4", "3.1.2", "3.2.1"])

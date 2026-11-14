@@ -38,6 +38,7 @@ openapi-to-mcp doctor [OPTIONS]
 - Swagger 2 constructs that cannot be faithfully generated, including body/form parameters, top-level parameter types, used security definitions, and unsupported protocol overrides
 - OpenAPI 3.2 additional operations, `QUERY` operations, and reachable `in: querystring` parameters that cannot yet be faithfully generated
 - missing HTTP operations under `paths`
+- no operations remaining after explicit policy selection
 
 ## Examples
 
@@ -75,5 +76,7 @@ WebSocket schemes cannot be used by the generated HTTP client. Other unsupported
 Swagger constructs still require conversion.
 
 Pass `--config` when doctor should apply the same include and exclude selectors as
-generation. OpenAPI compatibility findings are reported only for selected
-operations; auth overrides do not suppress unrelated OpenAPI findings.
+generation. All operation-derived readiness checks apply only to selected
+operations; auth overrides do not suppress unrelated OpenAPI findings. Doctor
+reports an error when a nonempty operation inventory is filtered to zero
+operations.

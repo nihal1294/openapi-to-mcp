@@ -15,6 +15,7 @@ from openapi_to_mcp.doctor.security import (
 )
 from openapi_to_mcp.doctor.swagger import report_swagger_compatibility
 from openapi_to_mcp.mapping.utils import generate_tool_name
+from openapi_to_mcp.policy.openapi import is_openapi_operation_selected
 
 if TYPE_CHECKING:
     from openapi_to_mcp.policy.models import PolicyConfig
@@ -36,13 +37,22 @@ class DoctorAnalyzer:
         """Return a diagnostics report for the current spec."""
         report = DoctorReport(source=source)
         self._check_base_url(report)
-        operations = list(self._iter_operations())
-        if not operations:
+        discovered_operations = list(self._iter_operations())
+        if not discovered_operations:
             report.add_error(
                 "no_http_operations",
                 "No HTTP operations were found under `paths`.",
                 "paths",
                 "Add at least one HTTP operation before generating an MCP server.",
+            )
+            return report
+        operations = self._selected_operations(discovered_operations)
+        if not operations:
+            report.add_error(
+                "no_selected_operations",
+                "No HTTP operations remain after applying the configured policy.",
+                "paths",
+                "Adjust the policy include or exclude selectors to retain at least one HTTP operation.",
             )
             return report
         self._check_missing_operation_ids(report, operations)
@@ -53,7 +63,7 @@ class DoctorAnalyzer:
             self.spec,
             [(item.method, item.path, item.operation) for item in operations],
         )
-        report_openapi_compatibility(report, self.spec, operations, self.policy_config)
+        report_openapi_compatibility(report, self.spec, operations)
         self._check_schema_unions(report, operations)
         return report
 
@@ -78,6 +88,16 @@ class DoctorAnalyzer:
 
     def _iter_operations(self) -> list[OperationRef]:
         return iter_operations(self.spec)
+
+    def _selected_operations(
+        self, operations: list[OperationRef]
+    ) -> list[OperationRef]:
+        """Return inventory entries retained by the configured policy selectors."""
+        return [
+            operation_ref
+            for operation_ref in operations
+            if is_openapi_operation_selected(operation_ref, self.policy_config)
+        ]
 
     def _check_missing_operation_ids(
         self,
