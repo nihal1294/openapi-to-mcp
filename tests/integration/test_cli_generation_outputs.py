@@ -7,6 +7,8 @@ import shutil
 import subprocess
 from typing import TYPE_CHECKING
 
+import pytest
+
 from openapi_to_mcp.cli import cli
 
 if TYPE_CHECKING:
@@ -59,6 +61,8 @@ def test_generate_streamable_http_end_to_end(runner: CliRunner, tmp_path: Path) 
     generated_source = _read_source(output_dir, "src/runtime/generated.ts")
     serialization = _read_source(output_dir, "src/runtime/serialization.ts")
     assert package_json["engines"] == {"node": ">=22"}
+    assert package_json["dependencies"]["@modelcontextprotocol/server"] == "^2.4.0"
+    assert package_json["dependencies"]["@modelcontextprotocol/node"] == "^2.1.2"
     assert "quiet: true" in index_source
     assert "StreamableHTTPServerTransport" in transport_source
     assert "SSEServerTransport" not in transport_source
@@ -100,10 +104,72 @@ def test_generate_stdio_omits_http_dependencies(
     assert result.exit_code == 0
     package_json = json.loads(_read_source(output_dir, "package.json"))
     assert "express" not in package_json["dependencies"]
+    assert package_json["dependencies"]["@modelcontextprotocol/server"] == "^2.4.0"
     assert "@types/express" not in package_json["devDependencies"]
     assert package_json["engines"] == {"node": ">=22"}
     assert "quiet: true" in _read_source(output_dir, "src/index.ts")
     assert "StdioServerTransport" in _read_source(output_dir, "src/transport.ts")
+
+
+@pytest.mark.parametrize(
+    ("transport", "minimum_dependencies"),
+    [
+        ("stdio", {"@modelcontextprotocol/server": "2.4.0"}),
+        (
+            "streamable-http",
+            {
+                "@modelcontextprotocol/server": "2.4.0",
+                "@modelcontextprotocol/node": "2.1.2",
+            },
+        ),
+    ],
+)
+def test_generated_server_builds_with_minimum_mcp_sdk_versions(
+    runner: CliRunner,
+    tmp_path: Path,
+    transport: str,
+    minimum_dependencies: dict[str, str],
+) -> None:
+    """Generated projects compile with the declared SDK floors, not only newer resolutions."""
+    output_dir = tmp_path / f"generated-minimum-{transport}"
+    arguments = [
+        "generate",
+        "--openapi-json",
+        "tests/resources/test_openapi.yaml",
+        "--output-dir",
+        str(output_dir),
+        "--transport",
+        transport,
+    ]
+    if transport == "streamable-http":
+        arguments.extend(
+            ["--host", "127.0.0.1", "--port", "8080", "--mcp-endpoint", "/mcp"]
+        )
+    result = runner.invoke(cli, arguments)
+    assert result.exit_code == 0, result.output
+
+    package_path = output_dir / "package.json"
+    package_json = json.loads(package_path.read_text(encoding="utf-8"))
+    package_json["dependencies"].update(minimum_dependencies)
+    package_path.write_text(json.dumps(package_json, indent=2) + "\n", encoding="utf-8")
+
+    npm = shutil.which("npm")
+    assert npm is not None, "npm is required for generated SDK compatibility tests"
+    subprocess.run(  # noqa: S603
+        [npm, "install", "--ignore-scripts", "--no-audit", "--no-fund"],
+        cwd=output_dir,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    compiled = subprocess.run(  # noqa: S603
+        [npm, "run", "build"],
+        cwd=output_dir,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
 
 
 def test_regenerating_http_output_as_stdio_removes_http_runtime(

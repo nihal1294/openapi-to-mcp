@@ -33,6 +33,99 @@ def generated_http(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return build_http_server(tmp_path_factory.mktemp("generated-http-health"))
 
 
+@pytest.fixture(scope="module")
+def generated_http_without_schema_validation(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Path:
+    return build_http_server(
+        tmp_path_factory.mktemp("generated-http-bounds"), runtime_validation="none"
+    )
+
+
+def _initialize_mcp_session(base: str) -> str:
+    response = requests.post(
+        base + "/mcp",
+        headers={"Accept": "application/json, text/event-stream"},
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-03-26",
+                "capabilities": {},
+                "clientInfo": {"name": "argument-bound-test", "version": "1.0"},
+            },
+        },
+        timeout=2,
+    )
+    assert response.status_code == 200
+    session_id = response.headers.get("Mcp-Session-Id")
+    assert session_id
+    return session_id
+
+
+def _post_tool_call(
+    base: str, session_id: str, arguments: dict[str, object]
+) -> requests.Response:
+    return requests.post(
+        base + "/mcp",
+        headers={
+            "Accept": "application/json, text/event-stream",
+            "Mcp-Session-Id": session_id,
+        },
+        json={
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "getWidget", "arguments": arguments},
+        },
+        timeout=2,
+    )
+
+
+def _assert_argument_limit(
+    generated_http_without_schema_validation: Path,
+    arguments: dict[str, object],
+) -> None:
+    with running_server(generated_http_without_schema_validation) as (base, _):
+        session_id = _initialize_mcp_session(base)
+        oversized = _post_tool_call(base, session_id, arguments)
+        assert oversized.status_code == 200
+        assert oversized.json()["error"] == {
+            "code": -32602,
+            "message": "Tool arguments exceed the 10000 element limit.",
+        }
+
+
+def test_runtime_guard_rejects_oversized_array_arguments_without_schema_validation(
+    generated_http_without_schema_validation: Path,
+) -> None:
+    """The low-level server rejects dense arrays before optional Ajv validation."""
+    with running_server(generated_http_without_schema_validation) as (base, _):
+        session_id = _initialize_mcp_session(base)
+        bounded = _post_tool_call(base, session_id, {"widgetId": "42"})
+        assert bounded.status_code == 200
+        assert "Tool arguments exceed" not in bounded.text
+
+    _assert_argument_limit(
+        generated_http_without_schema_validation,
+        {"widgetId": "42", "padding": list(range(10_001))},
+    )
+
+
+def test_runtime_guard_rejects_oversized_object_arguments_without_schema_validation(
+    generated_http_without_schema_validation: Path,
+) -> None:
+    """The low-level server rejects wide own-property maps before optional Ajv validation."""
+    _assert_argument_limit(
+        generated_http_without_schema_validation,
+        {
+            "widgetId": "42",
+            **{f"argument_{index}": index for index in range(10_000)},
+        },
+    )
+
+
 def test_readiness_transitions_over_http(generated_http: Path) -> None:
     node = shutil.which("node")
     assert node is not None

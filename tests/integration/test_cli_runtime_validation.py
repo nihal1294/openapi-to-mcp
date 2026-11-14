@@ -36,6 +36,7 @@ def test_generate_runtime_validation_input_emits_ajv_and_validator(
     )
 
     assert "ajv" in package_json["dependencies"]
+    assert package_json["dependencies"]["@modelcontextprotocol/server"] == "^2.4.0"
     assert "Ajv" in validation_source
     assert "Input validation failed:" in validation_source
 
@@ -65,6 +66,7 @@ def test_generate_runtime_validation_none_omits_ajv_and_validator(
     )
 
     assert "ajv" not in package_json["dependencies"]
+    assert package_json["dependencies"]["@modelcontextprotocol/server"] == "^2.4.0"
     assert "Ajv" not in validation_source
 
 
