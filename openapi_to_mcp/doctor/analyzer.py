@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from openapi_to_mcp.common.openapi_compatibility import openapi_operation_findings
 from openapi_to_mcp.common.operations import OperationRef, iter_operations
-from openapi_to_mcp.common.spec_compatibility import swagger_parameter_findings
+from openapi_to_mcp.common.spec_compatibility import swagger_operation_findings
 from openapi_to_mcp.doctor.models import DoctorReport
 from openapi_to_mcp.doctor.openapi import report_openapi_compatibility
 from openapi_to_mcp.doctor.security import (
@@ -16,8 +16,13 @@ from openapi_to_mcp.doctor.security import (
     security_schemes,
 )
 from openapi_to_mcp.doctor.swagger import report_swagger_compatibility
+from openapi_to_mcp.mapping.security import (
+    operation_security,
+    operation_security_schemes,
+)
 from openapi_to_mcp.mapping.utils import generate_tool_name, next_available_tool_name
 from openapi_to_mcp.policy.openapi import is_openapi_operation_selected
+from openapi_to_mcp.policy.swagger import preview_swagger_findings
 
 if TYPE_CHECKING:
     from openapi_to_mcp.policy.models import PolicyConfig
@@ -128,18 +133,25 @@ class DoctorAnalyzer:
                 candidate_name, used_names, name_counts
             )
             original_names.append(allocated_name)
-            structural_findings = swagger_parameter_findings(
+            findings = swagger_operation_findings(
                 self.spec,
                 operation_ref.method,
                 operation_ref.path,
                 operation_ref.path_item,
                 operation_ref.operation,
             )
-            if structural_findings and is_openapi_operation_selected(
-                operation_ref, self.policy_config, original_name=allocated_name
-            ):
-                # A selected incompatible Swagger operation fails before its name
-                # is registered. Excluded operations retain legacy allocation.
+            requirements = operation_security(self.spec, operation_ref.operation)
+            tool = {
+                "name": allocated_name,
+                "_original_method": operation_ref.method,
+                "_original_path": operation_ref.path,
+                "_original_security": requirements,
+                "_original_security_schemes": operation_security_schemes(
+                    self.spec, requirements
+                ),
+            }
+            if preview_swagger_findings(findings, tool, self.policy_config):
+                # Selected operations with effective findings fail before registration.
                 continue
             used_names.add(allocated_name)
             if allocated_name == candidate_name:
