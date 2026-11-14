@@ -124,6 +124,10 @@ To run the server in development mode with automatic rebuilding and restarting o
 npm run dev
 ```
 
+The generated npm manifest uses a scoped override to keep nodemon's glob matcher
+on a patched minimatch release. Preserve that override when updating development
+dependencies until nodemon's own dependency range includes the fix.
+
 ## Safe customization
 
 - `src/custom/tools.ts` is the preserved entry point for user-owned MCP tools.
