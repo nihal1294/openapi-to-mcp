@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from openapi_to_mcp.mapping.utils import generate_tool_name
-from openapi_to_mcp.policy.applier import apply_policy
+from openapi_to_mcp.policy.applier import is_tool_selected
 
 if TYPE_CHECKING:
     from openapi_to_mcp.common.operations import OperationRef
@@ -28,4 +28,4 @@ def is_openapi_operation_selected(
         "_original_method": operation_ref.method,
         "_original_path": operation_ref.path,
     }
-    return bool(apply_policy([provisional_tool], policy))
+    return is_tool_selected(provisional_tool, policy)

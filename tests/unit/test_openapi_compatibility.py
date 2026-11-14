@@ -99,7 +99,7 @@ def test_explicit_mapping_skip_overrides_strict_for_query_operation() -> None:
 def test_querystring_parameters_follow_effective_override_and_local_references() -> (
     None
 ):
-    """Only a reachable, effective querystring parameter blocks an operation."""
+    """A same-identity operation parameter replaces its inherited source."""
     spec = {
         "openapi": "3.2.1",
         "info": {"title": "Query string", "version": "1.0.0"},
@@ -118,7 +118,15 @@ def test_querystring_parameters_follow_effective_override_and_local_references()
                 "parameters": [{"$ref": "#/components/parameters/wholeQuery"}],
                 "get": {
                     "operationId": "listItems",
-                    "parameters": [{"name": "filter", "in": "query"}],
+                    "parameters": [
+                        {
+                            "name": "filter",
+                            "in": "querystring",
+                            "content": {
+                                "application/json": {"schema": {"type": "object"}}
+                            },
+                        }
+                    ],
                     "responses": {"200": {}},
                 },
             },
@@ -141,9 +149,13 @@ def test_querystring_parameters_follow_effective_override_and_local_references()
 
     assert [(issue.location, issue.message) for issue in findings] == [
         (
+            "paths./items.get.parameters[0].in",
+            "OpenAPI `in: querystring` cannot be faithfully generated.",
+        ),
+        (
             "components.parameters.wholeQuery.in",
             "OpenAPI `in: querystring` cannot be faithfully generated.",
-        )
+        ),
     ]
 
 
@@ -290,6 +302,43 @@ def test_doctor_config_excludes_unselected_additional_operation(
 
     assert result.exit_code == 0
     assert "unsupported_openapi_construct" not in result.output
+
+
+def test_doctor_config_execution_override_does_not_replace_copy_diagnostic(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """Compatibility reporting applies selectors without validating execution policy."""
+    spec = {
+        "openapi": "3.2.1",
+        "info": {"title": "Doctor execution policy", "version": "1.0.0"},
+        "servers": [{"url": "https://example.com"}],
+        "paths": {
+            "/ping": {
+                "additionalOperations": {
+                    "COPY": {
+                        "operationId": "copyPing",
+                        "responses": {"200": {"description": "OK"}},
+                    }
+                }
+            }
+        },
+    }
+    source = tmp_path / "openapi.json"
+    source.write_text(json.dumps(spec), encoding="utf-8")
+    config = tmp_path / "mcpgen.yaml"
+    config.write_text(
+        "execution:\n  operations:\n    COPY /ping:\n      cache_ttl_ms: 60\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        cli,
+        ["doctor", "-o", str(source), "--config", str(config), "--format", "json"],
+    )
+
+    assert result.exit_code == 3
+    assert "unsupported_openapi_construct" in result.output
+    assert "require a safe HTTP method" not in result.output
 
 
 @pytest.mark.parametrize("version", ["3.0.4", "3.1.2", "3.2.1"])
