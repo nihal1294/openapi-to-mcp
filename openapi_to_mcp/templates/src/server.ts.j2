@@ -129,7 +129,11 @@ export class OpenApiMcpServer {
     process.exit(0);
   }
 
-  private static setupGracefulShutdown(): void {
+{% if telemetry == 'opentelemetry' %}  public static registerProcessShutdown(): void {
+    OpenApiMcpServer.setupGracefulShutdown();
+  }
+
+{% endif %}  private static setupGracefulShutdown(): void {
     if (OpenApiMcpServer.shutdownHooksRegistered) {
       return;
     }

@@ -238,3 +238,62 @@ export function getCustomTools(): CustomToolDefinition[] {
             process.wait(timeout=3)
         server.shutdown()
         server.server_close()
+
+
+def test_http_telemetry_shutdown_before_first_session(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """A ready listener shuts down its process-wide SDK even without sessions."""
+    from tests.integration.http_health_support import running_server  # noqa: PLC0415
+
+    output = tmp_path / "http-server"
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--openapi-json",
+            "examples/container/openapi.yaml",
+            "--output-dir",
+            str(output),
+            "--transport",
+            "streamable-http",
+            "--telemetry",
+            "opentelemetry",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    npm = shutil.which("npm")
+    assert npm
+    for command in (
+        [npm, "install", "--ignore-scripts", "--no-audit", "--no-fund"],
+        [npm, "run", "build"],
+    ):
+        subprocess.run(command, cwd=output, check=True, capture_output=True, text=True)  # noqa: S603
+
+    marker = output / "shutdown-observed"
+    probe = output / "shutdown-probe.mjs"
+    probe.write_text("""
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { writeFileSync } from 'node:fs';
+const original = NodeSDK.prototype.shutdown;
+NodeSDK.prototype.shutdown = function (...args) {
+  writeFileSync(process.env.TEST_SHUTDOWN_MARKER, 'called');
+  return original.apply(this, args);
+};
+""")
+    with running_server(
+        output,
+        MCP_OTEL_ENABLED="on",
+        MCP_OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:9/collector",
+        NODE_OPTIONS=f"--import={probe}",
+        TEST_SHUTDOWN_MARKER=str(marker),
+    ) as (_base, process):
+        assert not marker.exists()
+        started = time.monotonic()
+        process.send_signal(signal.SIGTERM)
+        process.wait(timeout=3)
+        assert time.monotonic() - started < 2.2
+        assert process.returncode == 0
+        assert marker.read_text() == "called"
+        assert process.stdout
+        assert process.stdout.read() == ""

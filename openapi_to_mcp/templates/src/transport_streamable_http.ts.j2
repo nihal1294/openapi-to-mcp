@@ -22,7 +22,9 @@ import {
   withRequestCallerContext,
 } from './runtime/request_context.js';
 
-const HOST = process.env.MCP_HTTP_HOST || '{{ host }}';
+{% if telemetry == 'opentelemetry' %}OpenApiMcpServer.registerProcessShutdown();
+
+{% endif %}const HOST = process.env.MCP_HTTP_HOST || '{{ host }}';
 const PORT = Number.parseInt(process.env.MCP_HTTP_PORT || '{{ port }}', 10);
 const ENDPOINT = process.env.MCP_HTTP_ENDPOINT || '{{ mcp_endpoint }}';
 const ALLOWED_ORIGINS = (process.env.MCP_ALLOWED_ORIGINS || 'http://localhost')

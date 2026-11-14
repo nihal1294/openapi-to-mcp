@@ -72,6 +72,7 @@ class Generator:
             err_msg = "Internal error: Jinja2 environment not initialized."
             raise GenerationError(err_msg)
 
+        self._check_telemetry_collision()
         self._ensure_output_directories()
         self._generate_static_files()
         self._generate_transport_file()
@@ -93,6 +94,27 @@ class Generator:
             trim_blocks=True,
             lstrip_blocks=True,
         )
+
+    def _check_telemetry_collision(self) -> None:
+        """Protect unowned runtime source before writing any generated files."""
+        if self.context.get("telemetry") != "opentelemetry":
+            return
+        target = self.output_path / "src" / "runtime" / "telemetry.ts"
+        try:
+            if target.is_symlink() or (
+                target.exists()
+                and not target.read_bytes().startswith(
+                    b"// Generated runtime telemetry module.\n"
+                )
+            ):
+                raise GenerationError(
+                    "Cannot generate telemetry: src/runtime/telemetry.ts already "
+                    "exists and is not a generated telemetry module."
+                )
+        except OSError as error:
+            raise GenerationError(
+                "Cannot inspect existing src/runtime/telemetry.ts."
+            ) from error
 
     def _ensure_output_directories(self) -> None:
         """

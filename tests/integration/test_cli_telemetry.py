@@ -111,3 +111,54 @@ def test_policy_accepts_unquoted_off(runner: CliRunner, tmp_path: Path) -> None:
     )
     assert result.exit_code == 0, result.output
     assert not (output / "src/runtime/telemetry.ts").exists()
+
+
+def test_enabled_telemetry_rejects_unowned_collision_before_writes(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    output = tmp_path / "generated"
+    target = output / "src/runtime/telemetry.ts"
+    target.parent.mkdir(parents=True)
+    target.write_text("// custom runtime module\n")
+    manifest = output / "package.json"
+    manifest.write_text("original manifest\n")
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--openapi-json",
+            "tests/resources/test_openapi.yaml",
+            "--output-dir",
+            str(output),
+            "--telemetry",
+            "opentelemetry",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "src/runtime/telemetry.ts" in result.output
+    assert "not a generated telemetry module" in result.output
+    assert target.read_text() == "// custom runtime module\n"
+    assert manifest.read_text() == "original manifest\n"
+
+
+def test_enabled_telemetry_regenerates_owned_module(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    output = tmp_path / "generated"
+    args = [
+        "generate",
+        "--openapi-json",
+        "tests/resources/test_openapi.yaml",
+        "--output-dir",
+        str(output),
+        "--telemetry",
+        "opentelemetry",
+    ]
+    result = runner.invoke(cli, args)
+    assert result.exit_code == 0, result.output
+    target = output / "src/runtime/telemetry.ts"
+    original = target.read_text()
+    target.write_text(original + "\n// generated file modification\n")
+    result = runner.invoke(cli, args)
+    assert result.exit_code == 0, result.output
+    assert target.read_text() == original
