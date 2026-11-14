@@ -16,7 +16,133 @@ from openapi_to_mcp.policy import apply_policy
 from openapi_to_mcp.policy.models import PolicyConfig, SelectorSet
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from click.testing import CliRunner
+
+
+@pytest.fixture
+def encoded_querystring_spec() -> dict[str, Any]:
+    return {
+        "openapi": "3.2.1",
+        "info": {"title": "Encoded parameter reference", "version": "1.0.0"},
+        "servers": [{"url": "https://example.com"}],
+        "components": {
+            "parameters": {
+                "wholeQuery": {
+                    "name": "filter",
+                    "in": "querystring",
+                    "content": {"application/json": {"schema": {"type": "object"}}},
+                }
+            }
+        },
+        "paths": {
+            "/ping": {
+                "get": {
+                    "operationId": "ping",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+            "/search": {
+                "get": {
+                    "operationId": "search",
+                    "parameters": [{"$ref": "#/components/parameters/%77holeQuery"}],
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+        },
+    }
+
+
+def test_doctor_reports_percent_encoded_querystring_reference(
+    runner: CliRunner, tmp_path: Path, encoded_querystring_spec: dict[str, Any]
+) -> None:
+    source = tmp_path / "openapi.json"
+    source.write_text(json.dumps(encoded_querystring_spec), encoding="utf-8")
+
+    result = runner.invoke(cli, ["doctor", "-o", str(source), "--format", "json"])
+
+    assert result.exit_code == 3
+    issues = json.loads(result.output[result.output.index("{\n") :])["issues"]
+    findings = [
+        issue for issue in issues if issue["code"] == "unsupported_openapi_construct"
+    ]
+    assert [issue["location"] for issue in findings] == [
+        "components.parameters.wholeQuery.in"
+    ]
+    assert "in: querystring" in findings[0]["message"]
+
+
+def test_generate_strict_rejects_percent_encoded_querystring_reference(
+    runner: CliRunner, tmp_path: Path, encoded_querystring_spec: dict[str, Any]
+) -> None:
+    source = tmp_path / "openapi.json"
+    source.write_text(json.dumps(encoded_querystring_spec), encoding="utf-8")
+    destination = tmp_path / "generated"
+
+    result = runner.invoke(cli, ["generate", "-o", str(source), "-d", str(destination)])
+
+    assert result.exit_code == 1
+    assert "GET /search" in result.output
+    assert "components.parameters.wholeQuery.in" in result.output
+    assert not destination.exists()
+
+
+def test_generate_skip_accounts_for_percent_encoded_querystring_reference(
+    runner: CliRunner, tmp_path: Path, encoded_querystring_spec: dict[str, Any]
+) -> None:
+    source = tmp_path / "openapi.json"
+    source.write_text(json.dumps(encoded_querystring_spec), encoding="utf-8")
+    destination = tmp_path / "generated"
+
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "-o",
+            str(source),
+            "-d",
+            str(destination),
+            "--on-mapping-error",
+            "skip",
+        ],
+    )
+
+    assert result.exit_code == 0
+    report = json.loads((destination / "generation_report.json").read_text())
+    assert report["mapped_tools"] == 1
+    assert len(report["skipped_operations"]) == 1
+    skipped = report["skipped_operations"][0]
+    assert (skipped["method"], skipped["path"]) == ("GET", "/search")
+    assert "in: querystring" in skipped["reason"]
+    assert "components.parameters.wholeQuery.in" in skipped["reason"]
+
+
+@pytest.mark.parametrize(
+    ("parameter_key", "reference"),
+    [
+        ("wholeQuery", "#/components%2Fparameters%2FwholeQuery"),
+        ("café", "#/components/parameters/caf%C3%A9"),
+        ("query/~", "#/components/parameters/query%7E1%7E0"),
+        ("%77holeQuery", "#/components/parameters/%2577holeQuery"),
+    ],
+)
+def test_querystring_reference_decodes_fragment_once_before_pointer_tokens(
+    encoded_querystring_spec: dict[str, Any], parameter_key: str, reference: str
+) -> None:
+    parameters = encoded_querystring_spec["components"]["parameters"]
+    parameters[parameter_key] = parameters.pop("wholeQuery")
+    encoded_querystring_spec["paths"]["/search"]["get"]["parameters"] = [
+        {"$ref": reference}
+    ]
+
+    report = DoctorAnalyzer(encoded_querystring_spec).analyze("inline")
+
+    assert [
+        issue.location
+        for issue in report.issues
+        if issue.code == "unsupported_openapi_construct"
+    ] == [f"components.parameters.{parameter_key}.in"]
 
 
 def test_mapper_rejects_additional_operation_in_strict_mode() -> None:
@@ -256,9 +382,13 @@ def test_doctor_name_selection_does_not_reserve_unsupported_operation_names(
     assert "no_selected_operations" not in codes
 
 
-def test_querystring_parameters_follow_effective_override_and_local_references() -> (
-    None
-):
+@pytest.mark.parametrize(
+    "parameter_ref",
+    ["#/components/parameters/wholeQuery", "#/components/parameters/%77holeQuery"],
+)
+def test_querystring_parameters_follow_effective_override_and_local_references(
+    parameter_ref: str,
+) -> None:
     """A same-identity operation parameter replaces its inherited source."""
     spec = {
         "openapi": "3.2.1",
@@ -275,7 +405,7 @@ def test_querystring_parameters_follow_effective_override_and_local_references()
         },
         "paths": {
             "/items": {
-                "parameters": [{"$ref": "#/components/parameters/wholeQuery"}],
+                "parameters": [{"$ref": parameter_ref}],
                 "get": {
                     "operationId": "listItems",
                     "parameters": [
@@ -293,7 +423,7 @@ def test_querystring_parameters_follow_effective_override_and_local_references()
             "/search": {
                 "get": {
                     "operationId": "searchItems",
-                    "parameters": [{"$ref": "#/components/parameters/wholeQuery"}],
+                    "parameters": [{"$ref": parameter_ref}],
                     "responses": {"200": {}},
                 }
             },
