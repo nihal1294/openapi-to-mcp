@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+from urllib.parse import unquote
 
 if TYPE_CHECKING:
     from openapi_to_mcp.common.operations import OperationRef
@@ -139,14 +140,20 @@ def _parameter_key(parameter: dict[str, Any]) -> tuple[str, str] | None:
 
 def _resolve_local_ref(spec: dict[str, Any], ref: str) -> object:
     current: object = spec
-    for token in ref[2:].split("/"):
+    for token in _local_ref_tokens(ref):
         if not isinstance(current, dict):
             return None
-        current = current.get(token.replace("~1", "/").replace("~0", "~"))
+        current = current.get(token)
     return current
 
 
 def _location_for_ref(ref: str) -> str:
-    return ".".join(
-        token.replace("~1", "/").replace("~0", "~") for token in ref[2:].split("/")
-    )
+    return ".".join(_local_ref_tokens(ref))
+
+
+def _local_ref_tokens(ref: str) -> list[str]:
+    """Decode the URI fragment before applying JSON Pointer token escaping."""
+    return [
+        token.replace("~1", "/").replace("~0", "~")
+        for token in unquote(ref[2:]).split("/")
+    ]
