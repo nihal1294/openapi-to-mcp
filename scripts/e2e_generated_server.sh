@@ -27,6 +27,8 @@ AUTH_HEADER_API_KEY="${AUTH_HEADER_API_KEY:-header-secret}"
 AUTH_QUERY_API_KEY="${AUTH_QUERY_API_KEY:-query-secret}"
 AUTH_COOKIE_API_KEY="${AUTH_COOKIE_API_KEY:-cookie-secret}"
 AUTH_BEARER_TOKEN="${AUTH_BEARER_TOKEN:-bearer-secret}"
+AUTH_BASIC_USERNAME="${AUTH_BASIC_USERNAME:-basic-user}"
+AUTH_BASIC_PASSWORD="${AUTH_BASIC_PASSWORD:-basic-pass}"
 
 HTTP_SERVER_PID=""
 PIDS=()
@@ -195,6 +197,8 @@ prepare_auth_env_file() {
   replace_or_append_env_var "${output_dir}/.env" "AUTH_QUERYAPIKEY_API_KEY" "$AUTH_QUERY_API_KEY"
   replace_or_append_env_var "${output_dir}/.env" "AUTH_COOKIEAPIKEY_API_KEY" "$AUTH_COOKIE_API_KEY"
   replace_or_append_env_var "${output_dir}/.env" "AUTH_BEARERAUTH_TOKEN" "$AUTH_BEARER_TOKEN"
+  replace_or_append_env_var "${output_dir}/.env" "AUTH_BASICAUTH_USERNAME" "$AUTH_BASIC_USERNAME"
+  replace_or_append_env_var "${output_dir}/.env" "AUTH_BASICAUTH_PASSWORD" "$AUTH_BASIC_PASSWORD"
 }
 
 create_missing_bearer_env_file() {

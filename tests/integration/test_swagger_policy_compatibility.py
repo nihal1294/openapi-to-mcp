@@ -48,6 +48,8 @@ def test_swagger_auth_policy_can_make_operation_public(
         ({"type": "apiKey", "in": "query", "name": "key"}, "API_KEY"),
         ({"type": "apiKey", "in": "cookie", "name": "key"}, "API_KEY"),
         ({"type": "http", "scheme": "bearer"}, "TOKEN"),
+        ({"type": "http", "scheme": "basic"}, "USERNAME"),
+        ({"type": "http", "scheme": "Basic"}, "PASSWORD"),
         ({"type": "oauth2"}, "TOKEN"),
         ({"type": "openIdConnect"}, "TOKEN"),
     ],
@@ -80,7 +82,7 @@ def test_swagger_auth_policy_can_supply_runtime_security(
     [
         {},
         {"type": "basic"},
-        {"type": "http", "scheme": "basic"},
+        {"type": "http", "scheme": "digest"},
         {"type": "http"},
         {"type": "apiKey", "in": "body", "name": "key"},
         {"type": "apiKey", "in": "path", "name": "key"},

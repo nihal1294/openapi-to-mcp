@@ -51,7 +51,7 @@ def _runtime_supports_scheme(scheme: object) -> bool:
         return False
     scheme_type = str(scheme.get("type", "")).lower()
     if scheme_type == "http":
-        return str(scheme.get("scheme", "")).lower() == "bearer"
+        return str(scheme.get("scheme", "")).lower() in {"bearer", "basic"}
     if scheme_type == "apikey":
         location = scheme.get("in")
         name = scheme.get("name")

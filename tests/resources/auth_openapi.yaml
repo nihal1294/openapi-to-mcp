@@ -55,6 +55,19 @@ paths:
             application/json:
               schema:
                 type: object
+  /auth/basic:
+    get:
+      summary: Basic auth
+      operationId: getBasicAuth
+      security:
+        - BasicAuth: []
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                type: object
 components:
   securitySchemes:
     HeaderApiKey:
@@ -72,3 +85,6 @@ components:
     BearerAuth:
       type: http
       scheme: bearer
+    BasicAuth:
+      type: http
+      scheme: basic

@@ -14,6 +14,7 @@ RUNTIME_TEMPLATE_NAMES = (
     "audit",
     "request_context",
     "auth",
+    "basic_auth",
     "cache",
     "circuit_breaker",
     "config",

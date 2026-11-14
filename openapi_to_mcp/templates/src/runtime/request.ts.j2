@@ -142,11 +142,14 @@ function applyAuthContext(
 ): string[] {
   const resolvedAuth = resolveAuthForTool(tool);
   if (!resolvedAuth.ok) {
+    const invalid = resolvedAuth.invalid || [];
     throw createToolExecutionError(
-      'missing_credentials',
+      invalid.length > 0 ? 'invalid_credentials' : 'missing_credentials',
       'auth',
       false,
-      `Missing credentials for required security scheme(s): ${resolvedAuth.missing.join(', ')}`
+      invalid.length > 0
+        ? `Invalid credentials for required security scheme(s): ${invalid.join(', ')}${resolvedAuth.missing.length > 0 ? `; missing: ${resolvedAuth.missing.join(', ')}` : ''}`
+        : `Missing credentials for required security scheme(s): ${resolvedAuth.missing.join(', ')}`
     );
   }
   Object.assign(headers, resolvedAuth.headers);
@@ -157,7 +160,7 @@ function applyAuthContext(
 }
 
 function applyDefaultAuthHeader(headers: Record<string, string>): void {
-  if (!TARGET_API_AUTH_HEADER || headers.Authorization) {
+  if (!TARGET_API_AUTH_HEADER || Object.keys(headers).some((name) => name.toLowerCase() === 'authorization')) {
     return;
   }
   const separatorIndex = TARGET_API_AUTH_HEADER.indexOf(':');

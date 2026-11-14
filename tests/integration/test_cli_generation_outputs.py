@@ -252,3 +252,5 @@ def test_generate_auth_fixture_emits_auth_env_vars(
     assert "AUTH_QUERYAPIKEY_API_KEY=" in env_example
     assert "AUTH_COOKIEAPIKEY_API_KEY=" in env_example
     assert "AUTH_BEARERAUTH_TOKEN=" in env_example
+    assert "AUTH_BASICAUTH_USERNAME=" in env_example
+    assert "AUTH_BASICAUTH_PASSWORD=" in env_example

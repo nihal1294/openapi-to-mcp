@@ -1,3 +1,4 @@
+import { resolveBasicCredentials } from './basic_auth.js';
 import type { ToolRuntimeMetadata } from './generated.js';
 
 export interface ResolvedAuth {
@@ -6,6 +7,7 @@ export interface ResolvedAuth {
   query: Record<string, unknown>;
   cookies: Record<string, string>;
   missing: string[];
+  invalid?: string[];
 }
 
 function normalizeSchemeName(name: string): string {
@@ -16,6 +18,22 @@ function normalizeSchemeName(name: string): string {
     .replace(/_+/g, '_');
 }
 
+function mergeAuthHeaders(
+  headers: Record<string, string>,
+  values: Array<[string, string]>
+): string[] {
+  const conflicts: string[] = [];
+  for (const [name, value] of values) {
+    const existing = Object.keys(headers).find((key) => key.toLowerCase() === name.toLowerCase());
+    if (existing !== undefined && headers[existing] !== value) {
+      conflicts.push(`conflicting values for auth header ${name}`);
+    } else {
+      headers[existing ?? name] = value;
+    }
+  }
+  return conflicts;
+}
+
 export function resolveAuthForTool(tool: ToolRuntimeMetadata): ResolvedAuth {
   const securityRequirements = tool.security;
   const securitySchemes = tool.securitySchemes || {};
@@ -24,6 +42,7 @@ export function resolveAuthForTool(tool: ToolRuntimeMetadata): ResolvedAuth {
   }
 
   const missingAcrossRequirements: Set<string> = new Set();
+  const invalidAcrossRequirements: Set<string> = new Set();
   for (const requirement of securityRequirements) {
     if (!requirement || typeof requirement !== 'object') {
       continue;
@@ -34,6 +53,7 @@ export function resolveAuthForTool(tool: ToolRuntimeMetadata): ResolvedAuth {
     }
 
     const headers: Record<string, string> = {};
+    const headerValues: Array<[string, string]> = [];
     const query: Record<string, unknown> = {};
     const cookies: Record<string, string> = {};
     let satisfied = true;
@@ -63,8 +83,20 @@ export function resolveAuthForTool(tool: ToolRuntimeMetadata): ResolvedAuth {
         } else if (apiKeyIn === 'cookie') {
           cookies[apiKeyName] = apiKey;
         } else {
-          headers[apiKeyName] = apiKey;
+          headerValues.push([apiKeyName, apiKey]);
         }
+        continue;
+      }
+
+      if (schemeType === 'http' && httpScheme === 'basic') {
+        const credentials = resolveBasicCredentials(normalizedScheme);
+        if (!credentials.authorization) {
+          satisfied = false;
+          credentials.missing.forEach((name) => missingAcrossRequirements.add(name));
+          credentials.invalid.forEach((issue) => invalidAcrossRequirements.add(issue));
+          break;
+        }
+        headerValues.push(['Authorization', credentials.authorization]);
         continue;
       }
 
@@ -75,7 +107,7 @@ export function resolveAuthForTool(tool: ToolRuntimeMetadata): ResolvedAuth {
           missingAcrossRequirements.add(`AUTH_${normalizedScheme}_TOKEN`);
           break;
         }
-        headers.Authorization = `Bearer ${token}`;
+        headerValues.push(['Authorization', `Bearer ${token}`]);
         continue;
       }
 
@@ -86,7 +118,7 @@ export function resolveAuthForTool(tool: ToolRuntimeMetadata): ResolvedAuth {
           missingAcrossRequirements.add(`AUTH_${normalizedScheme}_TOKEN`);
           break;
         }
-        headers.Authorization = `Bearer ${token}`;
+        headerValues.push(['Authorization', `Bearer ${token}`]);
         continue;
       }
 
@@ -104,6 +136,11 @@ export function resolveAuthForTool(tool: ToolRuntimeMetadata): ResolvedAuth {
     }
 
     if (satisfied) {
+      const conflicts = mergeAuthHeaders(headers, headerValues);
+      conflicts.forEach((issue) => invalidAcrossRequirements.add(issue));
+      satisfied = conflicts.length === 0;
+    }
+    if (satisfied) {
       return { ok: true, headers, query, cookies, missing: [] };
     }
   }
@@ -114,5 +151,6 @@ export function resolveAuthForTool(tool: ToolRuntimeMetadata): ResolvedAuth {
     query: {},
     cookies: {},
     missing: [...missingAcrossRequirements],
+    invalid: [...invalidAcrossRequirements],
   };
 }
