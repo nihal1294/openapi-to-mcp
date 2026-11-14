@@ -1,6 +1,6 @@
 # OpenAPI to MCP
 
-[![PyPI version](https://img.shields.io/pypi/v/openapi-to-mcp-cli)](https://pypi.org/project/openapi-to-mcp-cli/)
+[![PyPI version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fpypi.org%2Fpypi%2Fopenapi-to-mcp-cli%2Fjson&query=%24.info.version&label=PyPI&prefix=v&color=orange&cacheSeconds=300)](https://pypi.org/project/openapi-to-mcp-cli/)
 
 Standalone CLI for diagnosing, diffing, generating, running, and testing Node.js/TypeScript MCP servers from OpenAPI specifications.
 
