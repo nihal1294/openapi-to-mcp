@@ -36,7 +36,7 @@ openapi-to-mcp doctor [OPTIONS]
 - combined security schemes that share an HTTP header and may require conflicting values
 - risky `oneOf` or `anyOf` usage in request or response schemas
 - Swagger 2 constructs that cannot be faithfully generated, including body/form parameters, top-level parameter types, used security definitions, and unsupported protocol overrides
-- OpenAPI 3.2 additional operations, `QUERY` operations, and reachable `in: querystring` parameters that cannot yet be faithfully generated
+- Invalid, reserved, mixed-case, or CONNECT OpenAPI 3.2 additional methods and reachable `in: querystring` parameters that cannot be faithfully generated
 - missing HTTP operations under `paths`
 - no operations remaining after explicit policy selection
 

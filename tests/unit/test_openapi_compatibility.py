@@ -28,7 +28,7 @@ def test_mapper_rejects_additional_operation_in_strict_mode() -> None:
             "/ping": {
                 "get": {"operationId": "ping", "responses": {"200": {}}},
                 "additionalOperations": {
-                    "COPY": {
+                    "CONNECT": {
                         "operationId": "copyPing",
                         "responses": {"200": {}},
                     }
@@ -37,7 +37,7 @@ def test_mapper_rejects_additional_operation_in_strict_mode() -> None:
         },
     }
 
-    with pytest.raises(MappingError, match=r"COPY /ping"):
+    with pytest.raises(MappingError, match=r"CONNECT /ping"):
         Mapper(spec).map_tools()
 
 
@@ -50,7 +50,7 @@ def test_mapper_skips_additional_operation_without_consuming_tool_suffix() -> No
             "/ping": {
                 "get": {"operationId": "shared", "responses": {"200": {}}},
                 "additionalOperations": {
-                    "COPY": {
+                    "CONNECT": {
                         "operationId": "shared",
                         "responses": {"200": {}},
                     }
@@ -65,12 +65,10 @@ def test_mapper_skips_additional_operation_without_consuming_tool_suffix() -> No
     assert [tool["name"] for tool in mapper.map_tools()] == ["shared", "shared_2"]
     assert mapper.get_report()["skipped_operations"] == [
         {
-            "method": "COPY",
+            "method": "CONNECT",
             "path": "/ping",
             "reason": "unsupported OpenAPI construct `additionalOperations` at "
-            "`paths./ping.additionalOperations.COPY`; Additional operations are "
-            "diagnostic-only. Use a supported fixed HTTP operation before "
-            "generating an MCP server.",
+            "`paths./ping.additionalOperations.CONNECT`; CONNECT tunnelling is not supported.",
         }
     ]
 
@@ -85,6 +83,15 @@ def test_explicit_mapping_skip_overrides_strict_for_query_operation() -> None:
                 "get": {"operationId": "listItems", "responses": {"200": {}}},
                 "query": {
                     "operationId": "queryItems",
+                    "parameters": [
+                        {
+                            "name": "whole",
+                            "in": "querystring",
+                            "content": {
+                                "application/json": {"schema": {"type": "string"}}
+                            },
+                        }
+                    ],
                     "responses": {"200": {}},
                 },
             }
@@ -323,7 +330,7 @@ def test_policy_excluded_operations_do_not_emit_openapi_compatibility_findings()
             "/ping": {
                 "get": {"operationId": "ping", "responses": {"200": {}}},
                 "additionalOperations": {
-                    "COPY": {
+                    "CONNECT": {
                         "operationId": "copyPing",
                         "responses": {"200": {}},
                     }
@@ -333,7 +340,7 @@ def test_policy_excluded_operations_do_not_emit_openapi_compatibility_findings()
     }
     policy = PolicyConfig(
         source_path=Path("mcpgen.yaml"),
-        exclude=SelectorSet(operations=frozenset({"COPY /ping"})),
+        exclude=SelectorSet(operations=frozenset({"CONNECT /ping"})),
     )
 
     assert Mapper(spec, policy_config=policy).map_tools()[0]["name"] == "ping"
@@ -351,7 +358,7 @@ def test_additional_only_document_has_compatibility_error_not_no_operations() ->
         "openapi": "3.2.1",
         "info": {"title": "Additional only", "version": "1.0.0"},
         "paths": {
-            "/copy": {"additionalOperations": {"COPY": {"responses": {"200": {}}}}}
+            "/copy": {"additionalOperations": {"CONNECT": {"responses": {"200": {}}}}}
         },
     }
 
@@ -360,10 +367,10 @@ def test_additional_only_document_has_compatibility_error_not_no_operations() ->
     assert "no_http_operations" not in codes
 
 
-def test_generate_strict_failure_writes_no_partial_project_and_skip_reports_copy(
+def test_generate_strict_failure_writes_no_partial_project_and_skip_reports_connect(
     runner: CliRunner, tmp_path: Path
 ) -> None:
-    """Generation fails atomically by default and reports the skipped COPY explicitly."""
+    """Generation fails atomically by default and reports the skipped CONNECT explicitly."""
     spec = {
         "openapi": "3.2.1",
         "info": {"title": "Generation", "version": "1.0.0"},
@@ -371,7 +378,7 @@ def test_generate_strict_failure_writes_no_partial_project_and_skip_reports_copy
             "/ping": {
                 "get": {"operationId": "ping", "responses": {"200": {}}},
                 "additionalOperations": {
-                    "COPY": {
+                    "CONNECT": {
                         "operationId": "copyPing",
                         "responses": {"200": {}},
                     }
@@ -389,7 +396,7 @@ def test_generate_strict_failure_writes_no_partial_project_and_skip_reports_copy
     )
 
     assert strict_result.exit_code == 1
-    assert "COPY /ping" in strict_result.output
+    assert "CONNECT /ping" in strict_result.output
     assert not strict_output.exists()
 
     skipped_output = tmp_path / "skipped-output"
@@ -411,12 +418,10 @@ def test_generate_strict_failure_writes_no_partial_project_and_skip_reports_copy
     assert report["mapped_tools"] == 1
     assert report["skipped_operations"] == [
         {
-            "method": "COPY",
+            "method": "CONNECT",
             "path": "/ping",
             "reason": "unsupported OpenAPI construct `additionalOperations` at "
-            "`paths./ping.additionalOperations.COPY`; Additional operations are "
-            "diagnostic-only. Use a supported fixed HTTP operation before "
-            "generating an MCP server.",
+            "`paths./ping.additionalOperations.CONNECT`; CONNECT tunnelling is not supported.",
         }
     ]
 
@@ -433,7 +438,7 @@ def test_doctor_config_excludes_unselected_additional_operation(
             "/ping": {
                 "get": {"operationId": "ping", "responses": {"200": {}}},
                 "additionalOperations": {
-                    "COPY": {
+                    "CONNECT": {
                         "operationId": "copyPing",
                         "responses": {"200": {}},
                     }
@@ -445,7 +450,7 @@ def test_doctor_config_excludes_unselected_additional_operation(
     source.write_text(json.dumps(spec), encoding="utf-8")
     config = tmp_path / "mcpgen.yaml"
     config.write_text(
-        "tools:\n  exclude:\n    operations: [COPY /ping]\n", encoding="utf-8"
+        "tools:\n  exclude:\n    operations: [CONNECT /ping]\n", encoding="utf-8"
     )
 
     result = runner.invoke(
@@ -457,7 +462,7 @@ def test_doctor_config_excludes_unselected_additional_operation(
     assert "unsupported_openapi_construct" not in result.output
 
 
-def test_doctor_config_execution_override_does_not_replace_copy_diagnostic(
+def test_doctor_config_execution_override_does_not_replace_connect_diagnostic(
     runner: CliRunner, tmp_path: Path
 ) -> None:
     """Compatibility reporting applies selectors without validating execution policy."""
@@ -468,7 +473,7 @@ def test_doctor_config_execution_override_does_not_replace_copy_diagnostic(
         "paths": {
             "/ping": {
                 "additionalOperations": {
-                    "COPY": {
+                    "CONNECT": {
                         "operationId": "copyPing",
                         "responses": {"200": {"description": "OK"}},
                     }
@@ -480,7 +485,7 @@ def test_doctor_config_execution_override_does_not_replace_copy_diagnostic(
     source.write_text(json.dumps(spec), encoding="utf-8")
     config = tmp_path / "mcpgen.yaml"
     config.write_text(
-        "execution:\n  operations:\n    COPY /ping:\n      cache_ttl_ms: 60\n",
+        "execution:\n  operations:\n    CONNECT /ping:\n      cache_ttl_ms: 60\n",
         encoding="utf-8",
     )
 
