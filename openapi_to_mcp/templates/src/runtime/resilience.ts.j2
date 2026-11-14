@@ -14,6 +14,8 @@ import {
 } from './errors.js';
 import { executeUpstream, type ExecutionContext } from './executor_support.js';
 import { logEvent } from './observability.js';
+{% if telemetry == 'opentelemetry' %}import { countEvent, traceAttempt } from './telemetry.js';
+{% endif %}
 import type { RequestContext } from './request.js';
 import type { ToolRetryBudget } from './retry.js';
 
@@ -38,14 +40,14 @@ export async function executeWithResilience(
 
   while (true) {
     try {
-      const result = await executeUpstream(
+      const result = await {% if telemetry == 'opentelemetry' %}traceAttempt(context.tool.method, () => {% endif %}executeUpstream(
         axiosInstance,
         responseCache,
         context,
         requestContext,
         cacheKey,
         cacheTtlMs
-      );
+      ){% if telemetry == 'opentelemetry' %}){% endif %};
       circuitBreaker.recordSuccess(context.toolName, circuitLease);
       return result;
     } catch (error) {
@@ -83,7 +85,8 @@ export async function executeWithResilience(
         attempt: nextAttempt,
         errorCode: toolError.meta.code,
       });
-      attempt = nextAttempt;
+{% if telemetry == 'opentelemetry' %}      countEvent('retry', context.toolName);
+{% endif %}      attempt = nextAttempt;
     }
   }
 }

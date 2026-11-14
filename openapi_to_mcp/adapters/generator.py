@@ -123,6 +123,12 @@ class Generator:
             GenerationError: If template rendering or file writing fails.
         """
         self._remove_unused_http_runtime_files()
+        if self.context.get("telemetry", "off") == "off":
+            telemetry = self.output_path / "src" / "runtime" / "telemetry.ts"
+            if telemetry.exists() and telemetry.read_bytes().startswith(
+                b"// Generated runtime telemetry module.\n"
+            ):
+                telemetry.unlink()
         generated_templates = {
             "package.json.j2": self.output_path / "package.json",
             "tsconfig.json.j2": self.output_path / "tsconfig.json",
@@ -155,6 +161,8 @@ class Generator:
         template_names = RUNTIME_TEMPLATE_NAMES
         if self.context.get("transport") == "streamable-http":
             template_names += HTTP_RUNTIME_TEMPLATE_NAMES
+        if self.context.get("telemetry") == "opentelemetry":
+            template_names += ("telemetry",)
         return {
             f"src/runtime/{name}.ts.j2": runtime_output / f"{name}.ts"
             for name in template_names

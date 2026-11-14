@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   audit:
-    name: npm-audit (${{ matrix.transport }}, ${{ matrix.validation }})
+    name: npm-audit (${{ matrix.transport }}, ${{ matrix.validation }}, ${{ matrix.telemetry }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -28,6 +28,7 @@ jobs:
       matrix:
         transport: [stdio, streamable-http]
         validation: [input, none]
+        telemetry: ["off", opentelemetry]
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -50,11 +51,12 @@ jobs:
           uv run python -m scripts.audit_generated_dependencies
           --transport ${{ matrix.transport }}
           --runtime-validation ${{ matrix.validation }}
+          --telemetry ${{ matrix.telemetry }}
           --report-file ${{ runner.temp }}/dependency-audit.json
       - name: Retain audit report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: dependency-audit-${{ matrix.transport }}-${{ matrix.validation }}
+          name: dependency-audit-${{ matrix.transport }}-${{ matrix.validation }}-${{ matrix.telemetry }}
           path: ${{ runner.temp }}/dependency-audit.json
           if-no-files-found: warn

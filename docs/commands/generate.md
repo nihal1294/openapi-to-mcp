@@ -156,3 +156,20 @@ Use it as the machine-readable summary of what happened during generation.
 ## Next step
 
 After `generate`, follow the generated project's own `README.md` or use [test-server](test-server.md) against the built server.
+
+
+### Optional OpenTelemetry
+
+Use `--telemetry opentelemetry` to include optional runtime tracing and metrics;
+`--telemetry off` is the default. The equivalent policy setting is
+`generate.telemetry`, and an explicit CLI option takes precedence. Telemetry-enabled
+projects require Node.js 22.15.0 or newer.
+
+The generated server still defaults to `MCP_OTEL_ENABLED=off`. To enable export,
+set it to `on` and set `MCP_OTEL_EXPORTER_OTLP_ENDPOINT` to an explicit HTTP(S)
+collector base URL without credentials, query, or fragment. The server appends
+`v1/traces` and `v1/metrics` to its base path. `MCP_OTEL_SERVICE_NAME` overrides
+the generated service name; `MCP_OTEL_METRICS_INTERVAL_MS` defaults to 60000
+and accepts integers from 1000 through 2147483647. The exporter does not use
+ambient `OTEL_*` endpoint, header, or resource settings. Tool arguments and
+upstream request and response contents are not exported.

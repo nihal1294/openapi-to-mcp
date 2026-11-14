@@ -16,7 +16,9 @@ _AUDIT_REPORT_VERSION = 2
 _STABLE_FLOOR = re.compile(r"[\^~]?(\d+\.\d+\.\d+)")
 
 
-def render_manifest(transport: str, validation: str) -> dict[str, Any]:
+def render_manifest(
+    transport: str, validation: str, telemetry: str = "off"
+) -> dict[str, Any]:
     """Render the production manifest template without executable scripts."""
     environment = Environment(
         loader=FileSystemLoader(_TEMPLATES),
@@ -28,6 +30,7 @@ def render_manifest(transport: str, validation: str) -> dict[str, Any]:
             server_name="generated-dependency-audit",
             server_version="0.0.0",
             transport=transport,
+            telemetry=telemetry,
             runtime_validation=validation,
         )
     )

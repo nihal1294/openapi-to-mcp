@@ -30,6 +30,7 @@ generate:
   port: 8080
   mcp_endpoint: /mcp
   strict: true
+  telemetry: off
   runtime_validation: input
   tool_grouping: tag-prefix
   on_mapping_error: fail
@@ -82,6 +83,7 @@ Sets default values for generation-related options:
 - `port`
 - `mcp_endpoint`
 - `strict`
+- `telemetry` (`off` or `opentelemetry`)
 - `runtime_validation`
 - `tool_grouping`
 - `on_mapping_error`

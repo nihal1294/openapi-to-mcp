@@ -13,6 +13,7 @@ _GENERATION_DEFAULT_FIELDS = (
     "mcp_server_name",
     "mcp_server_version",
     "tool_grouping",
+    "telemetry",
     "transport",
     "host",
     "port",

@@ -175,4 +175,15 @@ This server exposes the following tools based on the OpenAPI specification:
 *   **`{{ tool.name }}`**: {{ tool.description }}
 {% endfor %}
 
-**Input Schema:** See `inputSchema` definition within the server's `ListTools` response.
+**Input Schema:** See `inputSchema` definition within the server's `ListTools` response.{% if telemetry == 'opentelemetry' %}
+
+## Optional OpenTelemetry
+
+Telemetry is disabled by default. Set `MCP_OTEL_ENABLED=on` and supply an
+explicit HTTP(S) collector base in `MCP_OTEL_EXPORTER_OTLP_ENDPOINT`, without
+credentials, query, or fragment. The server appends `v1/traces` and `v1/metrics`
+to the base path. `MCP_OTEL_SERVICE_NAME` overrides the service name and
+`MCP_OTEL_METRICS_INTERVAL_MS` controls the export interval (1000–2147483647 ms;
+default 60000). No ambient `OTEL_*` endpoint, header, or resource settings are
+used. Tool arguments and upstream request and response contents are not exported.
+{% endif %}

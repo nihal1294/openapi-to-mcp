@@ -1,0 +1,149 @@
+// Generated runtime telemetry module.
+import { context, diag, logs, metrics, propagation, trace, type Span } from '@opentelemetry/api';
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
+import { setGlobalErrorHandler } from '@opentelemetry/core';
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { defaultResource, resourceFromAttributes } from '@opentelemetry/resources';
+import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { AlwaysOnSampler, BatchSpanProcessor } from '@opentelemetry/sdk-trace';
+import type { CallToolResult } from '@modelcontextprotocol/server';
+
+let sdk: NodeSDK | undefined;
+let shutdownPromise: Promise<void> | undefined;
+let lastFailure = 0;
+const failure = (): void => {
+  const now = Date.now();
+  if (now - lastFailure >= 60_000) {
+    lastFailure = now;
+    try { process.stderr.write('telemetry_export_failed\n'); } catch { /* stderr may be closed */ }
+  }
+};
+function isolated<T>(operation: () => T): T {
+  const saved = Object.entries(process.env).filter(([key]) => key.startsWith('OTEL_'));
+  for (const [key] of saved) delete process.env[key];
+  try { return operation(); } finally {
+    for (const [key, value] of saved) process.env[key] = value;
+  }
+}
+function settingError(name: string): never { throw new Error(`Invalid ${name}`); }
+export function initializeTelemetry(): void {
+  const enabled = process.env.MCP_OTEL_ENABLED ?? 'off';
+  if (enabled === 'off') return;
+  if (enabled !== 'on') settingError('MCP_OTEL_ENABLED');
+  const endpoint = process.env.MCP_OTEL_EXPORTER_OTLP_ENDPOINT;
+  let url: URL;
+  try { url = new URL(endpoint ?? ''); } catch { return settingError('MCP_OTEL_EXPORTER_OTLP_ENDPOINT'); }
+  if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password || endpoint?.includes('?') || endpoint?.includes('#'))
+    settingError('MCP_OTEL_EXPORTER_OTLP_ENDPOINT');
+  const service = process.env.MCP_OTEL_SERVICE_NAME || {{ server_name | tojson }};
+  if (!service.trim() || /[\x00-\x1f\x7f]/.test(service)) settingError('MCP_OTEL_SERVICE_NAME');
+  const intervalText = process.env.MCP_OTEL_METRICS_INTERVAL_MS ?? '60000';
+  const interval = Number(intervalText);
+  if (!/^\d+$/.test(intervalText) || !Number.isSafeInteger(interval) || interval < 1000 || interval > 2_147_483_647)
+    settingError('MCP_OTEL_METRICS_INTERVAL_MS');
+  url.pathname = `${url.pathname.replace(/\/+$/, '')}/`;
+  const traces = new URL('v1/traces', url).toString();
+  const metricUrl = new URL('v1/metrics', url).toString();
+  try {
+    isolated(() => {
+      diag.disable();
+      setGlobalErrorHandler(failure);
+      const options = { headers: {}, timeoutMillis: 1500, concurrencyLimit: 1 };
+      const traceExporter = new OTLPTraceExporter({ ...options, url: traces });
+      const metricExporter = new OTLPMetricExporter({ ...options, url: metricUrl });
+      sdk = new NodeSDK({
+        autoDetectResources: false,
+        resourceDetectors: [],
+        resource: defaultResource().merge(resourceFromAttributes({ 'service.name': service })),
+        instrumentations: [],
+        contextManager: new AsyncLocalStorageContextManager().enable(),
+        textMapPropagator: null,
+        sampler: new AlwaysOnSampler(),
+        spanLimits: { attributeValueLengthLimit: 128, attributeCountLimit: 8, linkCountLimit: 0, eventCountLimit: 0, attributePerLinkCountLimit: 0, attributePerEventCountLimit: 0 },
+        spanProcessors: [new BatchSpanProcessor({ exporter: traceExporter, maxQueueSize: 64, maxExportBatchSize: 32, scheduledDelayMillis: 1000, exportTimeoutMillis: 1500 })],
+        metricReaders: [new PeriodicExportingMetricReader({ exporter: metricExporter, exportIntervalMillis: interval, exportTimeoutMillis: Math.min(interval, 1500), maxExportBatchSize: 32, cardinalityLimits: { default: 256 } })],
+        logRecordProcessors: [],
+        views: [],
+      });
+      sdk.start();
+      diag.disable();
+    });
+  } catch {
+    const failedSdk = sdk;
+    sdk = undefined;
+    try { void failedSdk?.shutdown().catch(failure); } catch { /* setup failed */ }
+    trace.disable(); metrics.disable(); logs.disable(); context.disable(); propagation.disable();
+    diag.disable();
+    failure();
+  }
+}
+export async function shutdownTelemetry(): Promise<void> {
+  if (!shutdownPromise) shutdownPromise = (async () => {
+    const active = sdk;
+    sdk = undefined;
+    if (!active) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([active.shutdown().catch(failure), new Promise<void>((resolve) => { timer = setTimeout(() => { failure(); resolve(); }, 2000); })]);
+    } finally {
+      if (timer) clearTimeout(timer);
+      trace.disable(); metrics.disable(); logs.disable(); context.disable(); propagation.disable();
+    }
+  })();
+  return shutdownPromise;
+}
+const methods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE']);
+const errorCodes = new Set(['unknown_internal_error', 'tool_timeout', 'api_connection_failed', 'api_bad_request', 'api_authorization_failed', 'api_resource_not_found', 'api_request_timeout', 'api_rate_limited', 'api_server_error', 'api_request_failed', 'execution_queue_full', 'execution_queue_timeout', 'tool_rate_limited', 'request_failed', 'response_too_large', 'missing_credentials', 'invalid_credentials', 'input_validation_failed', 'missing_required_parameter', 'missing_required_request_body']);
+function safely(action: () => void): void { try { if (sdk) action(); } catch { failure(); } }
+function inSpan<T>(name: string, attributes: Record<string, string>, body: (span: Span) => Promise<T>, fallback: () => Promise<T>): Promise<T> {
+  let started: Promise<T> | undefined;
+  try {
+    return trace.getTracer('generated-server').startActiveSpan(name, { attributes }, (span) => {
+      started = body(span);
+      return started;
+    });
+  } catch {
+    failure();
+    return started ?? fallback();
+  }
+}
+export async function traceTool(name: string, generated: boolean, operation: () => Promise<CallToolResult>): Promise<CallToolResult> {
+  if (!sdk) return operation();
+  const attributes = { 'tool.name': name, transport: '{{ transport }}' };
+  const start = Date.now();
+  return inSpan('tool.call', attributes, async (span) => {
+    let outcome = 'success';
+    let code = 'none';
+    try {
+      const result = await operation();
+      safely(() => {
+        if (result.isError) {
+          outcome = 'error';
+          const meta = result._meta?.error as { code?: unknown } | undefined;
+          code = generated && typeof meta?.code === 'string' && errorCodes.has(meta.code) ? meta.code : 'unknown';
+        }
+      });
+      return result;
+    } catch (error) { outcome = 'error'; code = 'unknown'; throw error; }
+    finally {
+      safely(() => {
+        const labels = { ...attributes, outcome, 'error.code': code };
+        span.setAttributes(labels); span.end();
+        const meter = metrics.getMeter('generated-server');
+        meter.createCounter('tool.calls').add(1, labels);
+        meter.createHistogram('tool.duration').record(Date.now() - start, labels);
+      });
+    }
+  }, operation);
+}
+export async function traceAttempt<T>(method: string, operation: () => Promise<T>): Promise<T> {
+  if (!sdk) return operation();
+  return inSpan('upstream.attempt', { 'http.method': methods.has(method.toUpperCase()) ? method.toUpperCase() : 'OTHER' }, async (span) => {
+    try { return await operation(); } finally { safely(() => span.end()); }
+  }, operation);
+}
+export function countEvent(name: 'cache.hit' | 'retry' | 'response_budget.rejection', toolName: string): void {
+  safely(() => metrics.getMeter('generated-server').createCounter(name).add(1, { 'tool.name': toolName, transport: '{{ transport }}' }));
+}

@@ -3,6 +3,8 @@ import axios from 'axios';
 import * as http from 'http';
 import * as https from 'https';
 import { emitRequestAudit } from './audit.js';
+{% if telemetry == 'opentelemetry' %}import { countEvent } from './telemetry.js';
+{% endif %}
 import { buildCacheKey, resolveCacheTtlMs, ToolResponseCache } from './cache.js';
 import { resolveCircuitBreakerSettings, ToolCircuitBreaker } from './circuit_breaker.js';
 import {
@@ -73,7 +75,8 @@ export class ToolExecutor {
       this.rateLimiter.assertAllowed(toolName, resolveRateLimitPerMinute(tool));
       const cachedResult = tryCachedResult(this.responseCache, context, cacheKey);
       if (cachedResult) {
-        return cachedResult;
+{% if telemetry == 'opentelemetry' %}        countEvent('cache.hit', toolName);
+{% endif %}        return cachedResult;
       }
       const perToolLimiter = this.getPerToolLimiter(toolName, tool);
       await this.globalLimiter.acquire();
@@ -94,7 +97,8 @@ export class ToolExecutor {
         circuitBreakerSettings
       );
     } catch (error) {
-      return handleExecutionError(context, error, requestAudited);
+{% if telemetry == 'opentelemetry' %}      if (error && typeof error === 'object' && 'meta' in error && (error as { meta?: { code?: string } }).meta?.code === 'response_too_large') countEvent('response_budget.rejection', toolName);
+{% endif %}      return handleExecutionError(context, error, requestAudited);
     } finally {
       this.releaseLimiters(acquiredGlobal, acquiredPerTool, toolName, tool);
     }

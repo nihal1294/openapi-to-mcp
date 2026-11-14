@@ -78,6 +78,11 @@ def _parse_generation_defaults(value: object) -> GenerationDefaults:
             "generate.tool_grouping",
             TOOL_GROUPING_MODES,
         ),
+        telemetry=optional_choice(
+            "off" if config.get("telemetry") is False else config.get("telemetry"),
+            "generate.telemetry",
+            {"off", "opentelemetry"},
+        ),
         transport=optional_choice(
             config.get("transport"),
             "generate.transport",
