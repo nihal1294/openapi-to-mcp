@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0](https://github.com/nihal1294/openapi-to-mcp/compare/v0.10.0...v0.11.0) (2026-11-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* bound generated MCP tool inputs ([#144](https://github.com/nihal1294/openapi-to-mcp/issues/144))
+
+### Features
+
+* support upstream HTTP Basic authentication ([#143](https://github.com/nihal1294/openapi-to-mcp/issues/143)) ([a8aced1](https://github.com/nihal1294/openapi-to-mcp/commit/a8aced13c352650652c4c4a7e6b3b10f1c9d2a11))
+
+
+### Bug Fixes
+
+* audit generated dependencies and patch watcher globbing ([#145](https://github.com/nihal1294/openapi-to-mcp/issues/145)) ([481746e](https://github.com/nihal1294/openapi-to-mcp/commit/481746e3039b0728189cac22bc4be1340079c47e))
+* bound generated MCP tool inputs ([#144](https://github.com/nihal1294/openapi-to-mcp/issues/144)) ([f3da9d3](https://github.com/nihal1294/openapi-to-mcp/commit/f3da9d3f766ca62cc087557c4eaa2ee863be4987))
+* **deps:** bump filelock from 3.32.7 to 4.2.1 ([#133](https://github.com/nihal1294/openapi-to-mcp/issues/133)) ([59393ae](https://github.com/nihal1294/openapi-to-mcp/commit/59393aeeb9cf67b94c7d4be264dfa5f0443a2a03))
+* **deps:** bump mcp from 2.2.0 to 2.3.0 in the python-runtime group ([#127](https://github.com/nihal1294/openapi-to-mcp/issues/127)) ([d35d2cc](https://github.com/nihal1294/openapi-to-mcp/commit/d35d2ccbeee97926031681603d8bbba85e327d31))
+* **deps:** bump opentelemetry-api from 1.44.0 to 1.45.2 ([#139](https://github.com/nihal1294/openapi-to-mcp/issues/139)) ([ef16c89](https://github.com/nihal1294/openapi-to-mcp/commit/ef16c898885858cdb08e832ca447ef58becf927b))
+* **deps:** bump pyjwt from 2.14.0 to 2.15.0 ([#134](https://github.com/nihal1294/openapi-to-mcp/issues/134)) ([90f6df5](https://github.com/nihal1294/openapi-to-mcp/commit/90f6df5fed0467967ffdbcea1a5966ab15af28d1))
+* **deps:** bump virtualenv from 21.9.0 to 21.14.13 ([#130](https://github.com/nihal1294/openapi-to-mcp/issues/130)) ([8ae8ca8](https://github.com/nihal1294/openapi-to-mcp/commit/8ae8ca8280f9fa797014d2213a82a74aa2067214))
+* refresh transitive security dependencies ([#141](https://github.com/nihal1294/openapi-to-mcp/issues/141)) ([5ded5df](https://github.com/nihal1294/openapi-to-mcp/commit/5ded5df3bb2c64480629c4f03927bef058e98fba))
+
 ## [0.10.0](https://github.com/nihal1294/openapi-to-mcp/compare/v0.9.3...v0.10.0) (2026-09-21)
 
 
