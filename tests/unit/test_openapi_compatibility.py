@@ -166,6 +166,89 @@ def test_doctor_config_honors_non_strict_suffixed_name_selection(
     assert report["mapped_tools"] == 1
 
 
+@pytest.mark.parametrize(
+    ("selected_name", "selected_path", "unsupported_selected"),
+    [("get_a_b", "/a_b", True), ("get_a_b_2", "/a.b", False)],
+)
+def test_doctor_name_selection_does_not_reserve_unsupported_operation_names(
+    runner: CliRunner,
+    tmp_path: Path,
+    selected_name: str,
+    selected_path: str,
+    *,
+    unsupported_selected: bool,
+) -> None:
+    """Skipped querystring operations do not displace compatible source identities."""
+    spec = {
+        "openapi": "3.2.1",
+        "info": {"title": "Querystring sibling selection", "version": "1.0.0"},
+        "servers": [{"url": "https://example.com"}],
+        "components": {
+            "securitySchemes": {"digestAuth": {"type": "http", "scheme": "digest"}}
+        },
+        "paths": {
+            "/a-b": {
+                "get": {
+                    "parameters": [
+                        {
+                            "name": "filter",
+                            "in": "querystring",
+                            "content": {
+                                "application/json": {"schema": {"type": "object"}}
+                            },
+                        }
+                    ],
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+            "/a_b": {
+                "get": {
+                    "security": [{"digestAuth": []}],
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+            "/a.b": {
+                "get": {
+                    "security": [{"digestAuth": []}],
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+        },
+    }
+    policy = PolicyConfig(
+        source_path=Path("mcpgen.yaml"),
+        include=SelectorSet(names=frozenset({selected_name})),
+    )
+    mapper = Mapper(spec, strict=False, policy_config=policy)
+    tools = apply_policy(mapper.map_tools(), policy)
+    assert [(tool["name"], tool["_original_path"]) for tool in tools] == [
+        (selected_name, selected_path)
+    ]
+
+    source = tmp_path / "openapi.json"
+    source.write_text(json.dumps(spec), encoding="utf-8")
+    config = tmp_path / "mcpgen.yaml"
+    config.write_text(
+        f"tools:\n  include:\n    names: [{selected_name}]\n", encoding="utf-8"
+    )
+    result = runner.invoke(
+        cli,
+        ["doctor", "-o", str(source), "--config", str(config), "--format", "json"],
+    )
+
+    assert result.exit_code == 3
+    issues = json.loads(result.output[result.output.index("{\n") :])["issues"]
+    assert [
+        issue["location"]
+        for issue in issues
+        if issue["code"] == "unsupported_http_auth"
+    ] == [f"paths.{selected_path}.get.security"]
+    codes = {issue["code"] for issue in issues}
+    assert ("unsupported_openapi_construct" in codes) is unsupported_selected
+    assert ("tool_name_collision" in codes) is unsupported_selected
+    assert "no_selected_operations" not in codes
+
+
 def test_querystring_parameters_follow_effective_override_and_local_references() -> (
     None
 ):

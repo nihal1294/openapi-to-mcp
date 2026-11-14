@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from openapi_to_mcp.common.openapi_compatibility import openapi_operation_findings
 from openapi_to_mcp.common.operations import OperationRef, iter_operations
 from openapi_to_mcp.doctor.models import DoctorReport
 from openapi_to_mcp.doctor.openapi import report_openapi_compatibility
@@ -116,6 +117,11 @@ class DoctorAnalyzer:
                 "operationId"
             ) or generate_tool_name(operation_ref.method, operation_ref.path)
             if not isinstance(candidate_name, str):
+                continue
+            if openapi_operation_findings(self.spec, operation_ref):
+                # Mapper checks these operations before allocating a tool name.
+                # Keep their raw selector identity without reserving a suffix.
+                original_names[index] = candidate_name
                 continue
             candidate_indexes.append(index)
             candidate_names.append(candidate_name)
