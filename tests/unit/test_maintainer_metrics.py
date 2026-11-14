@@ -1,4 +1,4 @@
-# ruff: noqa: ANN201, ARG005, FBT003, PT011
+# ruff: noqa: ANN201, ARG005, FBT003, PT011, S105
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -188,3 +188,125 @@ def test_corrupt_cache_is_refetched(tmp_path):
     path.write_text(json.dumps(entry))
     source.get("recent", "p", "https://example.test")
     assert session.get.call_count == 2
+
+
+def test_cli_sanitizes_provider_labels_before_reports_and_cache(tmp_path, monkeypatch):
+    secret = "ghp_0123456789abcdefghijklmnopqrstuvwxyz"
+
+    def public_get(self, url, **kwargs):
+        if url.endswith("/python_minor"):
+            body = {
+                "data": [
+                    {"category": secret, "date": "2026-11-01", "downloads": 2},
+                    {"category": "3.14", "date": "2026-11-01", "downloads": 1},
+                ]
+            }
+        elif url.endswith("/system"):
+            body = {
+                "data": [
+                    {"category": "Linux", "date": "2026-11-01", "downloads": 3},
+                    {"category": secret, "date": "2026-11-01", "downloads": 2},
+                ]
+            }
+        else:
+            raise requests.ConnectionError
+        return Mock(status_code=200, headers={}, json=lambda: body)
+
+    monkeypatch.setattr(metrics.requests.Session, "get", public_get)
+    monkeypatch.setattr(
+        metrics.subprocess,
+        "run",
+        lambda *a, **k: Mock(
+            returncode=0,
+            stdout=json.dumps(
+                [
+                    {
+                        "referrer": f"https://user:{secret}@example.com/path?token={secret}",
+                        "count": 4,
+                        "uniques": 2,
+                    }
+                ]
+            ),
+        ),
+    )
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    assert (
+        metrics.main(
+            ["--output-dir", str(tmp_path), "--include-private-github-traffic"]
+        )
+        == 1
+    )
+    for path in tmp_path.rglob("*"):
+        if path.is_file():
+            assert secret not in path.read_text()
+            assert "user:" not in path.read_text()
+    report = json.loads((tmp_path / "maintainer-metrics.json").read_text())
+    assert (
+        report["sections"]["python_minor"]["data"]["downloads_by_category"]["3.14"] == 1
+    )
+    assert report["sections"]["system"]["data"]["downloads_by_category"]["Linux"] == 3
+    assert (
+        report["sections"]["referrers"]["data"]["referrers"][0]["referrer"]
+        == "example.com"
+    )
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "body"),
+    [
+        ("/recent", {}),
+        ("/pypi/sample/json", {"releases": {"1": [{"upload_time_iso_8601": 42}]}}),
+    ],
+)
+def test_cli_malformed_schema_writes_partial_reports(
+    tmp_path, monkeypatch, endpoint, body
+):
+    def get(self, url, **kwargs):
+        if url.endswith(endpoint):
+            return Mock(status_code=200, headers={}, json=lambda: body)
+        raise requests.ConnectionError("private error")
+
+    monkeypatch.setattr(metrics.requests.Session, "get", get)
+    assert (
+        metrics.main(
+            [
+                "--package",
+                "sample",
+                "--repo",
+                "owner/repo",
+                "--output-dir",
+                str(tmp_path),
+            ]
+        )
+        == 1
+    )
+    for name in ("maintainer-metrics.json", "maintainer-metrics.md"):
+        content = (tmp_path / name).read_text()
+        assert "unavailable" in content
+        assert "private error" not in content
+    report = json.loads((tmp_path / "maintainer-metrics.json").read_text())
+    assert report["completeness"] == "partial"
+
+
+def test_old_cached_provider_labels_are_reduced_before_reuse(tmp_path):
+    secret = "ghp_0123456789abcdefghijklmnopqrstuvwxyz"
+    session = Mock()
+    session.get.return_value = Mock(
+        status_code=200,
+        headers={},
+        json=lambda: {
+            "data": [{"category": "3.14", "date": "2026-11-01", "downloads": 1}]
+        },
+    )
+    source = metrics.Sources(tmp_path, session=session)
+    url = "https://example.test/python_minor"
+    source.get("python_minor", "sample", url)
+    path = next((tmp_path / "cache" / "v1").iterdir())
+    envelope = json.loads(path.read_text())
+    envelope["body"]["data"][0]["category"] = secret
+    path.write_text(json.dumps(envelope))
+    body, provenance = source.get("python_minor", "sample", url)
+    assert provenance["cache"] is True
+    assert body["data"][0]["category"] is None
+    assert secret not in path.read_text()
+    assert session.get.call_count == 1

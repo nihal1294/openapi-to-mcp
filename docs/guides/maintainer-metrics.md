@@ -17,3 +17,5 @@ uv run python -m scripts.maintainer_metrics --output-dir /path/to/private-report
 ```
 
 This option is rejected in GitHub Actions and cannot be combined with `--public-only`. New private report and cache files are owner-readable and owner-writable only; protect the output directory and any existing files separately. The command does not configure GitHub credentials. Do not publish private reports or caches.
+
+For privacy, unrecognized Python or operating-system categories are grouped as unknown. Referrer labels are reduced to hostnames; credentials, paths, queries and fragments are discarded. Cached response bodies retain only fields needed for the report, and older cached bodies are reduced when read.

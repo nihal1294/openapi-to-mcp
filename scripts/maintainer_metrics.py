@@ -8,9 +8,10 @@ import os
 import re
 import subprocess
 import tempfile
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit
 
 import requests
 
@@ -73,7 +74,15 @@ class Sources:
             ):
                 cached = None
             else:
-                normalize(name, cached["body"])
+                reduced = reduce_body(name, cached["body"])
+                if (
+                    name == "repository"
+                    and reduced["full_name"].lower() != identifier.lower()
+                ):
+                    raise ValueError("repository mismatch")
+                if reduced != cached["body"]:
+                    cached["body"] = reduced
+                    write_json(path, cached, self.private)
             if cached is not None and timedelta(
                 0
             ) <= self.clock() - fetched < timedelta(hours=24):
@@ -83,8 +92,10 @@ class Sources:
                     "cache": True,
                     "status": cached["status"],
                 }
-        except OSError, ValueError, KeyError, TypeError:
+        except OSError, ValueError, KeyError, TypeError, AttributeError:
             cached = None
+            with suppress(OSError):
+                path.unlink(missing_ok=True)
         status = None
         try:
             if gh:
@@ -123,7 +134,9 @@ class Sources:
                 else:
                     body = response.json()
                     headers = response.headers
-            normalize(name, body)
+            body = reduce_body(name, body)
+            if name == "repository" and body["full_name"].lower() != identifier.lower():
+                raise ValueError("repository mismatch")
             entry = {
                 "version": 1,
                 "url": url,
@@ -145,6 +158,9 @@ class Sources:
             requests.RequestException,
             OSError,
             ValueError,
+            KeyError,
+            TypeError,
+            AttributeError,
             subprocess.SubprocessError,
         ):
             return None, {"url": url, "state": "unavailable", "status": status}
@@ -320,6 +336,122 @@ def normalize(name, body):
                 for r in body
             ],
         }, None
+    raise ValueError("unknown source")
+
+
+def safe_referrer(value):
+    """Keep a hostname only; discard credentials, paths, queries and fragments."""
+    try:
+        host = urlsplit(value if "://" in value else "//" + value).hostname
+    except ValueError:
+        return "unknown"
+    if not host or len(host) > 253:
+        return "unknown"
+    labels = host.lower().split(".")
+    if len(labels) < 2 or any(
+        len(label) > 32 or not re.fullmatch(r"[a-z0-9]+(?:[a-z0-9-]*[a-z0-9])?", label)
+        for label in labels
+    ):
+        return "unknown"
+    return ".".join(labels)
+
+
+def reduce_body(name, body):
+    """Keep only fields needed by the report before writing a provider response."""
+    data, _ = normalize(name, body)
+    if name == "recent":
+        return {"data": {key: value["value"] for key, value in data.items()}}
+    if name in ("overall", "python_minor", "system"):
+        rows, _ = row_data(body)
+        cleaned = []
+        for row in rows:
+            category = row["category"]
+            if name == "overall":
+                category = (
+                    category
+                    if category in ("with_mirrors", "without_mirrors")
+                    else None
+                )
+            elif name == "python_minor":
+                category = (
+                    category
+                    if isinstance(category, str)
+                    and re.fullmatch(r"[0-9]{1,2}\.[0-9]{1,3}", category)
+                    else None
+                )
+            else:
+                category = (
+                    category
+                    if category
+                    in (
+                        "Linux",
+                        "Windows",
+                        "Darwin",
+                        "FreeBSD",
+                        "OpenBSD",
+                        "NetBSD",
+                        "SunOS",
+                        "AIX",
+                    )
+                    else None
+                )
+            cleaned.append(
+                {
+                    "category": category,
+                    "date": row["date"],
+                    "downloads": row["downloads"],
+                }
+            )
+        return {"data": cleaned}
+    if name == "pypi":
+        timestamp = data["first_upload"]
+        return {
+            "releases": {
+                "earliest": [{"upload_time_iso_8601": timestamp}] if timestamp else []
+            }
+        }
+    if name == "repository":
+        full_name = data["full_name"]
+        if not REPO.fullmatch(full_name):
+            raise ValueError("invalid repository name")
+        return {"full_name": full_name, "private": False, "default_branch": None}
+    if name == "release":
+        if body is None:
+            return None
+        tag = data["tag"]
+        if not re.fullmatch(r"v?[0-9][A-Za-z0-9._+-]{0,63}", tag):
+            tag = "unknown"
+        published = data["published_at"]
+        try:
+            published = stamp(datetime.fromisoformat(published.replace("Z", "+00:00")))
+        except AttributeError, TypeError, ValueError:
+            published = None
+        return {
+            "tag_name": tag,
+            "name": None,
+            "published_at": published,
+            "assets": [{"download_count": data["asset_downloads"]}],
+        }
+    if name in ("issues", "pull_requests"):
+        return {"total_count": data["count"], "incomplete_results": False}
+    if name in ("views", "clones"):
+        rows = []
+        for row in body[name]:
+            try:
+                date = datetime.fromisoformat(row["timestamp"].replace("Z", "+00:00"))
+                rows.append({"timestamp": stamp(date)})
+            except KeyError, AttributeError, TypeError, ValueError:
+                continue
+        return {"count": data["count"], "uniques": data["uniques"], name: rows}
+    if name == "referrers":
+        return [
+            {
+                "referrer": safe_referrer(row["referrer"]),
+                "count": row["count"],
+                "uniques": row["uniques"],
+            }
+            for row in body
+        ]
     raise ValueError("unknown source")
 
 
