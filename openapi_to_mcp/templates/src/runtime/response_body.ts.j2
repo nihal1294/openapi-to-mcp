@@ -1,0 +1,45 @@
+import axios, { AxiosError, type AxiosResponseHeaders, type AxiosInstance, type AxiosResponse, type AxiosResponseTransformer } from 'axios';
+import type { Readable } from 'stream';
+import { createToolExecutionError } from './errors.js';
+
+export function resolveResponseByteLimit(globalLimit: number, toolLimit: number | undefined): number {
+  const limits = [globalLimit, toolLimit ?? 0].filter((value) => value > 0);
+  return limits.length ? Math.min(...limits) : 0;
+}
+
+// Axios supplies a decompressed Node stream. Only admitted bytes reach transforms.
+export async function admitResponseBody(
+  response: AxiosResponse<Readable>,
+  limit: number,
+  instance: AxiosInstance
+): Promise<AxiosResponse> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of response.data) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += bytes.length;
+    if (size > limit) {
+      response.data.destroy();
+      throw createToolExecutionError('response_too_large', 'upstream', false,
+        'Upstream response exceeds configured byte limit.');
+    }
+    chunks.push(bytes);
+  }
+  // Match the Node adapter's default UTF-8 decoding and BOM stripping, then
+  // apply Axios's configured response transforms with the original responseType.
+  let data: unknown = Buffer.concat(chunks, size).toString('utf8').replace(/^\uFEFF/, '');
+  const config = { ...response.config, responseType: undefined };
+  const transforms = instance.defaults.transformResponse ?? axios.defaults.transformResponse;
+  for (const transform of (Array.isArray(transforms) ? transforms : [transforms]) as AxiosResponseTransformer[]) {
+    if (transform) data = transform.call(config, data, response.headers as AxiosResponseHeaders, response.status);
+  }
+  const admitted = { ...response, config, data } as AxiosResponse;
+  if (response.status < 200 || response.status >= 300) {
+    throw new AxiosError(
+      `Request failed with status code ${response.status}`,
+      response.status >= 500 ? AxiosError.ERR_BAD_RESPONSE : AxiosError.ERR_BAD_REQUEST,
+      config, response.request, admitted
+    );
+  }
+  return admitted;
+}

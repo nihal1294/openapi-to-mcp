@@ -33,6 +33,7 @@ RUNTIME_TEMPLATE_NAMES = (
     "request",
     "redaction",
     "response",
+    "response_body",
     "serialization",
     "tool_access",
     "validation",

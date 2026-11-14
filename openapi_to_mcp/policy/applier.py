@@ -142,6 +142,7 @@ def _build_execution_metadata(override: ExecutionOverride) -> dict[str, int]:
     metadata_pairs = (
         ("maxConcurrency", override.max_concurrency),
         ("timeoutMs", override.timeout_ms),
+        ("maxResponseBytes", override.max_response_bytes),
         ("cacheTtlMs", override.cache_ttl_ms),
         ("rateLimitPerMinute", override.rate_limit_per_minute),
         ("retryMaxRetries", override.retry_max_retries),

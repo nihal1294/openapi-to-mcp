@@ -38,6 +38,18 @@ export const TOOL_TIMEOUT_MS = parseIntegerEnv(
   presetFallback('toolTimeoutMs', 30000),
   1
 );
+export const MAX_RESPONSE_BYTES = parseResponseBytesEnv();
+
+function parseResponseBytesEnv(): number {
+  const raw = process.env.MCP_MAX_RESPONSE_BYTES?.trim();
+  if (!raw) return 0;
+  const value = Number(raw);
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value)) {
+    throw new Error('MCP_MAX_RESPONSE_BYTES must be a safe integer >= 0.');
+  }
+  return value;
+}
+
 export const CACHE_TTL_MS = parseIntegerEnv(
   'MCP_CACHE_TTL_MS',
   presetFallback('cacheTtlMs', 0),

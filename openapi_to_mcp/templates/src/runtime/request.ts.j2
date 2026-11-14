@@ -1,7 +1,8 @@
 import type { AxiosInstance } from 'axios';
 
 import { resolveAuthForTool } from './auth.js';
-import { TARGET_API_AUTH_HEADER, TOOL_TIMEOUT_MS } from './config.js';
+import { MAX_RESPONSE_BYTES, TARGET_API_AUTH_HEADER, TOOL_TIMEOUT_MS } from './config.js';
+import { admitResponseBody, resolveResponseByteLimit } from './response_body.js';
 import { createToolExecutionError } from './errors.js';
 import type { ToolRuntimeMetadata } from './generated.js';
 import {
@@ -66,6 +67,7 @@ export async function executeHttpRequest(
   }, timeoutMs);
 
   try {
+    const limit = resolveResponseByteLimit(MAX_RESPONSE_BYTES, tool.execution?.maxResponseBytes);
     const response = await axiosInstance.request({
       method: tool.method,
       url: requestContext.targetPath,
@@ -76,12 +78,14 @@ export async function executeHttpRequest(
       headers: requestContext.headers,
       data: requestContext.requestData,
       signal: abortController.signal,
-      validateStatus: (status) => status >= 200 && status < 300,
+      validateStatus: limit > 0 ? () => true : (status) => status >= 200 && status < 300,
+      ...(limit > 0 ? { responseType: 'stream' as const, transformResponse: [(data: unknown) => data] } : {}),
     });
+    const admitted = limit > 0 ? await admitResponseBody(response, limit, axiosInstance) : response;
     return {
-      responseData: response.data,
-      contentType: response.headers['content-type'],
-      status: response.status,
+      responseData: admitted.data,
+      contentType: admitted.headers['content-type'],
+      status: admitted.status,
     };
   } finally {
     clearTimeout(timeoutHandle);

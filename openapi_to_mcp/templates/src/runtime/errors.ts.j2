@@ -45,6 +45,7 @@ export function buildToolErrorResult(
   };
 }
 export function mapApiErrorToToolError(error: unknown): ToolExecutionError {
+  if (error instanceof ToolExecutionError) return error;
   if (axios.isAxiosError(error)) {
     return mapAxiosError(error);
   }
