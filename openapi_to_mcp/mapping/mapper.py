@@ -17,6 +17,7 @@ from openapi_to_mcp.common.spec_compatibility import (
     format_swagger_finding,
     swagger_operation_findings,
 )
+from openapi_to_mcp.mapping.annotations import derive_tool_annotations
 from openapi_to_mcp.mapping.output_schema import extract_output_schema
 from openapi_to_mcp.mapping.tool_description import build_tool_description
 from openapi_to_mcp.mapping.tool_examples import (
@@ -558,6 +559,9 @@ class Mapper:
             "_original_security": security_requirements,
             "_original_security_schemes": security_schemes,
         }
+        annotations = derive_tool_annotations(method)
+        if annotations:
+            tool_definition["annotations"] = annotations
         output_schema = extract_output_schema(operation, self.spec, self._resolve_ref)
         if output_schema:
             tool_definition["outputSchema"] = output_schema
