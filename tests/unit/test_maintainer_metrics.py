@@ -56,12 +56,12 @@ def test_upload_and_release_and_search():
         metrics.normalize("issues", {"total_count": 4, "incomplete_results": True})
 
 
-def test_cache_and_conditional_refresh(tmp_path):
+def test_cache_ttl_and_stale_replacement(tmp_path):
     clock = datetime(2026, 11, 15, tzinfo=UTC)
     session = Mock()
     session.get.return_value = Mock(
         status_code=200,
-        headers={"ETag": "tag"},
+        headers={"ETag": "opaque-token"},
         json=lambda: {"data": {"last_day": 0, "last_week": 2, "last_month": 3}},
     )
     source = metrics.Sources(tmp_path, session=session, clock=lambda: clock)
@@ -70,10 +70,19 @@ def test_cache_and_conditional_refresh(tmp_path):
     assert not provenance["cache"]
     assert source.get("recent", "p", url)[0] == body
     assert session.get.call_count == 1
+    path = next((tmp_path / "cache" / "v1").iterdir())
+    assert "opaque-token" not in path.read_text()
     source.clock = lambda: clock + timedelta(hours=25)
-    session.get.return_value = Mock(status_code=304)
-    assert source.get("recent", "p", url)[0] == body
-    assert session.get.call_args.kwargs["headers"]["If-None-Match"] == "tag"
+    session.get.return_value = Mock(
+        status_code=200,
+        headers={},
+        json=lambda: {"data": {"last_day": 7, "last_week": 8, "last_month": 9}},
+    )
+    body, provenance = source.get("recent", "p", url)
+    assert body["data"]["last_day"] == 7
+    assert not provenance["cache"]
+    assert not session.get.call_args.kwargs.get("headers")
+    assert json.loads(path.read_text())["body"] == body
 
 
 @pytest.mark.parametrize("status", [403, 404, 429, 500])
@@ -192,6 +201,7 @@ def test_corrupt_cache_is_refetched(tmp_path):
 
 def test_cli_sanitizes_provider_labels_before_reports_and_cache(tmp_path, monkeypatch):
     secret = "ghp_0123456789abcdefghijklmnopqrstuvwxyz"
+    hostname_secret = "abcdefghijklmnop1234567890"
 
     def public_get(self, url, **kwargs):
         if url.endswith("/python_minor"):
@@ -224,7 +234,12 @@ def test_cli_sanitizes_provider_labels_before_reports_and_cache(tmp_path, monkey
                         "referrer": f"https://user:{secret}@example.com/path?token={secret}",
                         "count": 4,
                         "uniques": 2,
-                    }
+                    },
+                    {
+                        "referrer": f"https://{hostname_secret}.example.com/path",
+                        "count": 5,
+                        "uniques": 3,
+                    },
                 ]
             ),
         ),
@@ -239,6 +254,7 @@ def test_cli_sanitizes_provider_labels_before_reports_and_cache(tmp_path, monkey
     for path in tmp_path.rglob("*"):
         if path.is_file():
             assert secret not in path.read_text()
+            assert hostname_secret not in path.read_text()
             assert "user:" not in path.read_text()
     report = json.loads((tmp_path / "maintainer-metrics.json").read_text())
     assert (
@@ -246,8 +262,7 @@ def test_cli_sanitizes_provider_labels_before_reports_and_cache(tmp_path, monkey
     )
     assert report["sections"]["system"]["data"]["downloads_by_category"]["Linux"] == 3
     assert (
-        report["sections"]["referrers"]["data"]["referrers"][0]["referrer"]
-        == "example.com"
+        report["sections"]["referrers"]["data"]["referrers"][0]["referrer"] == "other"
     )
 
 
@@ -310,3 +325,69 @@ def test_old_cached_provider_labels_are_reduced_before_reuse(tmp_path):
     assert body["data"][0]["category"] is None
     assert secret not in path.read_text()
     assert session.get.call_count == 1
+
+
+def test_referrer_host_and_legacy_envelope_privacy(tmp_path, monkeypatch):
+    token = "abcdefghijklmnop1234567890"
+    url = "https://api.github.com/repos/owner/repo/traffic/popular/referrers"
+    run = Mock(
+        return_value=Mock(
+            returncode=0,
+            stdout=json.dumps(
+                [
+                    {
+                        "referrer": f"https://{token}.example.com/path",
+                        "count": 4,
+                        "uniques": 2,
+                    },
+                    {
+                        "referrer": f"https://{token}.github.com/path",
+                        "count": 3,
+                        "uniques": 2,
+                    },
+                ]
+            ),
+        )
+    )
+    monkeypatch.setattr(metrics.subprocess, "run", run)
+    source = metrics.Sources(tmp_path, private=True)
+    body, _ = source.get("referrers", "owner/repo", url, gh=True)
+    assert body == [
+        {"referrer": "other", "count": 4, "uniques": 2},
+        {"referrer": "github.com", "count": 3, "uniques": 2},
+    ]
+    path = next((tmp_path / "cache" / "v1").iterdir())
+    entry = json.loads(path.read_text())
+    entry["etag"] = token
+    entry["last_modified"] = token
+    entry["headers"] = {"Authorization": token}
+    path.write_text(json.dumps(entry))
+    body, provenance = source.get("referrers", "owner/repo", url, gh=True)
+    assert provenance["cache"]
+    assert run.call_count == 1
+    assert token not in path.read_text()
+    assert set(json.loads(path.read_text())) == {
+        "version",
+        "url",
+        "identifier",
+        "fetched_at",
+        "status",
+        "body",
+    }
+    assert body[0]["uniques"] == body[1]["uniques"] == 2
+    report = {
+        "observed_at": "time",
+        "package": "sample",
+        "repository": "owner/repo",
+        "completeness": "complete",
+        "sections": {
+            "referrers": {
+                "data": metrics.normalize("referrers", body)[0],
+                "window": None,
+                "methodology": "",
+                "source": {"url": url},
+            }
+        },
+    }
+    assert token not in metrics.render(report)
+    assert token not in json.dumps(report)

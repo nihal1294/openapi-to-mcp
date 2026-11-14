@@ -70,19 +70,31 @@ class Sources:
                 cached["version"] != 1
                 or cached["url"] != url
                 or cached["identifier"] != identifier
-                or "body" not in cached
             ):
-                cached = None
-            else:
-                reduced = reduce_body(name, cached["body"])
-                if (
-                    name == "repository"
-                    and reduced["full_name"].lower() != identifier.lower()
-                ):
-                    raise ValueError("repository mismatch")
-                if reduced != cached["body"]:
-                    cached["body"] = reduced
-                    write_json(path, cached, self.private)
+                raise ValueError("invalid cache")
+            if cached["status"] not in (200, 304) and not (
+                name == "release" and cached["status"] == 404 and cached["body"] is None
+            ):
+                raise ValueError("invalid cache status")
+            reduced = reduce_body(name, cached["body"])
+            if (
+                name == "repository"
+                and reduced["full_name"].lower() != identifier.lower()
+            ):
+                raise ValueError("repository mismatch")
+            if fetched.tzinfo is None:
+                raise ValueError("invalid cache timestamp")
+            canonical = {
+                "version": 1,
+                "url": url,
+                "identifier": identifier,
+                "fetched_at": stamp(fetched.astimezone(UTC)),
+                "status": 404 if name == "release" and reduced is None else 200,
+                "body": reduced,
+            }
+            if canonical != cached:
+                write_json(path, canonical, self.private)
+            cached = canonical
             if cached is not None and timedelta(
                 0
             ) <= self.clock() - fetched < timedelta(hours=24):
@@ -109,31 +121,16 @@ class Sources:
                 if result.returncode:
                     raise ValueError("command failed")
                 body = json.loads(result.stdout)
-                headers = {}
                 status = 200
             else:
-                headers = {}
-                if cached:
-                    if cached.get("etag"):
-                        headers["If-None-Match"] = cached["etag"]
-                    if cached.get("last_modified"):
-                        headers["If-Modified-Since"] = cached["last_modified"]
-                response = self.session.get(url, headers=headers, timeout=TIMEOUT)
+                response = self.session.get(url, timeout=TIMEOUT)
                 status = response.status_code
-                if status == 304 and cached:
-                    body = cached["body"]
-                    headers = {
-                        "ETag": cached.get("etag"),
-                        "Last-Modified": cached.get("last_modified"),
-                    }
-                elif status == 404 and release:
+                if status == 404 and release:
                     body = None
-                    headers = {}
                 elif status != 200:
                     raise ValueError("http failure")
                 else:
                     body = response.json()
-                    headers = response.headers
             body = reduce_body(name, body)
             if name == "repository" and body["full_name"].lower() != identifier.lower():
                 raise ValueError("repository mismatch")
@@ -143,8 +140,6 @@ class Sources:
                 "identifier": identifier,
                 "fetched_at": stamp(self.clock()),
                 "status": status,
-                "etag": headers.get("ETag"),
-                "last_modified": headers.get("Last-Modified"),
                 "body": body,
             }
             write_json(path, entry, self.private)
@@ -340,20 +335,24 @@ def normalize(name, body):
 
 
 def safe_referrer(value):
-    """Keep a hostname only; discard credentials, paths, queries and fragments."""
+    """Map known services to fixed labels; never retain arbitrary host text."""
     try:
         host = urlsplit(value if "://" in value else "//" + value).hostname
     except ValueError:
-        return "unknown"
-    if not host or len(host) > 253:
-        return "unknown"
-    labels = host.lower().split(".")
-    if len(labels) < 2 or any(
-        len(label) > 32 or not re.fullmatch(r"[a-z0-9]+(?:[a-z0-9-]*[a-z0-9])?", label)
-        for label in labels
-    ):
-        return "unknown"
-    return ".".join(labels)
+        return "other"
+    if host:
+        host = host.lower().rstrip(".")
+        for domain in (
+            "github.com",
+            "google.com",
+            "bing.com",
+            "reddit.com",
+            "stackoverflow.com",
+            "pypi.org",
+        ):
+            if host == domain or host.endswith("." + domain):
+                return domain
+    return "other"
 
 
 def reduce_body(name, body):
