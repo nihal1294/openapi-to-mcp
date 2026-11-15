@@ -71,8 +71,8 @@ def test_doctor(name) -> None:
             ("risky_union_schema", "paths./v2/core/events/{id}.get"),
         }
     else:
-        # Future doctor versions may add advisory warnings, including name checks.
-        assert result.exit_code in (0, 2)
+        assert result.exit_code == 0
+        assert report["issues"] == []
 
 
 @pytest.mark.parametrize(
