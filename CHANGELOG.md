@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file.
 
+**Form serialization migration:** Earlier generated servers used Axios's implicit form serializer, which could emit names such as `tags[]` and `object[key]`. Declared form encoding now uses repeated array names or comma-separated items and serializes content-mode objects as JSON. Check affected endpoints before regenerating; see the [migration guide](https://nihal1294.github.io/openapi-to-mcp/guides/form-serialization/#migration).
+
 ## [0.13.0](https://github.com/nihal1294/openapi-to-mcp/compare/v0.12.0...v0.13.0) (2026-11-15)
 
 
