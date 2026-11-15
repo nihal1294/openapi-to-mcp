@@ -67,6 +67,7 @@ def test_doctor_help_lists_output_options() -> None:
 
     assert result.exit_code == 0
     assert "--openapi-json" in result.output
+    assert "--config" in result.output
     assert "--format" in result.output
 
 

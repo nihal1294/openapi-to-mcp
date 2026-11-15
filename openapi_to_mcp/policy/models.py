@@ -64,6 +64,16 @@ class ExecutionOverride:
 
 
 @dataclass(frozen=True)
+class ToolAnnotationOverride:
+    """Explicit set of client-facing tool hints."""
+
+    read_only: bool | None = None
+    destructive: bool | None = None
+    idempotent: bool | None = None
+    open_world: bool | None = None
+
+
+@dataclass(frozen=True)
 class PolicyConfig:
     """Resolved `mcpgen.yaml` policy configuration."""
 
@@ -75,5 +85,9 @@ class PolicyConfig:
     rename_names: dict[str, str] = field(default_factory=dict)
     auth_operations: dict[str, AuthOverride] = field(default_factory=dict)
     auth_names: dict[str, AuthOverride] = field(default_factory=dict)
+    annotation_operations: dict[str, ToolAnnotationOverride] = field(
+        default_factory=dict
+    )
+    annotation_names: dict[str, ToolAnnotationOverride] = field(default_factory=dict)
     execution_operations: dict[str, ExecutionOverride] = field(default_factory=dict)
     execution_names: dict[str, ExecutionOverride] = field(default_factory=dict)

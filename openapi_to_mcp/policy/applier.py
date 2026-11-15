@@ -21,13 +21,16 @@ def apply_policy(
     """Return policy-adjusted mapped tools."""
     if policy is None:
         return mcp_tools
-    filtered = [deepcopy(tool) for tool in mcp_tools if _should_keep_tool(tool, policy)]
+    filtered = [deepcopy(tool) for tool in mcp_tools if is_tool_selected(tool, policy)]
     updated = [_apply_tool_overrides(tool, policy) for tool in filtered]
     _ensure_unique_names(updated)
     return updated
 
 
-def _should_keep_tool(tool: dict[str, Any], policy: PolicyConfig) -> bool:
+def is_tool_selected(tool: dict[str, Any], policy: PolicyConfig | None) -> bool:
+    """Return whether include and exclude selectors retain a tool."""
+    if policy is None:
+        return True
     operation = _tool_operation_key(tool)
     original_name = _tool_name(tool)
     if not policy.include.is_empty and not _matches_selectors(
@@ -35,6 +38,22 @@ def _should_keep_tool(tool: dict[str, Any], policy: PolicyConfig) -> bool:
     ):
         return False
     return not _matches_selectors(original_name, operation, policy.exclude)
+
+
+def preview_auth_policy(
+    tool: dict[str, Any], policy: PolicyConfig | None
+) -> dict[str, Any] | None:
+    """Apply only selection, rename and authentication policy to a copied tool."""
+    if not is_tool_selected(tool, policy):
+        return None
+    result = deepcopy(tool)
+    if policy is not None:
+        operation = _tool_operation_key(result)
+        original_name = _tool_name(result)
+        renamed_name = _resolve_rename(operation, original_name, policy)
+        result["name"] = renamed_name
+        _apply_auth_override(result, operation, original_name, renamed_name, policy)
+    return result
 
 
 def _matches_selectors(
@@ -48,6 +67,7 @@ def _apply_tool_overrides(tool: dict[str, Any], policy: PolicyConfig) -> dict[st
     original_name = _tool_name(tool)
     renamed_name = _resolve_rename(operation, original_name, policy)
     tool["name"] = renamed_name
+    _apply_annotation_override(tool, operation, original_name, renamed_name, policy)
     _apply_auth_override(tool, operation, original_name, renamed_name, policy)
     _apply_execution_override(tool, operation, original_name, renamed_name, policy)
     return tool
@@ -61,6 +81,38 @@ def _resolve_rename(operation: str, original_name: str, policy: PolicyConfig) ->
     if name_rename is not None:
         return name_rename
     return original_name
+
+
+def _apply_annotation_override(
+    tool: dict[str, Any],
+    operation: str,
+    original_name: str,
+    renamed_name: str,
+    policy: PolicyConfig,
+) -> None:
+    override = _lookup_override(
+        operation,
+        original_name,
+        renamed_name,
+        policy.annotation_operations,
+        policy.annotation_names,
+    )
+    if override is None:
+        return
+    hints = {
+        key: value
+        for key, value in (
+            ("readOnlyHint", override.read_only),
+            ("destructiveHint", override.destructive),
+            ("idempotentHint", override.idempotent),
+            ("openWorldHint", override.open_world),
+        )
+        if value is not None
+    }
+    if hints:
+        tool["annotations"] = hints
+    else:
+        tool.pop("annotations", None)
 
 
 def _apply_auth_override(
