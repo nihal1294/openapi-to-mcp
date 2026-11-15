@@ -168,3 +168,16 @@ Use the report to check:
 - mapped tool count
 - skipped operations
 - warnings emitted during generation
+
+### Cancellation
+
+MCP cancellation is cooperative. Generated tools stop waiting for concurrency
+slots, stop retrying, and abort an in-flight HTTP request when the request signal
+is cancelled. An upstream service may already have received or acted on the
+request; cancellation does not roll back its effects. Custom tool handlers may
+accept a second argument containing `signal` and should observe it when they
+perform cancellable work. Existing single-argument handlers remain supported.
+If an HTTP adapter reports a non-cancellation failure while cancellation is
+occurring, the runtime retains that failure and does not retry after the caller
+has cancelled. This reflects the adapter outcome observable by the runtime;
+it cannot determine the wall-clock order of events at a remote service.

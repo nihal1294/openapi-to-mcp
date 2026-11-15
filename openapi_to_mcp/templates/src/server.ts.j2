@@ -154,7 +154,7 @@ export class OpenApiMcpServer {
     }));
     this.server.setRequestHandler(
       'tools/call',
-      async (request): Promise<CallToolResult> => {
+      async (request, ctx): Promise<CallToolResult> => {
         const toolName = request.params.name;
         const args = (request.params.arguments || {}) as Record<string, unknown>;
         const customTool = this.customToolMap.get(toolName);
@@ -170,9 +170,10 @@ export class OpenApiMcpServer {
 {% endif %}        assertToolArgumentBounds(args);
         try {
           assertToolAllowed(toolName);
+          ctx.mcpReq.signal.throwIfAborted();
           const result = customTool
-            ? await customTool.handler(args)
-            : await this.executor.execute(toolName, tool!, args);
+            ? await customTool.handler(args, { signal: ctx.mcpReq.signal })
+            : await this.executor.execute(toolName, tool!, args, ctx.mcpReq.signal);
           return this.server.projectCallToolResult(result, outputSchema);
         } catch (error) {
           if (!(error instanceof ToolExecutionError)) {

@@ -8,6 +8,7 @@ import type {
   ToolCircuitBreaker,
 } from './circuit_breaker.js';
 import {
+  throwIfCancelled,
   mapApiErrorToToolError,
   shouldRetryToolFailure,
   type ToolExecutionError,
@@ -30,8 +31,10 @@ export async function executeWithResilience(
   cacheTtlMs: number,
   retryMaxRetries: number,
   retryBudgetPerMinute: number,
-  circuitBreakerSettings: CircuitBreakerSettings | null
+  circuitBreakerSettings: CircuitBreakerSettings | null,
+  signal?: AbortSignal
 ): Promise<CallToolResult> {
+  throwIfCancelled(signal);
   const circuitLease = circuitBreaker.acquireExecution(
     context.toolName,
     circuitBreakerSettings
@@ -40,18 +43,30 @@ export async function executeWithResilience(
 
   while (true) {
     try {
+      throwIfCancelled(signal);
       const result = await {% if telemetry == 'opentelemetry' %}traceAttempt(context.tool.method, () => {% endif %}executeUpstream(
         axiosInstance,
         responseCache,
         context,
         requestContext,
         cacheKey,
-        cacheTtlMs
+        cacheTtlMs,
+        signal
       ){% if telemetry == 'opentelemetry' %}){% endif %};
       circuitBreaker.recordSuccess(context.toolName, circuitLease);
       return result;
     } catch (error) {
       const toolError = mapApiErrorToToolError(error);
+      if (toolError.meta.code === 'request_cancelled') {
+        circuitBreaker.cancelExecution(context.toolName, circuitLease);
+        throw toolError;
+      }
+      // A later caller cancellation stops retries without changing the failure
+      // that already ended this attempt.
+      if (signal?.aborted) {
+        finishCircuitBreaker(circuitBreaker, context.toolName, circuitBreakerSettings, circuitLease, toolError);
+        throw toolError;
+      }
       const nextAttempt = attempt + 1;
       if (!shouldRetry(toolError, attempt, retryMaxRetries, retryBudgetPerMinute)) {
         finishCircuitBreaker(
