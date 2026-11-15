@@ -6,8 +6,14 @@ import hashlib
 import json
 import math
 from importlib import metadata
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from openapi_to_mcp.commands.generation_models import (
+    GenerationBehavior,
+    GenerationSettings,
+    ServerIdentity,
+    TransportSettings,
+)
 from openapi_to_mcp.common.error_policy import resolve_error_mode
 from openapi_to_mcp.common.exceptions import GenerationError
 from openapi_to_mcp.policy.models import (
@@ -16,9 +22,6 @@ from openapi_to_mcp.policy.models import (
     SelectorSet,
     ToolAnnotationOverride,
 )
-
-if TYPE_CHECKING:
-    from openapi_to_mcp.commands.generation_models import GenerationSettings
 
 _ANNOTATIONS = ("read_only", "destructive", "idempotent", "open_world")
 _EXECUTION = (
@@ -153,7 +156,18 @@ def _policy(policy: PolicyConfig | None) -> tuple[dict[str, Any], dict[str, bool
     return projection, presence
 
 
+def validate_settings_containers(settings: GenerationSettings) -> None:
+    """Reject malformed request containers before logging or projection."""
+    if not isinstance(settings, GenerationSettings) or not (
+        isinstance(settings.identity, ServerIdentity)
+        and isinstance(settings.transport, TransportSettings)
+        and isinstance(settings.behavior, GenerationBehavior)
+    ):
+        raise _invalid()
+
+
 def _options(settings: GenerationSettings) -> dict[str, Any]:
+    validate_settings_containers(settings)
     behavior = settings.behavior
     options = {
         "tool_grouping": behavior.tool_grouping,

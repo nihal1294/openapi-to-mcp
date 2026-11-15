@@ -12,7 +12,10 @@ import rich_click as click
 from openapi_to_mcp.adapters.generator import Generator
 from openapi_to_mcp.adapters.spec_loader import SpecLoader
 from openapi_to_mcp.commands.generation_context import build_template_context
-from openapi_to_mcp.commands.generation_provenance import build_provenance
+from openapi_to_mcp.commands.generation_provenance import (
+    build_provenance,
+    validate_settings_containers,
+)
 from openapi_to_mcp.common.exceptions import NoToolsMappedError
 from openapi_to_mcp.common.tool_runtime import (
     derive_auth_env_vars,
@@ -120,6 +123,8 @@ def _log_request(request: GenerationRequest) -> None:
 
 def generate_project(request: GenerationRequest) -> None:
     """Generate project files and a diagnostic report for one request."""
+    if request.provenance:
+        validate_settings_containers(request.settings)
     _log_request(request)
     logger.info("Loading OpenAPI spec from: %s", request.source)
     loader = SpecLoader(source=request.source)

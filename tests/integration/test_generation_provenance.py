@@ -95,6 +95,11 @@ def test_cli_generate_and_run_opt_in_and_custom_preservation(
     monkeypatch.setattr(run_module, "ensure_runtime_tools", lambda: None)
     monkeypatch.setattr(run_module, "_execute_runtime", lambda *_args: None)
     monkeypatch.setattr(run_module, "_prepare_runtime", lambda *_args: {})
+    result = runner.invoke(cli, ["run", *args])
+    assert result.exit_code == 0, result.output
+    assert "provenance" not in json.loads(
+        (output / "generation_report.json").read_text()
+    )
     result = runner.invoke(cli, ["run", *args, "--provenance"])
     assert result.exit_code == 0, result.output
     first = json.loads((output / "generation_report.json").read_text())["provenance"]
@@ -286,3 +291,120 @@ def test_distribution_version_and_missing_metadata(monkeypatch) -> None:
 
     monkeypatch.setattr(module.metadata, "version", missing)
     assert _record()["generator"]["version"] is None
+
+
+def test_real_cli_policy_precedence_and_error_mode_equivalence(tmp_path) -> None:
+    spec = tmp_path / "spec.yaml"
+    spec.write_text(SPEC, encoding="utf-8")
+    policy = tmp_path / "policy.yaml"
+    runner = CliRunner()
+
+    def generate(name, policy_text, *options):
+        policy.write_text(policy_text, encoding="utf-8")
+        output = tmp_path / name
+        result = runner.invoke(
+            cli,
+            [
+                "generate",
+                "-o",
+                str(spec),
+                "-d",
+                str(output),
+                "-t",
+                "stdio",
+                "--config",
+                str(policy),
+                "--provenance",
+                *options,
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        return json.loads((output / "generation_report.json").read_text())["provenance"]
+
+    implicit_fail = generate(
+        "strict", "generate:\n  tool_grouping: tag-prefix\n", "--tool-grouping", "none"
+    )
+    explicit_fail = generate(
+        "strict-explicit",
+        "generate:\n  tool_grouping: none\n  on_mapping_error: fail\n  on_schema_error: fail\n",
+    )
+    assert implicit_fail["resolved_options"] == explicit_fail["resolved_options"]
+    assert (
+        implicit_fail["config_projection_digest"]
+        == explicit_fail["config_projection_digest"]
+    )
+    assert implicit_fail["policy_digest"] == explicit_fail["policy_digest"]
+    implicit_skip = generate("non-strict", "generate:\n  strict: false\n")
+    explicit_skip = generate(
+        "non-strict-explicit",
+        "generate:\n  strict: true\n  on_mapping_error: skip\n  on_schema_error: skip\n",
+        "--no-strict",
+    )
+    assert implicit_skip["resolved_options"] == explicit_skip["resolved_options"]
+    assert implicit_skip["resolved_options"]["on_mapping_error"] == "skip"
+    assert implicit_skip["resolved_options"]["on_schema_error"] == "skip"
+    assert (
+        implicit_skip["config_projection_digest"]
+        == explicit_skip["config_projection_digest"]
+    )
+    assert implicit_skip["policy_digest"] == explicit_skip["policy_digest"]
+    changed = generate(
+        "changed", "generate:\n  tool_grouping: none\n", "--runtime-validation", "none"
+    )
+    assert changed["resolved_options"]["runtime_validation"] == "none"
+    assert (
+        changed["config_projection_digest"] != implicit_fail["config_projection_digest"]
+    )
+
+
+@pytest.mark.parametrize("field", ["behavior", "transport", "identity"])
+def test_invalid_settings_containers_fail_before_logging_and_writes(
+    tmp_path, field
+) -> None:
+    spec = tmp_path / "spec.yaml"
+    spec.write_text(SPEC, encoding="utf-8")
+    invalid = replace(_settings(), **{field: None})
+    output = tmp_path / "out"
+    with pytest.raises(
+        GenerationError,
+        match=r"^Invalid values for generation provenance projection\.$",
+    ):
+        _record(config=invalid)
+    with pytest.raises(
+        GenerationError,
+        match=r"^Invalid values for generation provenance projection\.$",
+    ):
+        generate_project(
+            GenerationRequest(str(spec), str(output), invalid, provenance=True)
+        )
+    assert not output.exists()
+
+
+def test_non_json_yaml_and_local_reference_target_change(tmp_path) -> None:
+    path = tmp_path / "spec.yaml"
+    text = (
+        SPEC
+        + "x-date: 2024-01-02\ncomponents:\n  schemas:\n    Item:\n      type: string\n    Alias:\n      $ref: '#/components/schemas/Item'\n"
+    )
+    path.write_text(text, encoding="utf-8")
+    loader = SpecLoader(str(path))
+    parsed = loader.load_and_validate()
+    assert not isinstance(parsed["x-date"], str)
+    assert loader.loaded_text_sha256() == hashlib.sha256(text.encode()).hexdigest()
+    changed = text.replace("      type: string", "      type: integer")
+    path.write_text(changed, encoding="utf-8")
+    loader.load_and_validate()
+    assert loader.loaded_text_sha256() == hashlib.sha256(changed.encode()).hexdigest()
+    assert hashlib.sha256(text.encode()).hexdigest() != loader.loaded_text_sha256()
+
+
+def test_missing_settings_container_is_controlled(tmp_path) -> None:
+    with pytest.raises(GenerationError, match="Invalid values"):
+        build_provenance(
+            source_kind="file", spec_digest="a" * 64, settings=None, policy=None
+        )
+    with pytest.raises(GenerationError, match="Invalid values"):
+        generate_project(
+            GenerationRequest("unused", str(tmp_path / "out"), None, provenance=True)
+        )
+    assert not (tmp_path / "out").exists()
