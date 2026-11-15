@@ -97,12 +97,7 @@ def _decision_lines(decision: dict[str, Any]) -> list[str]:  # noqa: PLR0911
     return []
 
 
-def _render_operations(
-    rows: list[dict[str, Any]], skipped: list[dict[str, str]]
-) -> None:
-    skipped_reasons = {
-        (item["method"].upper(), item["path"]): item["reason"] for item in skipped
-    }
+def _render_operations(rows: list[dict[str, Any]]) -> None:
     for row in rows:
         provisional, final = row["provisional_name"], row["final_name"]
         names = ""
@@ -110,12 +105,15 @@ def _render_operations(
             names = f"; {_quoted(provisional)}"
             if final is not None and final != provisional:
                 names += f" -> {_quoted(final)}"
-        click.echo(f"  {row['method']} {_quoted(row['path'])}: {row['status']}{names}")
+        click.echo(
+            f"  {row['method']} {_quoted(row['path'])}: {row['status']}{names}; "
+            f"source {_quoted(row['source_location'])}"
+        )
         for decision in row["decisions"]:
             for line in _decision_lines(decision):
                 click.echo(f"    {line}")
         if row["status"] == "skipped":
-            reason = skipped_reasons.get((row["method"], row["path"]))
+            reason = row.get("skip_reason")
             if reason is not None:
                 click.echo(f"    mapping skipped: {_quoted(reason)}")
 
@@ -200,7 +198,7 @@ def preview(
             click.echo(
                 "Component sizes are independent JSON values, not additive partitions."
             )
-            _render_operations(result.trace or [], result.report["skipped_operations"])
+            _render_operations(result.trace or [])
         if max_catalog_bytes is not None and catalog["total_bytes"] > max_catalog_bytes:
             raise click.exceptions.Exit(2)
     except (

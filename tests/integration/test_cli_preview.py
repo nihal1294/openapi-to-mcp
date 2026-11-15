@@ -470,3 +470,56 @@ def test_text_preview_explains_policy_and_grouping_without_override_values(
             "secret-env-value",
         )
     )
+
+
+def test_text_and_json_preserve_each_skipped_operation_source(tmp_path, runner) -> None:
+    unsupported = {
+        "name": "filter",
+        "in": "querystring",
+        "content": {"application/json": {"schema": {"type": "object"}}},
+    }
+    operation = {
+        "parameters": [unsupported],
+        "responses": {"200": {"description": "ok"}},
+    }
+    spec = {
+        "openapi": "3.2.1",
+        "info": {"title": "Test", "version": "1"},
+        "paths": {
+            "/x": {
+                "get": operation,
+                "post": operation,
+                "additionalOperations": {
+                    "Copy": {"responses": {"200": {"description": "ok"}}},
+                    "copy": {"responses": {"200": {"description": "ok"}}},
+                },
+            }
+        },
+    }
+    source = tmp_path / "spec.json"
+    source.write_text(json.dumps(spec))
+    args = ["preview", "-o", str(source), "--no-strict"]
+    text_result = runner.invoke(cli, args)
+    json_result = runner.invoke(cli, [*args, "--format", "json"])
+    assert text_result.exit_code == json_result.exit_code == 0, text_result.output
+    report = json.loads(json_result.stdout)
+    rows = report["operations"]
+    assert [row["method"] for row in rows] == ["GET", "POST", "COPY", "COPY"]
+    assert all(row["status"] == "skipped" for row in rows)
+    lines = [
+        line.strip()
+        for line in text_result.stdout.splitlines()
+        if line.strip().startswith("mapping skipped:")
+    ]
+    assert len(lines) == 4
+    locations = [".get", ".post", ".Copy", ".copy"]
+    assert all(
+        location in line for location, line in zip(locations, lines, strict=True)
+    )
+    for line, row, location in zip(lines, rows, locations, strict=True):
+        assert row.get("skip_reason") is not None
+        assert (
+            line
+            == f"mapping skipped: {json.dumps(row['skip_reason'], ensure_ascii=True)}"
+        )
+        assert row["source_location"].endswith(location)

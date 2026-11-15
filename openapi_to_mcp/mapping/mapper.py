@@ -116,6 +116,7 @@ class Mapper:
                 row = {
                     "method": method.upper(),
                     "path": path,
+                    "source_location": operation_ref.location,
                     "provisional_name": None,
                     "final_name": None,
                     "status": "skipped",
@@ -235,6 +236,8 @@ class Mapper:
         self, method: str, path: str, reason: str, message: str
     ) -> None:
         """Record a skipped operation and its diagnostic message."""
+        if self._trace_row is not None:
+            self._trace_row["skip_reason"] = reason
         logger.warning(message)
         self._diagnostics.append(message)
         self._skipped_operations.append(
