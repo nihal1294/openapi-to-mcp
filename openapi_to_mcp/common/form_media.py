@@ -48,6 +48,12 @@ def schema_kind(schema: dict[str, Any]) -> object:
     return kind
 
 
+def _is_binary(schema: dict[str, Any]) -> bool:
+    return any(
+        key in schema for key in ("contentEncoding", "contentMediaType")
+    ) or schema.get("format") in ("binary", "byte")
+
+
 def _field(spec: dict[str, Any], schema: object, encoding: object) -> dict[str, Any]:  # noqa: C901, PLR0912
     schema = resolve_local(spec, schema)
     if not isinstance(encoding, dict):
@@ -56,9 +62,7 @@ def _field(spec: dict[str, Any], schema: object, encoding: object) -> dict[str, 
         raise FormMediaError("Nested form encoding is unsupported.")
     if encoding.get("allowReserved") is True:
         raise FormMediaError("allowReserved=true is unsupported for forms.")
-    if any(
-        key in schema for key in ("contentEncoding", "contentMediaType")
-    ) or schema.get("format") in ("binary", "byte"):
+    if _is_binary(schema):
         raise FormMediaError("Binary form fields are unsupported.")
     kind = schema_kind(schema)
     if kind not in ("string", "number", "integer", "boolean", "object", "array"):
@@ -67,11 +71,8 @@ def _field(spec: dict[str, Any], schema: object, encoding: object) -> dict[str, 
     if kind == "array":
         item = resolve_local(spec, schema.get("items"))
         item_kind = schema_kind(item)
-        if (
-            item_kind not in ("string", "number", "integer", "boolean")
-            or item.get("format") in ("binary", "byte")
-            or "contentEncoding" in item
-            or "contentMediaType" in item
+        if item_kind not in ("string", "number", "integer", "boolean") or _is_binary(
+            item
         ):
             raise FormMediaError("Form arrays require primitive items.")
     style = any(key in encoding for key in ("style", "explode", "allowReserved"))
@@ -87,12 +88,16 @@ def _field(spec: dict[str, Any], schema: object, encoding: object) -> dict[str, 
             for p in props.values()
         ):
             raise FormMediaError("Styled objects require flat primitive properties.")
-        object_fields = {
-            name: schema_kind(resolve_local(spec, prop)) for name, prop in props.items()
-        }
+        children = {name: resolve_local(spec, prop) for name, prop in props.items()}
+        if any(_is_binary(child) for child in children.values()):
+            raise FormMediaError("Binary form fields are unsupported.")
+        object_fields = {name: schema_kind(child) for name, child in children.items()}
         additional_schema = schema.get("additionalProperties")
         if isinstance(additional_schema, dict):
-            object_additional = schema_kind(resolve_local(spec, additional_schema))
+            resolved_additional = resolve_local(spec, additional_schema)
+            if _is_binary(resolved_additional):
+                raise FormMediaError("Binary form fields are unsupported.")
+            object_additional = schema_kind(resolved_additional)
             if object_additional not in ("string", "number", "integer", "boolean"):
                 raise FormMediaError(
                     "Styled object additional properties must be primitive."

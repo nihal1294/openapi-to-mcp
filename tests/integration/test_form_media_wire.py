@@ -531,3 +531,77 @@ def test_prototype_names_with_input_validation(tmp_path: Path) -> None:
             "application/x-www-form-urlencoded",
         )
     ]
+
+
+@pytest.mark.parametrize("transport", ["stdio", "streamable-http"])
+def test_ordinary_json_and_text_bodies_wire(tmp_path: Path, transport: str) -> None:
+    paths = {}
+    for name, media_type, schema in (
+        ("jsonbody", "application/json", {"type": "object"}),
+        ("textbody", "text/plain", {"type": "string"}),
+    ):
+        paths[f"/{name}"] = {
+            "post": {
+                "operationId": name,
+                "requestBody": {
+                    "required": True,
+                    "content": {media_type: {"schema": schema}},
+                },
+                "responses": {"200": {"description": "OK"}},
+            }
+        }
+    spec = {
+        "openapi": "3.1.2",
+        "info": {"title": "Wire", "version": "1"},
+        "paths": paths,
+    }
+    source = tmp_path / "spec.json"
+    source.write_text(json.dumps(spec), encoding="utf-8")
+    out = tmp_path / "generated"
+    result = CliRunner().invoke(
+        cli, ["generate", "-o", str(source), "-d", str(out), "--transport", transport]
+    )
+    assert result.exit_code == 0, result.output
+    _build(out)
+    Capture.requests = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Capture)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+
+        async def exercise(connection: ConnectionSettings) -> None:
+            for name, body in (
+                ("jsonbody", {"a": "é +%&=", "n": 2}),
+                ("textbody", "é +%&="),
+            ):
+                result = await execute_mcp_server(
+                    ServerTestRequest(
+                        transport,
+                        "call",
+                        {"tool_name": name, "tool_arguments": {"requestBody": body}},
+                        connection=connection,
+                    )
+                )
+                result = result.get("result", result)
+                assert not result.get("isError", False), result
+
+        env = {"TARGET_API_BASE_URL": f"http://127.0.0.1:{server.server_port}"}
+        if transport == "stdio":
+            asyncio.run(
+                exercise(
+                    ConnectionSettings(
+                        server_cmd=f"node {out / 'build' / 'index.js'}", env=env
+                    )
+                )
+            )
+        else:
+            with running_server(out, **env) as (url, _):
+                asyncio.run(exercise(ConnectionSettings(endpoint_url=url + "/mcp")))
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+    assert Capture.requests == [
+        ("/jsonbody", '{"a":"é +%&=","n":2}', "application/json"),
+        ("/textbody", "é +%&=", "text/plain"),
+    ]

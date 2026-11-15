@@ -224,3 +224,56 @@ def test_whole_query_reference_override_keeps_trace_and_schema() -> None:
         "selected",
         "items",
     )
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        {"format": "binary"},
+        {"format": "byte"},
+        {"contentEncoding": "base64"},
+        {"contentMediaType": "application/octet-stream"},
+    ],
+)
+@pytest.mark.parametrize("additional", [False, True])
+def test_styled_object_binary_children_rejected_strict_and_skip(
+    marker: dict, *, additional: bool
+) -> None:
+    child = {"type": "string", **marker}
+    object_schema = (
+        {
+            "type": "object",
+            "additionalProperties": {"$ref": "#/components/schemas/Child"},
+        }
+        if additional
+        else {
+            "type": "object",
+            "properties": {"file": {"$ref": "#/components/schemas/Child"}},
+        }
+    )
+    media = {
+        "schema": {"type": "object", "properties": {"obj": object_schema}},
+        "encoding": {"obj": {"style": "form"}},
+    }
+    spec = {
+        "openapi": "3.2.1",
+        "components": {"schemas": {"Child": child}},
+        "paths": {
+            "/send": {
+                "post": {
+                    "operationId": "send",
+                    "requestBody": {
+                        "content": {"application/x-www-form-urlencoded": media}
+                    },
+                    "responses": {"200": {"description": "OK"}},
+                }
+            }
+        },
+    }
+    with pytest.raises(FormMediaError, match="Binary"):
+        normalize_form_media(spec, media)
+    with pytest.raises(MappingError, match="Binary"):
+        Mapper(spec).map_tools()
+    mapper = Mapper(spec, on_mapping_error="skip")
+    assert mapper.map_tools() == []
+    assert "Binary" in mapper.get_report()["skipped_operations"][0]["reason"]
