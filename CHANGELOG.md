@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 **Form serialization migration:** Earlier generated servers used Axios's implicit form serializer, which could emit names such as `tags[]` and `object[key]`. Declared form encoding now uses repeated array names or comma-separated items and serializes content-mode objects as JSON. Check affected endpoints before regenerating; see the [migration guide](https://nihal1294.github.io/openapi-to-mcp/guides/form-serialization/#migration).
 
+## [0.16.0](https://github.com/nihal1294/openapi-to-mcp/compare/v0.15.0...v0.16.0) (2026-11-15)
+
+
+### Features
+
+* support modern MCP transports ([#168](https://github.com/nihal1294/openapi-to-mcp/issues/168)) ([8b573bf](https://github.com/nihal1294/openapi-to-mcp/commit/8b573bf56634c2a9ee177901ebfd390ab3d758e6))
+
+
+### Bug Fixes
+
+* describe all supported success schemas ([#169](https://github.com/nihal1294/openapi-to-mcp/issues/169)) ([d525fec](https://github.com/nihal1294/openapi-to-mcp/commit/d525fec2ea631ec3063e3af653c3c923eced7720))
+* propagate tool request cancellation ([#170](https://github.com/nihal1294/openapi-to-mcp/issues/170)) ([b64c19c](https://github.com/nihal1294/openapi-to-mcp/commit/b64c19c569422e3fe4e939a52fbc355cd68730f0))
+
 ## [0.15.0](https://github.com/nihal1294/openapi-to-mcp/compare/v0.14.0...v0.15.0) (2026-11-15)
 
 
