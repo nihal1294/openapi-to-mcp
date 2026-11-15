@@ -20,6 +20,7 @@ try:
         RELEASE_BRANCH,
         artifact_hashes,
         git,
+        git_text,
         metadata_digest,
         project_version,
         resolve,
@@ -39,6 +40,7 @@ except ModuleNotFoundError:
         RELEASE_BRANCH,
         artifact_hashes,
         git,
+        git_text,
         metadata_digest,
         project_version,
         resolve,
@@ -122,7 +124,9 @@ def override_message(message: str, body: str) -> str:
         raise ValueError(
             "Expected one complete BEGIN_COMMIT_OVERRIDE/END_COMMIT_OVERRIDE block."
         )
-    return body.split(begin, 1)[1].split(end, 1)[0].strip()
+    effective = body.split(begin, 1)[1].split(end, 1)[0]
+    extract_migration_note(effective)
+    return effective.strip(" \t\r\n")
 
 
 def intent_message(message: str, body: str) -> str:
@@ -145,7 +149,7 @@ def release_range(repository: str, baseline: str, head: str) -> dict:
     for sha in git(
         "rev-list", "--first-parent", "--reverse", f"{baseline}..{head}"
     ).splitlines():
-        message = git("show", "-s", "--format=%B", sha)
+        message = git_text("show", "-s", "--format=%B", sha)
         associated = api(f"repos/{repository}/commits/{sha}/pulls")
         merged = [
             p

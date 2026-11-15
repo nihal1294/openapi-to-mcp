@@ -24,6 +24,10 @@ DISTRIBUTION_COUNT = 2
 SHA_PATTERN = re.compile(r"[0-9a-f]{40}\Z")
 
 
+def git_text(*args: str) -> str:
+    return subprocess.check_output(["git", *args]).decode("utf-8", errors="strict")  # noqa: S603, S607
+
+
 def git(*args: str) -> str:
     return subprocess.check_output(["git", *args], text=True).strip()  # noqa: S603, S607
 

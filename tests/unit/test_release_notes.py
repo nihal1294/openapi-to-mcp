@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from scripts import release_automation as automation
+from scripts import release_metadata
 from scripts.release_notes import build_release_notes, extract_migration_note
 from scripts.release_notes_cli import verify
 from tests.unit.test_release_metadata import BASE, MERGE, REPO, evidence, release_pr
@@ -259,3 +260,53 @@ def test_workflow_verifies_notes_with_python_314_before_publication() -> None:
     assert github.index("scripts/release_notes_cli.py verify") < github.index(
         "- name: Create GitHub Release"
     )
+
+
+@pytest.mark.parametrize("separator", ["\u0085", "\u2028", "\u2029"])
+def test_release_range_rejects_trailing_unicode_separators_from_git(
+    monkeypatch, separator
+) -> None:
+    sha = "a" * 40
+    message = f"fix: change\n\nMigration: use new{separator}\n"
+
+    def check_output(command, *, text=False):
+        result = f"{sha}\n" if command[1] == "rev-list" else message
+        return result if text else result.encode("utf-8")
+
+    monkeypatch.setattr(release_metadata.subprocess, "check_output", check_output)
+    monkeypatch.setattr(automation, "api", lambda *_args: [])
+    monkeypatch.setattr(automation, "resolve", lambda ref: ref)
+    monkeypatch.setattr(
+        automation, "analyze_changes", lambda *_args: {"minimum": "patch"}
+    )
+    with pytest.raises(ValueError, match="control"):
+        automation.release_range("owner/repo", "base", "head")
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_release_range_preserves_allowed_commit_note_text(monkeypatch, newline) -> None:
+    sha = "a" * 40
+    message = f"fix: change{newline}{newline}Migration: café\tnew{newline}"
+
+    def check_output(command, *, text=False):
+        result = f"{sha}\n" if command[1] == "rev-list" else message
+        return result if text else result.encode("utf-8")
+
+    monkeypatch.setattr(release_metadata.subprocess, "check_output", check_output)
+    monkeypatch.setattr(automation, "api", lambda *_args: [])
+    monkeypatch.setattr(automation, "resolve", lambda ref: ref)
+    monkeypatch.setattr(
+        automation, "analyze_changes", lambda *_args: {"minimum": "patch"}
+    )
+    history = automation.release_range("owner/repo", "base", "head")
+    assert (
+        build_release_notes("owner/repo", "0.15.0", history)["entries"][0]["text"]
+        == "café\tnew"
+    )
+
+
+@pytest.mark.parametrize("separator", ["\u0085", "\u2028", "\u2029"])
+def test_override_does_not_trim_invalid_trailing_note(separator) -> None:
+    body = f"```\nBEGIN_COMMIT_OVERRIDE\nfix: change\nMigration: use new{separator}\nEND_COMMIT_OVERRIDE\n```"
+    with pytest.raises(ValueError, match="control"):
+        automation.intent_message("fix: original", body)
