@@ -20,6 +20,10 @@ from openapi_to_mcp.common.tool_runtime import (
 )
 from openapi_to_mcp.mapping import Mapper
 from openapi_to_mcp.mapping.tool_grouping import apply_tool_grouping
+from openapi_to_mcp.mapping.tool_metadata import (
+    apply_description_mode,
+    validate_tool_names,
+)
 from openapi_to_mcp.policy import apply_policy
 
 if TYPE_CHECKING:
@@ -67,8 +71,12 @@ def _map_tools(
         on_schema_error=behavior.on_schema_error,
         policy_config=request.policy_config,
     )
-    tools = apply_policy(mapper.map_tools(), request.policy_config)
+    tools = apply_description_mode(mapper.map_tools(), behavior.tool_descriptions)
+    tools = apply_policy(tools, request.policy_config)
     tools = apply_tool_grouping(tools, behavior.tool_grouping)
+    warnings = validate_tool_names(tools, behavior.tool_name_policy)
+    for warning in warnings:
+        click.echo(f"Warning: {warning['message']}", err=True)
     logger.info("Mapped %d tools.", len(tools))
     _raise_if_no_tools(tools, request.policy_config)
     return mapper, tools
@@ -82,6 +90,8 @@ def _generation_report(
     return {
         "strict_mode": settings.behavior.strict,
         "tool_grouping": settings.behavior.tool_grouping,
+        "tool_descriptions": settings.behavior.tool_descriptions,
+        "tool_name_policy": settings.behavior.tool_name_policy,
         "transport": settings.transport.kind,
         "policy_file": str(policy.source_path) if policy is not None else None,
         **mapper.get_report(),
@@ -139,5 +149,7 @@ def generate_project(request: GenerationRequest) -> None:
     )
     logger.info("Generating files in: %s", request.output_dir)
     Generator(output_dir=request.output_dir, context=context).generate_files()
-    _write_report(request, _generation_report(mapper, request, len(tools)))
+    report = _generation_report(mapper, request, len(tools))
+    report["tool_name_warnings"] = validate_tool_names(tools, "preserve")
+    _write_report(request, report)
     logger.info("File generation complete.")

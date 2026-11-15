@@ -117,6 +117,20 @@ generation_runtime_options = [
         help="Runtime validation applied by the generated server.",
     ),
     click.option(
+        "--tool-descriptions",
+        default="spec",
+        show_default=True,
+        type=click.Choice(["spec", "method"], case_sensitive=False),
+        help="Choose imported or method-only tool descriptions.",
+    ),
+    click.option(
+        "--tool-name-policy",
+        default="preserve",
+        show_default=True,
+        type=click.Choice(["preserve", "validate"], case_sensitive=False),
+        help="Preserve names with warnings or require recommended names.",
+    ),
+    click.option(
         "--tool-grouping",
         default="none",
         show_default=True,

@@ -41,11 +41,24 @@ def parse_policy_config(payload: dict[str, Any], source_path: Path) -> PolicyCon
     tools = mapping_value(payload.get("tools"), "tools")
     annotations = mapping_value(tools.get("annotations"), "tools.annotations")
     _reject_unknown(annotations, {"operations", "names"}, "tools.annotations")
+    descriptions = tools.get("descriptions", {})
+    if not isinstance(descriptions, dict):
+        raise PolicyConfigError("`tools.descriptions` must be a mapping.")
+    _reject_unknown(descriptions, {"operations", "names"}, "tools.descriptions")
+    for key in ("operations", "names"):
+        if key in descriptions and not isinstance(descriptions[key], dict):
+            raise PolicyConfigError(f"`tools.descriptions.{key}` must be a mapping.")
     renames = mapping_value(tools.get("rename"), "tools.rename")
     auth = mapping_value(payload.get("auth"), "auth")
     execution = mapping_value(payload.get("execution"), "execution")
     return PolicyConfig(
         source_path=source_path,
+        description_operations=parse_string_mapping(
+            descriptions.get("operations"), "tools.descriptions.operations"
+        ),
+        description_names=parse_string_mapping(
+            descriptions.get("names"), "tools.descriptions.names"
+        ),
         generation=_parse_generation_defaults(payload.get("generate")),
         include=_parse_selectors(tools.get("include"), "tools.include"),
         exclude=_parse_selectors(tools.get("exclude"), "tools.exclude"),
@@ -86,6 +99,16 @@ def _parse_generation_defaults(value: object) -> GenerationDefaults:
             config.get("tool_grouping"),
             "generate.tool_grouping",
             TOOL_GROUPING_MODES,
+        ),
+        tool_descriptions=optional_choice(
+            config.get("tool_descriptions"),
+            "generate.tool_descriptions",
+            {"spec", "method"},
+        ),
+        tool_name_policy=optional_choice(
+            config.get("tool_name_policy"),
+            "generate.tool_name_policy",
+            {"preserve", "validate"},
         ),
         telemetry=optional_choice(
             "off" if config.get("telemetry") is False else config.get("telemetry"),

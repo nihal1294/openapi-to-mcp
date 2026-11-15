@@ -67,6 +67,15 @@ def _apply_tool_overrides(tool: dict[str, Any], policy: PolicyConfig) -> dict[st
     original_name = _tool_name(tool)
     renamed_name = _resolve_rename(operation, original_name, policy)
     tool["name"] = renamed_name
+    description = _lookup_override(
+        operation,
+        original_name,
+        renamed_name,
+        policy.description_operations,
+        policy.description_names,
+    )
+    if description is not None:
+        tool["description"] = description
     _apply_annotation_override(tool, operation, original_name, renamed_name, policy)
     _apply_auth_override(tool, operation, original_name, renamed_name, policy)
     _apply_execution_override(tool, operation, original_name, renamed_name, policy)

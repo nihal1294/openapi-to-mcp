@@ -26,6 +26,8 @@ openapi-to-mcp generate [OPTIONS]
 | `--on-schema-error` | No | strict=`fail`, non-strict=`skip` | How to handle schema conversion failures while mapping operations |
 | `--runtime-validation` | No | `input` | Runtime validation mode compiled into the generated server (`none` or `input`) |
 | `--tool-grouping` | No | `none` | Optional grouped tool naming strategy (`none` or `tag-prefix`) |
+| `--tool-descriptions` | No | `spec` | Use imported descriptions (`spec`) or fixed HTTP method descriptions (`method`) |
+| `--tool-name-policy` | No | `preserve` | Warn on non-recommended names (`preserve`) or reject them (`validate`) |
 
 ## Examples
 
