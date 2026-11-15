@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from pathlib import Path
 
@@ -23,6 +24,7 @@ class SpecLoader:
         self.source = source
         self.spec = None
         self._content = None
+        self._validated = False
 
     def load_and_validate(self) -> dict:
         """
@@ -35,10 +37,20 @@ class SpecLoader:
             SpecLoaderError: If loading or validation fails.
         """
         logger.info("Loading OpenAPI spec from: %s", self.source)
+        self._validated = False
         self._load_content()
         self._parse_and_validate()
+        self._validated = True
         logger.info("OpenAPI spec loaded and validated successfully.")
         return self.spec
+
+    def loaded_text_sha256(self) -> str:
+        """Hash the decoded text used in the last successful validation."""
+        if not self._validated or self._content is None:
+            raise SpecLoaderError(
+                "Internal error: no validated spec content available."
+            )
+        return hashlib.sha256(self._content.encode("utf-8")).hexdigest()
 
     def _load_content(self) -> None:
         """
