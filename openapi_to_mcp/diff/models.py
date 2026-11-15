@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-Impact = Literal["breaking", "non_breaking"]
-FailMode = Literal["breaking", "none"]
+Impact = Literal["breaking", "non_breaking", "review"]
+FailMode = Literal["breaking", "none", "review"]
 
 
 @dataclass(frozen=True)
@@ -52,9 +52,15 @@ class DiffReport:
         """Return the number of non-breaking changes."""
         return sum(1 for change in self.changes if change.impact == "non_breaking")
 
+    def review_count(self) -> int:
+        """Return the number of changes requiring review."""
+        return sum(1 for change in self.changes if change.impact == "review")
+
     def exit_code(self, fail_on: FailMode) -> int:
         """Return the command exit code for the requested fail policy."""
-        if fail_on == "breaking" and self.breaking_count() > 0:
+        if fail_on in ("breaking", "review") and self.breaking_count() > 0:
+            return 2
+        if fail_on == "review" and self.review_count() > 0:
             return 2
         return 0
 
@@ -65,6 +71,7 @@ class DiffReport:
             "after_source": self.after_source,
             "breaking": self.breaking_count(),
             "non_breaking": self.non_breaking_count(),
+            "review": self.review_count(),
             "exit_code": self.exit_code(fail_on),
             "changes": [change.to_dict() for change in self.changes],
         }

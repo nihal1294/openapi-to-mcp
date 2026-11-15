@@ -50,12 +50,45 @@ def _impact(reasons: list[str]) -> str:
         return "breaking"
     if any(
         reason.startswith(
-            ("generated-tool-added", "cli-command-added", "cli-option-added")
+            (
+                "generated-tool-added",
+                "cli-command-added",
+                "cli-option-added",
+                "cli-option-choices-added",
+            )
         )
         for reason in reasons
     ):
         return "minor"
     return "none"
+
+
+def _is_choice_extension(before: object, after: object) -> bool:
+    """Recognize a strict choice superset with otherwise identical type metadata."""
+    for metadata in (before, after):
+        if (
+            not isinstance(metadata, dict)
+            or metadata.get("kind") != "choice"
+            or not isinstance(metadata.get("case_sensitive"), bool)
+        ):
+            return False
+        choices = metadata.get("choices")
+        if (
+            not isinstance(choices, list)
+            or not choices
+            or not all(isinstance(choice, str) for choice in choices)
+        ):
+            return False
+        normalized = (
+            choices
+            if metadata["case_sensitive"]
+            else [choice.casefold() for choice in choices]
+        )
+        if len(set(normalized)) != len(choices):
+            return False
+    return {key: value for key, value in before.items() if key != "choices"} == {
+        key: value for key, value in after.items() if key != "choices"
+    } and set(before["choices"]) < set(after["choices"])
 
 
 def compare_contracts(  # noqa: C901, PLR0912
@@ -98,7 +131,14 @@ def compare_contracts(  # noqa: C901, PLR0912
             if base_metadata.get("default") != head_metadata.get("default"):
                 reasons.append(f"cli-option-default-changed:{command}:{option}")
             if base_metadata.get("type") != head_metadata.get("type"):
-                reasons.append(f"cli-option-type-changed:{command}:{option}")
+                change = (
+                    "choices-added"
+                    if _is_choice_extension(
+                        base_metadata.get("type"), head_metadata.get("type")
+                    )
+                    else "type-changed"
+                )
+                reasons.append(f"cli-option-{change}:{command}:{option}")
     for command, head_command in head_cli.items():
         if command not in base_cli:
             reasons.append(f"cli-command-added:{command}")
@@ -507,6 +547,7 @@ def _option_type(parameter: object) -> dict[str, object]:
     choices = getattr(option_type, "choices", None)
     if choices is not None:
         result["choices"] = sorted(str(choice) for choice in choices)
+        result["case_sensitive"] = option_type.case_sensitive
     for attribute in ("file_okay", "dir_okay", "exists"):
         value = getattr(option_type, attribute, None)
         if value is not None:

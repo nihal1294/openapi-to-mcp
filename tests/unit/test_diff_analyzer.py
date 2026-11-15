@@ -108,13 +108,14 @@ def test_diff_analyzer_reports_rename_and_contract_changes() -> None:
     assert report.breaking_count() == 4
     assert codes == [
         "tool_renamed",
+        "description_changed",
         "input_schema_changed",
         "output_schema_changed",
         "auth_changed",
     ]
 
 
-def test_diff_analyzer_reports_rename_only_when_contract_is_identical() -> None:
+def test_diff_analyzer_reports_rename_and_changed_fallback_description() -> None:
     before = _spec(
         {
             "/pets": {
@@ -139,7 +140,11 @@ def test_diff_analyzer_reports_rename_only_when_contract_is_identical() -> None:
     report = DiffAnalyzer(before, after).analyze("before.json", "after.json")
 
     assert report.breaking_count() == 1
-    assert [change.code for change in report.changes] == ["tool_renamed"]
+    assert [change.code for change in report.changes] == [
+        "tool_renamed",
+        "description_changed",
+    ]
+    assert report.review_count() == 1
 
 
 def _spec(paths: dict, *, components: dict | None = None) -> dict:

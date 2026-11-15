@@ -9,7 +9,12 @@ import rich_click as click
 
 from openapi_to_mcp.adapters.spec_loader import SpecLoader
 from openapi_to_mcp.common import MappingError
-from openapi_to_mcp.common.exceptions import SpecLoaderError
+from openapi_to_mcp.common.exceptions import (
+    GenerationError,
+    PolicyConfigError,
+    SchemaError,
+    SpecLoaderError,
+)
 from openapi_to_mcp.common.terminal import (
     print_error_panel,
     print_section,
@@ -17,6 +22,8 @@ from openapi_to_mcp.common.terminal import (
     print_warning_panel,
 )
 from openapi_to_mcp.diff import DiffAnalyzer, DiffReport
+from openapi_to_mcp.mapping.tool_grouping import TOOL_GROUPING_MODES
+from openapi_to_mcp.policy import load_policy_config
 
 OutputFormat = Literal["json", "text"]
 
@@ -47,31 +54,78 @@ if TYPE_CHECKING:
 )
 @click.option(
     "--fail-on",
-    type=click.Choice(["none", "breaking"], case_sensitive=False),
+    type=click.Choice(["none", "breaking", "review"], case_sensitive=False),
     default="none",
     show_default=True,
     help="Exit non-zero when the selected change class is present.",
 )
+@click.option("--before-config", type=click.Path(dir_okay=False))
+@click.option("--after-config", type=click.Path(dir_okay=False))
+@click.option("--before-no-config", is_flag=True)
+@click.option("--after-no-config", is_flag=True)
+@click.option("--before-tool-grouping", type=click.Choice(sorted(TOOL_GROUPING_MODES)))
+@click.option("--after-tool-grouping", type=click.Choice(sorted(TOOL_GROUPING_MODES)))
+@click.option("--before-tool-descriptions", type=click.Choice(["spec", "method"]))
+@click.option("--after-tool-descriptions", type=click.Choice(["spec", "method"]))
+@click.option("--before-tool-name-policy", type=click.Choice(["preserve", "validate"]))
+@click.option("--after-tool-name-policy", type=click.Choice(["preserve", "validate"]))
 def diff(
     before_openapi_json: str,
     after_openapi_json: str,
     output_format: OutputFormat,
     fail_on: FailMode,
+    **options: object,
 ) -> None:
     """Compare two OpenAPI specs as generated MCP tool surfaces."""
-    report = _build_report(before_openapi_json, after_openapi_json)
+    report = _build_report(before_openapi_json, after_openapi_json, options)
     _render_report(report, output_format, fail_on)
     raise click.exceptions.Exit(report.exit_code(fail_on))
 
 
-def _build_report(before_source: str, after_source: str) -> DiffReport:
+def _build_report(
+    before_source: str, after_source: str, options: dict | None = None
+) -> DiffReport:
     before_spec = _load_spec(before_source)
     after_spec = _load_spec(after_source)
     try:
-        return DiffAnalyzer(before_spec, after_spec).analyze(
-            before_source, after_source
+        options = options or {}
+        sides = {}
+        for side in ("before", "after"):
+            config = options.get(f"{side}_config")
+            if config and options.get(f"{side}_no_config"):
+                raise click.UsageError(
+                    f"--{side}-config and --{side}-no-config are mutually exclusive"
+                )
+            sides[side] = {
+                "policy": load_policy_config(config) if config else None,
+                **{
+                    key: options.get(f"{side}_{key}")
+                    for key in (
+                        "tool_grouping",
+                        "tool_descriptions",
+                        "tool_name_policy",
+                    )
+                },
+            }
+        analyzer = DiffAnalyzer(before_spec, after_spec)
+        if not any(value for side in sides.values() for value in side.values()):
+            return analyzer.analyze(before_source, after_source)
+        return analyzer.analyze(
+            before_source,
+            after_source,
+            before_options=sides["before"],
+            after_options=sides["after"],
         )
-    except MappingError as exc:
+    except PolicyConfigError as exc:
+        raise click.ClickException(
+            "Unable to load or validate the diff policy configuration."
+        ) from exc
+    except (
+        MappingError,
+        GenerationError,
+        SchemaError,
+        ValueError,
+    ) as exc:
         err_msg = (
             f"Unable to diff MCP surface: {exc}. "
             "Run `openapi-to-mcp doctor` on both specs first."
@@ -114,6 +168,7 @@ def _print_summary(report: DiffReport, fail_on: FailMode) -> None:
         f"After: {report.after_source}",
         f"Breaking: {report.breaking_count()}",
         f"Non-breaking: {report.non_breaking_count()}",
+        f"Review: {report.review_count()}",
         f"Exit code: {report.exit_code(fail_on)}",
     ]
     if report.breaking_count() > 0:

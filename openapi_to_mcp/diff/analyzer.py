@@ -22,10 +22,17 @@ class DiffAnalyzer:
         self.before_spec = before_spec
         self.after_spec = after_spec
 
-    def analyze(self, before_source: str, after_source: str) -> DiffReport:
+    def analyze(
+        self,
+        before_source: str,
+        after_source: str,
+        *,
+        before_options: dict[str, Any] | None = None,
+        after_options: dict[str, Any] | None = None,
+    ) -> DiffReport:
         """Return a report of meaningful MCP-surface changes."""
-        before_tools = build_tool_surfaces(self.before_spec)
-        after_tools = build_tool_surfaces(self.after_spec)
+        before_tools = build_tool_surfaces(self.before_spec, **(before_options or {}))
+        after_tools = build_tool_surfaces(self.after_spec, **(after_options or {}))
         before_by_op = {tool.operation_key: tool for tool in before_tools.values()}
         after_by_op = {tool.operation_key: tool for tool in after_tools.values()}
         report = DiffReport(before_source=before_source, after_source=after_source)
@@ -93,6 +100,52 @@ class DiffAnalyzer:
                         details={"before_tool": before.name, "after_tool": after.name},
                     )
                 )
+            for code, fields in (
+                ("description_changed", ("description", "title")),
+                ("annotations_changed", ("annotations",)),
+                ("execution_changed", ("execution",)),
+            ):
+                left = (
+                    before.execution if code == "execution_changed" else before.metadata
+                )
+                right = (
+                    after.execution if code == "execution_changed" else after.metadata
+                )
+                left, right = left or {}, right or {}
+                changed = [
+                    field
+                    for field in fields
+                    if canonicalize({field: left[field]} if field in left else {})
+                    != canonicalize({field: right[field]} if field in right else {})
+                ]
+                if code == "execution_changed" and changed:
+                    before_execution = left.get("execution", {})
+                    after_execution = right.get("execution", {})
+                    changed = sorted(
+                        key
+                        for key in before_execution.keys() | after_execution.keys()
+                        if canonicalize(
+                            {key: before_execution[key]}
+                            if key in before_execution
+                            else {}
+                        )
+                        != canonicalize(
+                            {key: after_execution[key]}
+                            if key in after_execution
+                            else {}
+                        )
+                    ) or ["execution"]
+                if changed:
+                    report.add(
+                        DiffChange(
+                            code=code,
+                            impact="review",
+                            message=f"Tool fields changed: {', '.join(changed)}.",
+                            location=_format_operation(operation),
+                            hint="Review the changed tool behavior and metadata.",
+                            details={"fields": changed},
+                        )
+                    )
             self._record_contract_change(
                 report, operation, "input_schema_changed", before, after
             )
