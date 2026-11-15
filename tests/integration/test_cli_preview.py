@@ -1,6 +1,7 @@
 import json
 import re
 
+import pytest
 import yaml
 from click.testing import CliRunner
 
@@ -8,6 +9,124 @@ from openapi_to_mcp.cli import cli
 from openapi_to_mcp.commands.generation_models import GenerationBehavior
 from openapi_to_mcp.mapping.preparation import prepare_tools
 from openapi_to_mcp.policy import load_policy_config
+
+
+@pytest.mark.parametrize("output_format", ["text", "json"])
+@pytest.mark.parametrize("malformed_yaml", [True, False])
+def test_preview_policy_errors_do_not_disclose_values(
+    tmp_path, runner, output_format, malformed_yaml
+) -> None:
+    marker = "private-policy-value"
+    policy = tmp_path / "policy.yaml"
+    if malformed_yaml:
+        content = (
+            "auth:\n  names:\n    getPet:\n      security_schemes:\n"
+            f"        bearer:\n          x-secret: [{marker}\n"
+        )
+    else:
+        content = yaml.safe_dump(
+            {"auth": {"names": {marker: {"security_schemes": "invalid"}}}}
+        )
+    policy.write_text(content)
+    result = runner.invoke(
+        cli,
+        [
+            "preview",
+            "-o",
+            "tests/resources/test_openapi.yaml",
+            "--config",
+            str(policy),
+            "--format",
+            output_format,
+        ],
+    )
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert marker not in result.output
+    assert "Invalid policy configuration" in result.stderr
+
+
+def test_preview_help_has_shared_mapping_defaults_and_unique_options(runner) -> None:
+    names = [
+        "strict",
+        "on_mapping_error",
+        "on_schema_error",
+        "tool_descriptions",
+        "tool_name_policy",
+        "tool_grouping",
+    ]
+    commands = [cli.commands[name] for name in ("generate", "run", "preview")]
+    for command in commands:
+        options = {parameter.name: parameter for parameter in command.params}
+        assert len(options) == len(command.params)
+        assert [
+            parameter.name for parameter in command.params if parameter.name in names
+        ] == names
+        for name in names:
+            parameter, reference = (
+                options[name],
+                commands[0].params[
+                    next(i for i, p in enumerate(commands[0].params) if p.name == name)
+                ],
+            )
+            assert parameter.default == reference.default
+            assert parameter.type.to_info_dict() == reference.type.to_info_dict()
+    result = runner.invoke(cli, ["preview", "--help"])
+    assert result.exit_code == 0
+    for flag in (
+        "--strict",
+        "--on-mapping-error",
+        "--on-schema-error",
+        "--tool-descriptions",
+        "--tool-name-policy",
+        "--tool-grouping",
+    ):
+        assert flag in result.stdout
+
+
+def test_preview_cli_overrides_all_shared_policy_settings(tmp_path, runner) -> None:
+    settings = {
+        "strict": False,
+        "on_mapping_error": "skip",
+        "on_schema_error": "skip",
+        "tool_descriptions": "method",
+        "tool_name_policy": "validate",
+        "tool_grouping": "tag-prefix",
+    }
+    policy = tmp_path / "policy.yaml"
+    policy.write_text(yaml.safe_dump({"generate": settings}))
+    result = runner.invoke(
+        cli,
+        [
+            "preview",
+            "-o",
+            "tests/resources/test_openapi.yaml",
+            "--config",
+            str(policy),
+            "--format",
+            "json",
+            "--strict",
+            "--on-mapping-error",
+            "fail",
+            "--on-schema-error",
+            "fail",
+            "--tool-descriptions",
+            "spec",
+            "--tool-name-policy",
+            "preserve",
+            "--tool-grouping",
+            "none",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["settings"] == {
+        "strict": True,
+        "on_mapping_error": "fail",
+        "on_schema_error": "fail",
+        "tool_descriptions": "spec",
+        "tool_name_policy": "preserve",
+        "tool_grouping": "none",
+    }
 
 
 def test_preview_json_reports_public_catalog() -> None:
