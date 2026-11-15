@@ -85,7 +85,7 @@ class Mapper:
         self._tool_name_counts: dict[str, int] = {}
         self._used_tool_names: set[str] = set()
 
-    def map_tools(self) -> list[dict[str, Any]]:  # noqa: C901
+    def map_tools(self) -> list[dict[str, Any]]:  # noqa: C901, PLR0915
         """
         Iterate through the OpenAPI spec and generate MCP tool definitions.
 
@@ -175,6 +175,7 @@ class Mapper:
                 if row is not None:
                     row["status"] = "selected"
                     row["final_name"] = tool_definition["name"]
+                    tool_definition["_trace_index"] = len(self.trace) - 1
             except SchemaError as exc:
                 self._handle_schema_error(method, path, exc)
             except PolicyConfigError:

@@ -523,3 +523,146 @@ def test_text_and_json_preserve_each_skipped_operation_source(tmp_path, runner) 
             == f"mapping skipped: {json.dumps(row['skip_reason'], ensure_ascii=True)}"
         )
         assert row["source_location"].endswith(location)
+
+
+def test_trace_associates_mapped_copy_with_its_own_policy_decisions(
+    tmp_path, runner
+) -> None:
+    spec = {
+        "openapi": "3.2.1",
+        "info": {"title": "Test", "version": "1"},
+        "paths": {
+            "/x": {
+                "additionalOperations": {
+                    "Copy": {
+                        "operationId": "bad",
+                        "responses": {"200": {"description": "ok"}},
+                    },
+                    "COPY": {
+                        "operationId": "good",
+                        "tags": ["Pets"],
+                        "responses": {"200": {"description": "ok"}},
+                    },
+                }
+            }
+        },
+    }
+    source = tmp_path / "spec.json"
+    source.write_text(json.dumps(spec))
+    policy = tmp_path / "policy.yaml"
+    cases = [
+        (
+            {"tools": {"rename": {"names": {"good": "renamed"}}}},
+            ["--tool-grouping", "tag-prefix"],
+            "selected",
+            "renamed",
+            "rename",
+        ),
+        (
+            {"tools": {"exclude": {"names": ["good"]}}},
+            [],
+            "mapped_then_excluded",
+            None,
+            "selection",
+        ),
+        ({}, ["--tool-grouping", "tag-prefix"], "selected", "pets_good", "grouping"),
+    ]
+    for config, options, status, final, decision in cases:
+        policy.write_text(yaml.safe_dump(config))
+        args = [
+            "preview",
+            "-o",
+            str(source),
+            "--config",
+            str(policy),
+            "--no-strict",
+            "--format",
+            "json",
+            *options,
+        ]
+        result = runner.invoke(cli, args)
+        assert result.exit_code == 0, result.output
+        report = json.loads(result.stdout)
+        skipped, selected = report["operations"]
+        assert skipped["status"] == "skipped"
+        assert skipped["final_name"] is None
+        assert all(
+            item["kind"] not in {"selection", "rename", "grouping"}
+            for item in skipped["decisions"]
+        )
+        assert selected["status"] == status
+        assert selected["final_name"] == final
+        assert any(item["kind"] == decision for item in selected["decisions"])
+        assert [tool["name"] for tool in report["tools"]] == ([final] if final else [])
+        behavior = GenerationBehavior(
+            tool_grouping="tag-prefix" if options else "none",
+            telemetry="off",
+            strict=False,
+            runtime_validation="input",
+            on_mapping_error=None,
+            on_schema_error=None,
+        )
+        resolved = load_policy_config(str(policy))
+        plain = prepare_tools(spec, behavior=behavior, policy=resolved)
+        traced = prepare_tools(spec, behavior=behavior, policy=resolved, trace=True)
+        assert plain.tools == traced.tools
+        assert plain.public_tools == traced.public_tools
+        assert plain.runtime_registry == traced.runtime_registry
+        assert plain.mapper.mcp_tools == traced.mapper.mcp_tools
+        assert plain.report == traced.report
+
+
+def test_trace_association_does_not_use_formatted_source_location(
+    tmp_path, runner
+) -> None:
+    spec = {
+        "openapi": "3.2.1",
+        "info": {"title": "Test", "version": "1"},
+        "paths": {
+            "/x": {
+                "additionalOperations": {
+                    "COPY.get": {"responses": {"200": {"description": "ok"}}}
+                }
+            },
+            "/x.additionalOperations.COPY": {
+                "get": {
+                    "operationId": "good",
+                    "tags": ["Pets"],
+                    "responses": {"200": {"description": "ok"}},
+                }
+            },
+        },
+    }
+    source = tmp_path / "spec.json"
+    source.write_text(json.dumps(spec))
+    result = runner.invoke(
+        cli,
+        [
+            "preview",
+            "-o",
+            str(source),
+            "--no-strict",
+            "--tool-grouping",
+            "tag-prefix",
+            "--format",
+            "json",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    skipped, selected = json.loads(result.stdout)["operations"]
+    assert skipped["source_location"] == selected["source_location"]
+    assert skipped["status"] == "skipped"
+    assert selected["final_name"] == "pets_good"
+
+
+def test_policy_import_succeeds_in_fresh_interpreter() -> None:
+    import subprocess  # noqa: PLC0415
+    import sys  # noqa: PLC0415
+
+    result = subprocess.run(
+        [sys.executable, "-c", "from openapi_to_mcp.policy import apply_policy"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr

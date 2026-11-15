@@ -6,28 +6,13 @@ from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
 from openapi_to_mcp.common.exceptions import PolicyConfigError
+from openapi_to_mcp.common.trace import trace_row
 
 if TYPE_CHECKING:
     from openapi_to_mcp.policy.models import (
         ExecutionOverride,
         PolicyConfig,
         SelectorSet,
-    )
-
-
-def _trace_row(
-    trace: list[dict[str, Any]] | None, tool: dict[str, Any]
-) -> dict[str, Any] | None:
-    if trace is None:
-        return None
-    return next(
-        (
-            row
-            for row in trace
-            if row["method"] == tool["_original_method"].upper()
-            and row["path"] == tool["_original_path"]
-        ),
-        None,
     )
 
 
@@ -74,7 +59,7 @@ def apply_policy(
     updated = []
     for tool in mcp_tools:
         selected, decision = selection_decision(tool, policy)
-        row = _trace_row(trace, tool)
+        row = trace_row(trace, tool)
         if row is not None:
             row["decisions"].append(decision)
         if not selected:
