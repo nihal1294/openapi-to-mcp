@@ -13,7 +13,7 @@ def test_build_tool_surfaces_rejects_partial_mapper_results(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "openapi_to_mcp.diff.surface.Mapper",
+        "openapi_to_mcp.mapping.preparation.Mapper",
         _FakeMapperWithSkippedSchemas,
     )
 

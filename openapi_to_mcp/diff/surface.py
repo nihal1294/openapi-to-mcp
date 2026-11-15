@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from openapi_to_mcp.commands.generation_models import GenerationBehavior
 from openapi_to_mcp.common import MappingError
-from openapi_to_mcp.common.tool_runtime import (
-    build_public_tools,
-    build_runtime_tool_registry,
-)
-from openapi_to_mcp.mapping.mapper import Mapper
+from openapi_to_mcp.mapping.preparation import prepare_tools
+
+if TYPE_CHECKING:
+    from openapi_to_mcp.policy.models import PolicyConfig
 
 _SKIPPED_OPERATION_PREVIEW_LIMIT = 3
 
@@ -27,6 +27,8 @@ class ToolSurface:
     output_schema: dict[str, Any] | None
     security: list[dict[str, Any]] | None
     security_schemes: dict[str, dict[str, Any]]
+    metadata: dict[str, Any] | None = None
+    execution: dict[str, Any] | None = None
 
     @property
     def operation_key(self) -> tuple[str, str]:
@@ -34,18 +36,35 @@ class ToolSurface:
         return (self.method.upper(), self.path)
 
 
-def build_tool_surfaces(spec: dict[str, Any]) -> dict[str, ToolSurface]:
+def build_tool_surfaces(
+    spec: dict[str, Any],
+    *,
+    policy: PolicyConfig | None = None,
+    tool_grouping: str | None = None,
+    tool_descriptions: str | None = None,
+    tool_name_policy: str | None = None,
+) -> dict[str, ToolSurface]:
     """Return comparable tool surfaces keyed by tool name."""
-    mapper = Mapper(
-        spec,
+    defaults = policy.generation if policy else None
+    behavior = GenerationBehavior(
+        tool_grouping=tool_grouping
+        or (defaults.tool_grouping if defaults else None)
+        or "none",
+        tool_descriptions=tool_descriptions
+        or (defaults.tool_descriptions if defaults else None)
+        or "spec",
+        tool_name_policy=tool_name_policy
+        or (defaults.tool_name_policy if defaults else None)
+        or "preserve",
+        telemetry="off",
         strict=False,
+        runtime_validation="input",
         on_mapping_error="fail",
         on_schema_error="skip",
     )
-    mapped_tools = mapper.map_tools()
-    _raise_if_mapper_skipped_operations(mapper.get_report())
-    public_tools = build_public_tools(mapped_tools)
-    runtime_tools = build_runtime_tool_registry(mapped_tools)
+    prepared = prepare_tools(spec, behavior=behavior, policy=policy)
+    _raise_if_mapper_skipped_operations(prepared.report)
+    runtime_tools = prepared.runtime_registry
     return {
         tool["name"]: ToolSurface(
             name=tool["name"],
@@ -55,8 +74,16 @@ def build_tool_surfaces(spec: dict[str, Any]) -> dict[str, ToolSurface]:
             output_schema=tool.get("outputSchema"),
             security=_require_security(runtime_tools, tool["name"]),
             security_schemes=_require_security_schemes(runtime_tools, tool["name"]),
+            metadata={
+                key: tool[key]
+                for key in ("description", "title", "annotations")
+                if key in tool
+            },
+            execution={"execution": runtime_tools[tool["name"]]["execution"]}
+            if "execution" in runtime_tools[tool["name"]]
+            else {},
         )
-        for tool in public_tools
+        for tool in prepared.public_tools
     }
 
 
