@@ -1,9 +1,9 @@
-import type { AxiosInstance } from 'axios';
+import axios, { type AxiosInstance } from 'axios';
 
 import { resolveAuthForTool } from './auth.js';
 import { MAX_RESPONSE_BYTES, TARGET_API_AUTH_HEADER, TARGET_API_BASE_URL, TOOL_TIMEOUT_MS } from './config.js';
 import { admitResponseBody, resolveResponseByteLimit } from './response_body.js';
-import { createToolExecutionError } from './errors.js';
+import { createToolExecutionError, throwIfCancelled } from './errors.js';
 import { componentEscape, serializeForm, serializeWholeJson } from './form_media.js';
 import type { ToolRuntimeMetadata } from './generated.js';
 import {
@@ -72,15 +72,32 @@ export function buildRequestContext(
 export async function executeHttpRequest(
   axiosInstance: AxiosInstance,
   tool: ToolRuntimeMetadata,
-  requestContext: RequestContext
+  requestContext: RequestContext,
+  signal?: AbortSignal
 ): Promise<UpstreamResponse> {
+  throwIfCancelled(signal);
   const timeoutMs = tool.execution?.timeoutMs ?? TOOL_TIMEOUT_MS;
   const abortController = new AbortController();
+  let abortCause: 'caller' | 'timeout' | undefined;
+  const onAbort = () => {
+    if (!abortCause) {
+      abortCause = 'caller';
+      abortController.abort();
+    }
+  };
+  signal?.addEventListener('abort', onAbort, { once: true });
+  if (signal?.aborted) onAbort();
   const timeoutHandle = setTimeout(() => {
-    abortController.abort(new Error('Tool execution timeout exceeded'));
+    if (!abortCause) {
+      abortCause = 'timeout';
+      abortController.abort(new Error('Tool execution timeout exceeded'));
+    }
   }, timeoutMs);
 
+  let adapterFailed = false;
+  let adapterFailure: unknown;
   try {
+    const adapter = axios.getAdapter(axiosInstance.defaults.adapter);
     const limit = resolveResponseByteLimit(MAX_RESPONSE_BYTES, tool.execution?.maxResponseBytes);
     const response = await axiosInstance.request({
       method: tool.method,
@@ -92,6 +109,15 @@ export async function executeHttpRequest(
       headers: requestContext.headers,
       data: requestContext.wireData,
       signal: abortController.signal,
+      adapter: (config) => adapter(config).catch((error: unknown) => {
+        // Axios may replace an adapter failure with cancellation during dispatch.
+        // Retain the raw outcome when it is not itself a cancellation.
+        if (!axios.isCancel(error)) {
+          adapterFailed = true;
+          adapterFailure = error;
+        }
+        throw error;
+      }),
       validateStatus: limit > 0 ? () => true : (status) => status >= 200 && status < 300,
       ...(limit > 0 ? { responseType: 'stream' as const, transformResponse: [(data: unknown) => data] } : {}),
     });
@@ -101,8 +127,22 @@ export async function executeHttpRequest(
       contentType: admitted.headers['content-type'],
       status: admitted.status,
     };
+  } catch (error) {
+    // Preserve an already determined upstream error; only classify abort errors
+    // using the first signal that interrupted this request.
+    if (axios.isCancel(error)) {
+      if (adapterFailed) throw adapterFailure;
+      if (abortCause === 'caller') {
+        throw createToolExecutionError('request_cancelled', 'runtime', false, 'Tool execution cancelled');
+      }
+      if (abortCause === 'timeout') {
+        throw createToolExecutionError('tool_timeout', 'runtime', true, 'API request cancelled or timed out');
+      }
+    }
+    throw error;
   } finally {
     clearTimeout(timeoutHandle);
+    signal?.removeEventListener('abort', onAbort);
   }
 }
 

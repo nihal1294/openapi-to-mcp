@@ -6,6 +6,7 @@ import type { ToolResponseCache } from './cache.js';
 import {
   buildToolErrorResult,
   mapApiErrorToToolError,
+  throwIfCancelled,
   ToolExecutionError,
 } from './errors.js';
 import type { ToolRuntimeMetadata } from './generated.js';
@@ -80,13 +81,16 @@ export async function executeUpstream(
   context: ExecutionContext,
   requestContext: RequestContext,
   cacheKey: string | null,
-  cacheTtlMs: number
+  cacheTtlMs: number,
+  signal?: AbortSignal
 ): Promise<CallToolResult> {
   const upstreamResponse = await executeHttpRequest(
     axiosInstance,
     context.tool,
-    requestContext
+    requestContext,
+    signal
   );
+  throwIfCancelled(signal);
   emitResponseAudit(
     context.toolName,
     context.tool,

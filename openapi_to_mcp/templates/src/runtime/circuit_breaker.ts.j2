@@ -75,6 +75,13 @@ export class ToolCircuitBreaker {
     return { halfOpen: false };
   }
 
+  public cancelExecution(toolName: string, lease: CircuitBreakerLease | null): void {
+    if (lease?.halfOpen) {
+      const state = this.states.get(toolName);
+      if (state?.state === 'half-open') state.probeInFlight = false;
+    }
+  }
+
   public recordSuccess(toolName: string, lease: CircuitBreakerLease | null): void {
     if (!lease) {
       return;

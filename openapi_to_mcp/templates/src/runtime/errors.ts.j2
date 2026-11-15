@@ -16,6 +16,12 @@ interface ToolErrorOptions {
   httpStatus?: number;
   retryAfterMs?: number;
 }
+export function throwIfCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw createToolExecutionError('request_cancelled', 'runtime', false, 'Tool execution cancelled');
+  }
+}
+
 export class ToolExecutionError extends Error {
   constructor(
     readonly meta: ToolErrorMeta,

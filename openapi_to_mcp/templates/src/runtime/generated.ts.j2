@@ -41,7 +41,7 @@ export interface ToolExecutionMetadata {
 
 export interface CustomToolDefinition {
   tool: Tool;
-  handler: (args: Record<string, unknown>) => Promise<CallToolResult>;
+  handler: (args: Record<string, unknown>, context: { signal: AbortSignal }) => Promise<CallToolResult>;
 }
 
 export interface ToolRuntimeMetadata {

@@ -14,6 +14,7 @@ import {
   QUEUE_TIMEOUT_MS,
   TARGET_API_BASE_URL,
 } from './config.js';
+import { throwIfCancelled } from './errors.js';
 import type { ToolRuntimeMetadata } from './generated.js';
 import { ConcurrencyLimiter } from './limiter.js';
 import { createRequestId } from './observability.js';
@@ -51,7 +52,8 @@ export class ToolExecutor {
   public async execute(
     toolName: string,
     tool: ToolRuntimeMetadata,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    signal?: AbortSignal
   ): Promise<CallToolResult> {
     const context: ExecutionContext = {
       requestId: createRequestId(),
@@ -68,6 +70,7 @@ export class ToolExecutor {
     let requestAudited = false;
 
     try {
+      throwIfCancelled(signal);
       const requestContext = prepareRequestContext(context, args);
       const cacheKey = cacheTtlMs > 0 ? buildCacheKey(toolName, args, tool, requestContext) : null;
       emitRequestAudit(toolName, tool, requestContext, context.requestId);
@@ -79,10 +82,12 @@ export class ToolExecutor {
 {% endif %}        return cachedResult;
       }
       const perToolLimiter = this.getPerToolLimiter(toolName, tool);
-      await this.globalLimiter.acquire();
+      await this.globalLimiter.acquire(signal);
       acquiredGlobal = true;
-      await perToolLimiter.acquire();
+      throwIfCancelled(signal);
+      await perToolLimiter.acquire(signal);
       acquiredPerTool = true;
+      throwIfCancelled(signal);
       return await executeWithResilience(
         this.axiosInstance,
         this.responseCache,
@@ -94,7 +99,8 @@ export class ToolExecutor {
         cacheTtlMs,
         retryMaxRetries,
         retryBudgetPerMinute,
-        circuitBreakerSettings
+        circuitBreakerSettings,
+        signal
       );
     } catch (error) {
 {% if telemetry == 'opentelemetry' %}      if (error && typeof error === 'object' && 'meta' in error && (error as { meta?: { code?: string } }).meta?.code === 'response_too_large') countEvent('response_budget.rejection', toolName);
