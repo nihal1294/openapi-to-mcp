@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from openapi_to_mcp.common.exceptions import GenerationError
+from openapi_to_mcp.common.trace import trace_row
 
 TOOL_GROUPING_MODES = frozenset({"none", "tag-prefix"})
 
@@ -24,14 +25,7 @@ def apply_tool_grouping(
 
     grouped_tools = [{**tool} for tool in mcp_tools]
     for tool in grouped_tools:
-        row = None
-        if trace is not None:
-            row = next(
-                row
-                for row in trace
-                if row["method"] == tool["_original_method"].upper()
-                and row["path"] == tool["_original_path"]
-            )
+        row = trace_row(trace, tool)
         _apply_tag_prefix(tool, row)
     _ensure_unique_names(grouped_tools)
     return grouped_tools

@@ -59,6 +59,11 @@ def prepare_tools(
                 )
     tools = apply_policy(tools, policy, trace=rows)
     tools = apply_tool_grouping(tools, behavior.tool_grouping, trace=rows)
+    if rows is not None:
+        for tool in mapper.mcp_tools:
+            tool.pop("_trace_index", None)
+        for tool in tools:
+            tool.pop("_trace_index", None)
     warnings = validate_tool_names(tools, behavior.tool_name_policy)
     return PreparedTools(
         tools,
