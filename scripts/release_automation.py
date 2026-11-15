@@ -16,9 +16,11 @@ from pathlib import Path
 
 try:
     from scripts.release_metadata import (
+        EVIDENCE_SCHEMA,
         RELEASE_BRANCH,
         artifact_hashes,
         git,
+        git_text,
         metadata_digest,
         project_version,
         resolve,
@@ -34,9 +36,11 @@ try:
     )
 except ModuleNotFoundError:
     from release_metadata import (
+        EVIDENCE_SCHEMA,
         RELEASE_BRANCH,
         artifact_hashes,
         git,
+        git_text,
         metadata_digest,
         project_version,
         resolve,
@@ -50,6 +54,11 @@ except ModuleNotFoundError:
         validate_intent,
         validate_version,
     )
+
+try:
+    from scripts.release_notes import build_release_notes, extract_migration_note
+except ModuleNotFoundError:
+    from release_notes import build_release_notes, extract_migration_note
 
 IMPACTS = ("none", "patch", "minor", "breaking")
 PAGE_SIZE = 100
@@ -115,16 +124,21 @@ def override_message(message: str, body: str) -> str:
         raise ValueError(
             "Expected one complete BEGIN_COMMIT_OVERRIDE/END_COMMIT_OVERRIDE block."
         )
-    return body.split(begin, 1)[1].split(end, 1)[0].strip()
+    effective = body.split(begin, 1)[1].split(end, 1)[0]
+    extract_migration_note(effective)
+    return effective.strip(" \t\r\n")
 
 
 def intent_message(message: str, body: str) -> str:
     effective = override_message(message, body)
-    notes = re.search(
-        r"(?im)^[ \t]*migration(?:[ \t]+notes?)?[ \t]*:[ \t]*(\S[^\n]*)", body
-    )
-    if notes and not re.search(r"(?im)^migration(?:\s+notes?)?\s*:", effective):
-        effective += "\n\nMigration: " + notes.group(1)
+    effective_note = extract_migration_note(effective)
+    body_note = extract_migration_note(body)
+    if effective_note and body_note and effective_note != body_note:
+        raise ValueError(
+            "Conflicting migration notes between effective message and PR body."
+        )
+    if body_note and not effective_note:
+        effective += "\n\nMigration: " + body_note
     return effective
 
 
@@ -135,7 +149,7 @@ def release_range(repository: str, baseline: str, head: str) -> dict:
     for sha in git(
         "rev-list", "--first-parent", "--reverse", f"{baseline}..{head}"
     ).splitlines():
-        message = git("show", "-s", "--format=%B", sha)
+        message = git_text("show", "-s", "--format=%B", sha)
         associated = api(f"repos/{repository}/commits/{sha}/pulls")
         merged = [
             p
@@ -220,7 +234,7 @@ def check_pr(event_path: Path, report_path: Path) -> None:
     if resolve("HEAD") != head:
         raise ValueError("Release checks must run on the exact PR head.")
     report = {
-        "schema": 1,
+        "schema": EVIDENCE_SCHEMA,
         "repository": repository,
         "pr_number": pr["number"],
         "head_sha": head,
@@ -242,6 +256,7 @@ def check_pr(event_path: Path, report_path: Path) -> None:
             tag=f"v{version}",
             baseline_sha=baseline,
             history=history,
+            release_notes=build_release_notes(repository, version, history),
             contracts=comparison,
             impact=impact,
         )
@@ -265,6 +280,11 @@ def check_pr(event_path: Path, report_path: Path) -> None:
         floor = max((minimum["minimum"], comparison["minimum"]), key=IMPACTS.index)
         intent = validate_intent(intent_message(squash, pr.get("body") or ""), floor)
         report.update(impact=intent["impact"], changes=minimum, contracts=comparison)
+    if is_release:
+        summary(
+            "### Reviewed migration guidance\n\n"
+            + (report["release_notes"]["markdown"] or "No migration guidance.")
+        )
     report["complete"] = True
     report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     summary(
@@ -347,7 +367,7 @@ def read_evidence(repository: str, pr: dict) -> dict:
     )
 
 
-def authorize(repository: str, sha: str) -> None:
+def authorize(repository: str, sha: str, notes_output: Path | None = None) -> None:
     sha = resolve(sha)
     candidates = api(f"repos/{repository}/commits/{sha}/pulls")
     candidates = [
@@ -376,14 +396,27 @@ def authorize(repository: str, sha: str) -> None:
     if evidence["baseline_sha"] != baseline:
         raise ValueError("Published baseline differs from the reviewed evidence.")
     history = release_range(repository, baseline, parent)
-    if evidence["history"] != history:
+    if json.dumps(evidence["history"], sort_keys=True) != json.dumps(
+        history, sort_keys=True
+    ):
         raise ValueError(
             "Release classification changed after CI; refreshed review is required."
         )
     comparison = contracts(baseline, sha)
     impact = max((history["impact"], comparison["minimum"]), key=IMPACTS.index)
     validate_version(project_version(parent), version, impact)
-    output(pr_number=pr["number"])
+    notes = build_release_notes(repository, version, history)
+    if json.dumps(evidence.get("release_notes"), sort_keys=True) != json.dumps(
+        notes, sort_keys=True
+    ):
+        raise ValueError(
+            "Release migration guidance differs from reviewed evidence; rerun CI."
+        )
+    if notes_output is not None:
+        notes_output.write_bytes(
+            evidence["release_notes"]["markdown"].encode("utf-8", errors="strict")
+        )
+    output(pr_number=pr["number"], notes_sha256=notes["sha256"])
     summary(
         f"Human merge of release PR #{pr['number']} authorizes `{version}` at `{sha}`."
     )
@@ -448,6 +481,7 @@ def main() -> None:
     publish = commands.add_parser("authorize")
     publish.add_argument("--repository", required=True)
     publish.add_argument("--sha", required=True)
+    publish.add_argument("--notes-output", type=Path)
     finish = commands.add_parser("finalize")
     finish.add_argument("--repository", required=True)
     finish.add_argument("--pr", type=int, required=True)
@@ -462,7 +496,7 @@ def main() -> None:
     elif args.command == "prepare-labels":
         prepare_labels(args.repository)
     elif args.command == "authorize":
-        authorize(args.repository, args.sha)
+        authorize(args.repository, args.sha, args.notes_output)
     else:
         finalize(args.repository, args.pr, args.sha, args.version, args.dist)
 

@@ -44,6 +44,7 @@ def test_unclassified_legacy_product_change_is_not_silently_skipped(
         "git",
         lambda *_args: "a" * 40 if _args[0] == "rev-list" else "Update dependencies",
     )
+    monkeypatch.setattr(automation, "git_text", automation.git)
     monkeypatch.setattr(automation, "api", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(automation, "resolve", lambda value: value)
     monkeypatch.setattr(
@@ -59,6 +60,7 @@ def test_legacy_non_releasing_maintenance_can_be_ignored(monkeypatch) -> None:
         "git",
         lambda *_args: "a" * 40 if _args[0] == "rev-list" else "Update docs",
     )
+    monkeypatch.setattr(automation, "git_text", automation.git)
     monkeypatch.setattr(automation, "api", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(automation, "resolve", lambda value: value)
     monkeypatch.setattr(
@@ -75,6 +77,7 @@ def test_malformed_breaking_maintenance_is_not_ignored(monkeypatch) -> None:
             "a" * 40 if _args[0] == "rev-list" else "feat!: changed defaults"
         ),
     )
+    monkeypatch.setattr(automation, "git_text", automation.git)
     monkeypatch.setattr(automation, "api", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(automation, "resolve", lambda value: value)
     monkeypatch.setattr(

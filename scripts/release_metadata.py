@@ -19,8 +19,13 @@ RELEASE_FILES = {
     "CHANGELOG.md",
     ".release-please-manifest.json",
 }
+EVIDENCE_SCHEMA = 2
 DISTRIBUTION_COUNT = 2
 SHA_PATTERN = re.compile(r"[0-9a-f]{40}\Z")
+
+
+def git_text(*args: str) -> str:
+    return subprocess.check_output(["git", *args]).decode("utf-8", errors="strict")  # noqa: S603, S607
 
 
 def git(*args: str) -> str:
@@ -75,7 +80,7 @@ def validate_evidence(
     version: str,
 ) -> None:
     expected = {
-        "schema": 1,
+        "schema": EVIDENCE_SCHEMA,
         "repository": repository,
         "pr_number": pr["number"],
         "head_sha": pr["head"]["sha"],
@@ -86,7 +91,9 @@ def validate_evidence(
         "complete": True,
     }
     for key, value in expected.items():
-        if evidence.get(key) != value:
+        if json.dumps(evidence.get(key), sort_keys=True) != json.dumps(
+            value, sort_keys=True
+        ):
             raise ValueError(f"Release evidence does not match {key}; rerun CI.")
     if not SHA_PATTERN.fullmatch(str(evidence.get("baseline_sha", ""))):
         raise ValueError("Release evidence has no valid published baseline.")

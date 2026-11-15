@@ -5,6 +5,11 @@ from __future__ import annotations
 import re
 from typing import Final
 
+try:
+    from scripts.release_notes import extract_migration_note
+except ModuleNotFoundError:
+    from release_notes import extract_migration_note
+
 IMPACTS: Final = ("none", "patch", "minor", "breaking")
 __all__ = ["analyze_changes", "parse_intent", "validate_intent", "validate_version"]
 _IMPACT_ORDER: Final = {impact: index for index, impact in enumerate(IMPACTS)}
@@ -14,9 +19,6 @@ _CONVENTIONAL_HEADER: Final = re.compile(
 )
 _RELEASE_AS: Final = re.compile(r"(?im)^\s*release-as\s*:")
 _BREAKING_NOTE: Final = re.compile(r"(?im)^\s*breaking[ -]change\s*:")
-_MIGRATION_NOTE: Final = re.compile(
-    r"(?im)^[ \t]*migration(?:[ \t]+notes?)?[ \t]*:[ \t]*\S"
-)
 _VERSION: Final = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 
@@ -24,6 +26,17 @@ def parse_intent(message: str) -> dict[str, object]:
     """Return the highest conventional-commit impact in an effective message."""
     if _RELEASE_AS.search(message):
         raise ValueError("Release-As directives require reviewed release metadata.")
+    lines = message.split("\n")
+    begin = [
+        i for i, line in enumerate(lines) if line.strip() == "BEGIN_COMMIT_OVERRIDE"
+    ]
+    end = [i for i, line in enumerate(lines) if line.strip() == "END_COMMIT_OVERRIDE"]
+    source = (
+        "\n".join(lines[begin[0] + 1 : end[0]])
+        if len(begin) == len(end) == 1 and begin[0] < end[0]
+        else message
+    )
+    note = extract_migration_note(source)
     messages = _effective_messages(message)
     impacts: list[str] = []
     reasons: list[str] = []
@@ -31,7 +44,7 @@ def parse_intent(message: str) -> dict[str, object]:
         header = _first_header(entry)
         kind = header.group("kind")
         breaking = bool(header.group("breaking")) or bool(_BREAKING_NOTE.search(entry))
-        if breaking and not _MIGRATION_NOTE.search("\n".join(messages)):
+        if breaking and not note:
             raise ValueError("Breaking changes require migration notes.")
         impact = _impact_for_kind(kind, breaking)
         impacts.append(impact)

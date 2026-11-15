@@ -151,6 +151,20 @@ Use strict semantic pull request titles:
 - `chore:`, `docs:`, `test:`, and `ci:` for changes that do not release the
   product; Dependabot uses `chore(deps-dev):` for development dependencies
 
+For breaking changes, add a standalone `Migration:`, `Migration note:`, or
+`Migration notes:` line with guidance on the same line. Nonbreaking changes may
+also include guidance. Keep it to one line and link to a durable guide for longer
+instructions. Fenced examples and blockquotes do not count. Identical duplicates
+are allowed; conflicting notes within the effective commit or between it and the
+pull request body fail the check. Release Please commit overrides supply the
+effective message, and the pull request body can supply the note when it is absent.
+
+Release PR CI shows the migration guidance selected from changes since the last
+published release. Review that guidance alongside the release evidence before
+merging. After the human merge, the release workflow verifies the reviewed evidence
+and uses the authorized guidance file in the generated GitHub Release notes.
+This applies to future releases; existing releases are not edited.
+
 Before 1.0, compatible fixes are patches and features or breaking changes are
 minor releases. Promotion to 1.0 is an explicit maintainer decision. Do not add
 `Release-As:` to ordinary pull requests: it cannot force a version.
