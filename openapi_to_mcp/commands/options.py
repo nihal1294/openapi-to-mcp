@@ -57,6 +57,13 @@ generation_identity_options = [
 
 generation_runtime_options = [
     click.option(
+        "--telemetry",
+        default="off",
+        show_default=True,
+        type=click.Choice(["off", "opentelemetry"], case_sensitive=False),
+        help="Optional generated runtime telemetry.",
+    ),
+    click.option(
         "--transport",
         "-t",
         default="streamable-http",

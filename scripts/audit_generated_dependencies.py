@@ -79,6 +79,7 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument(
         "--runtime-validation", required=True, choices=["input", "none"]
     )
+    parser.add_argument("--telemetry", choices=["off", "opentelemetry"], default="off")
     parser.add_argument("--report-file", type=Path)
     return parser.parse_args()
 
@@ -94,10 +95,13 @@ def main() -> int:
         "schema_version": 1,
         "transport": args.transport,
         "runtime_validation": args.runtime_validation,
+        "telemetry": args.telemetry,
         "resolutions": {},
     }
     try:
-        manifest = render_manifest(args.transport, args.runtime_validation)
+        manifest = render_manifest(
+            args.transport, args.runtime_validation, args.telemetry
+        )
         with TemporaryDirectory(prefix="generated-dependency-audit-") as temporary:
             for label, graph in [
                 ("fresh", manifest),

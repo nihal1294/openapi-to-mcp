@@ -14,6 +14,8 @@ import {
 } from './runtime/generated.js';
 import { buildToolErrorResult, ToolExecutionError } from './runtime/errors.js';
 import { ToolExecutor } from './runtime/executor.js';
+{% if telemetry == 'opentelemetry' %}import { shutdownTelemetry, traceTool } from './runtime/telemetry.js';
+{% endif %}
 import { createRequestId, logEvent } from './runtime/observability.js';
 import {
   assertToolAllowed,
@@ -111,12 +113,14 @@ export class OpenApiMcpServer {
   private static async shutdownAll(signal: string): Promise<void> {
     const instances = [...OpenApiMcpServer.activeInstances];
     if (instances.length === 0) {
-      process.exit(0);
+{% if telemetry == 'opentelemetry' %}      await shutdownTelemetry();
+{% endif %}      process.exit(0);
       return;
     }
 
     const results = await Promise.allSettled(instances.map((instance) => instance.close()));
-    const failures = results.filter((result) => result.status === 'rejected');
+{% if telemetry == 'opentelemetry' %}    await shutdownTelemetry();
+{% endif %}    const failures = results.filter((result) => result.status === 'rejected');
     if (failures.length > 0) {
       console.error(`Encountered ${failures.length} error(s) while handling ${signal} shutdown.`);
       process.exit(1);
@@ -125,7 +129,11 @@ export class OpenApiMcpServer {
     process.exit(0);
   }
 
-  private static setupGracefulShutdown(): void {
+{% if telemetry == 'opentelemetry' %}  public static registerProcessShutdown(): void {
+    OpenApiMcpServer.setupGracefulShutdown();
+  }
+
+{% endif %}  private static setupGracefulShutdown(): void {
     if (OpenApiMcpServer.shutdownHooksRegistered) {
       return;
     }
@@ -156,7 +164,8 @@ export class OpenApiMcpServer {
             `Tool '${toolName}' not found.`
           );
         }
-        assertToolArgumentBounds(args);
+{% if telemetry == 'opentelemetry' %}        return traceTool(toolName, !customTool, async () => {
+{% endif %}        assertToolArgumentBounds(args);
         try {
           assertToolAllowed(toolName);
           const result = customTool
@@ -172,6 +181,8 @@ export class OpenApiMcpServer {
           }
           return this.handleDeniedTool(toolName, error);
         }
+{% if telemetry == 'opentelemetry' %}        });
+{% endif %}
       }
     );
   }

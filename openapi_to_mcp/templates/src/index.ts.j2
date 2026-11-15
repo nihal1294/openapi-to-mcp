@@ -12,7 +12,12 @@ async function bootstrap(): Promise<void> {
   // Keep dotenv's runtime banner off stdout so MCP protocol output stays clean.
   dotenv.config({ path: envPath, quiet: true });
   console.error(`Attempting to load environment variables from: ${envPath}`);
-  await import('./transport.js');
+{% if telemetry == 'opentelemetry' %}  const { initializeTelemetry, shutdownTelemetry } = await import('./runtime/telemetry.js');
+  initializeTelemetry();
+  process.once('beforeExit', () => {
+    void shutdownTelemetry();
+  });
+{% endif %}  await import('./transport.js');
 }
 
 bootstrap().catch((error) => {

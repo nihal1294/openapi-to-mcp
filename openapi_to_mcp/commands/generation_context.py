@@ -96,6 +96,7 @@ def build_template_context(
         "server_version": _server_version(identity.version, spec_info),
         "server_description": spec_info.get("description", ""),
         "transport": transport.kind,
+        "telemetry": behavior.telemetry,
         "host": transport.host,
         "port": transport.port,
         "mcp_endpoint": transport.endpoint,

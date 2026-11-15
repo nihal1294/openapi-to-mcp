@@ -19,6 +19,7 @@ class _GenerationClickOptions(TypedDict):
     mcp_server_version: str | None
     tool_grouping: str
     transport: str
+    telemetry: str
     host: str
     port: int | None
     mcp_endpoint: str
@@ -91,6 +92,7 @@ class GenerationBehavior:
     """Mapping, grouping, and validation behavior for generation."""
 
     tool_grouping: str
+    telemetry: str
     strict: bool
     runtime_validation: str
     on_mapping_error: ErrorMode | None
@@ -121,6 +123,7 @@ GENERATION_SETTING_NAMES = (
     "mcp_server_version",
     "tool_grouping",
     "transport",
+    "telemetry",
     "host",
     "port",
     "mcp_endpoint",
@@ -155,6 +158,7 @@ def compose_generation_request(
     )
     behavior = GenerationBehavior(
         tool_grouping=cast("str", values["tool_grouping"]),
+        telemetry=cast("str", values["telemetry"]),
         strict=cast("bool", values["strict"]),
         runtime_validation=cast("str", values["runtime_validation"]),
         on_mapping_error=cast("ErrorMode | None", values["on_mapping_error"]),

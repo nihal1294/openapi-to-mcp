@@ -13,10 +13,11 @@ from scripts.generated_dependency_audit import (
 
 @pytest.mark.parametrize("transport", ["stdio", "streamable-http"])
 @pytest.mark.parametrize("validation", ["input", "none"])
+@pytest.mark.parametrize("telemetry", ["off", "opentelemetry"])
 def test_audit_manifest_tracks_generated_dependency_variants(
-    transport: str, validation: str
+    transport: str, validation: str, telemetry: str
 ) -> None:
-    manifest = render_manifest(transport, validation)
+    manifest = render_manifest(transport, validation, telemetry)
     dependencies = manifest["dependencies"]
     assert "@modelcontextprotocol/server" in dependencies
     assert ("express" in dependencies) == (transport == "streamable-http")
@@ -24,6 +25,10 @@ def test_audit_manifest_tracks_generated_dependency_variants(
         transport == "streamable-http"
     )
     assert ("ajv" in dependencies) == (validation == "input")
+    assert ("@opentelemetry/sdk-node" in dependencies) == (telemetry == "opentelemetry")
+    assert manifest["engines"]["node"] == (
+        ">=22.15.0" if telemetry == "opentelemetry" else ">=22"
+    )
     assert "scripts" not in manifest
 
 
