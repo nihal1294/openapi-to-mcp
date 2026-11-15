@@ -32,7 +32,7 @@ def encoded_querystring_spec() -> dict[str, Any]:
                 "wholeQuery": {
                     "name": "filter",
                     "in": "querystring",
-                    "content": {"application/json": {"schema": {"type": "object"}}},
+                    "content": {"application/xml": {"schema": {"type": "object"}}},
                 }
             }
         },
@@ -214,7 +214,7 @@ def test_explicit_mapping_skip_overrides_strict_for_query_operation() -> None:
                             "name": "whole",
                             "in": "querystring",
                             "content": {
-                                "application/json": {"schema": {"type": "string"}}
+                                "application/xml": {"schema": {"type": "string"}}
                             },
                         }
                     ],
@@ -327,7 +327,7 @@ def test_doctor_name_selection_does_not_reserve_unsupported_operation_names(
                             "name": "filter",
                             "in": "querystring",
                             "content": {
-                                "application/json": {"schema": {"type": "object"}}
+                                "application/xml": {"schema": {"type": "object"}}
                             },
                         }
                     ],
@@ -398,7 +398,7 @@ def test_querystring_parameters_follow_effective_override_and_local_references(
                 "wholeQuery": {
                     "name": "filter",
                     "in": "querystring",
-                    "content": {"application/json": {"schema": {"type": "object"}}},
+                    "content": {"application/xml": {"schema": {"type": "object"}}},
                 },
                 "unused": {"name": "unused", "in": "querystring"},
             }
@@ -413,7 +413,7 @@ def test_querystring_parameters_follow_effective_override_and_local_references(
                             "name": "filter",
                             "in": "querystring",
                             "content": {
-                                "application/json": {"schema": {"type": "object"}}
+                                "application/xml": {"schema": {"type": "object"}}
                             },
                         }
                     ],
@@ -909,7 +909,7 @@ def test_array_reference_preserves_effective_overrides_and_cycles(
         {
             "name": "filter",
             "in": "querystring",
-            "content": {"application/json": {"schema": {"type": "string"}}},
+            "content": {"application/xml": {"schema": {"type": "string"}}},
         },
         {"$ref": "#/x-parameters/1"},
     ]
@@ -918,4 +918,4 @@ def test_array_reference_preserves_effective_overrides_and_cycles(
         issue.location
         for issue in report.issues
         if issue.code == "unsupported_openapi_construct"
-    ] == ["paths./search.get.parameters[0].in"]
+    ] == ["x-parameters.1.$ref", "paths./search.get.parameters[0].in"]

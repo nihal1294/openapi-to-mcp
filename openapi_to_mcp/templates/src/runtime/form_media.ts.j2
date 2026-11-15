@@ -1,0 +1,103 @@
+import { createToolExecutionError } from './errors.js';
+
+export interface FormField {
+  kind: 'string' | 'number' | 'integer' | 'boolean' | 'object' | 'array';
+  mode: 'style' | 'content';
+  itemKind: string | null;
+  objectFields?: Record<string, string>;
+  objectAdditional?: string | null;
+  contentType: string | null;
+  explode: boolean;
+}
+export interface FormMetadata {
+  version32: boolean;
+  fields: Record<string, FormField>;
+  additional: FormField | null;
+}
+
+function invalid(): never {
+  throw createToolExecutionError('invalid_form_value', 'validation', false, 'Unsupported form value or field.');
+}
+function primitive(value: unknown): value is string | number | boolean {
+  return typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value));
+}
+function matchesKind(value: unknown, kind: string | null | undefined): boolean {
+  if (!primitive(value)) return false;
+  if (kind === 'string' || kind === 'boolean') return typeof value === kind;
+  if (kind === 'number') return typeof value === 'number';
+  if (kind === 'integer') return typeof value === 'number' && Number.isInteger(value);
+  return false;
+}
+function json(value: unknown): string {
+  const visit = (item: unknown, ancestors: Set<object>): void => {
+    if (item === null || primitive(item)) return;
+    if (typeof item !== 'object' || item === undefined || ancestors.has(item)) invalid();
+    ancestors.add(item);
+    for (const nested of Object.values(item)) visit(nested, ancestors);
+    ancestors.delete(item);
+  };
+  visit(value, new Set());
+  return JSON.stringify(value);
+}
+function formEscape(value: string): string {
+  return new URLSearchParams([['', value]]).toString().slice(1);
+}
+export function componentEscape(value: string): string {
+  return encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+export function serializeWholeJson(value: unknown): string {
+  return componentEscape(json(value));
+}
+export function serializeForm(value: unknown, metadata: FormMetadata): { wire: string; names: string[] } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) invalid();
+  const entries: string[] = [];
+  const owners = new Map<string, string>();
+  const emit = (name: string, owner: string, encoded: string, escape: (value: string) => string): void => {
+    const previous = owners.get(name);
+    if (previous !== undefined && previous !== owner) invalid();
+    owners.set(name, owner);
+    entries.push(`${escape(name)}=${encoded}`);
+  };
+  for (const [name, fieldValue] of Object.entries(value)) {
+    const field = Object.hasOwn(metadata.fields, name) ? metadata.fields[name] : metadata.additional;
+    if (!field) invalid();
+    if (fieldValue === undefined || fieldValue === null) continue;
+    const escape = field.mode === 'style' ? componentEscape : formEscape;
+    const scalar = (item: unknown): string => {
+      if (!primitive(item)) invalid();
+      return field.contentType === 'application/json' && field.mode === 'content' ? json(item) : String(item);
+    };
+    if (field.kind === 'array') {
+      if (!Array.isArray(fieldValue)) invalid();
+      const values = fieldValue.map((item) => {
+        if ((field.itemKind === 'string' && typeof item !== 'string') || (field.itemKind === 'boolean' && typeof item !== 'boolean') || ((field.itemKind === 'number' || field.itemKind === 'integer') && typeof item !== 'number') || (field.itemKind === 'integer' && !Number.isInteger(item))) invalid();
+        return escape(scalar(item));
+      });
+      if (field.mode === 'style' && !field.explode && !metadata.version32) {
+        if (values.length) emit(name, name, values.join(','), escape);
+      } else for (const item of values) emit(name, name, item, escape);
+    } else if (field.kind === 'object') {
+      if (!fieldValue || typeof fieldValue !== 'object' || Array.isArray(fieldValue)) invalid();
+      if (field.mode === 'content') emit(name, name, escape(json(fieldValue)), escape);
+      else {
+        const parts = Object.entries(fieldValue).filter(([key, item]) => {
+          const kind = field.objectFields && Object.hasOwn(field.objectFields, key) ? field.objectFields[key] : field.objectAdditional;
+          if (!kind) invalid();
+          if (item === undefined || item === null) return false;
+          if (!matchesKind(item, kind)) invalid();
+          return true;
+        });
+        if (field.explode) {
+          for (const [key, item] of parts) emit(key, name, escape(String(item)), escape);
+        } else {
+          const tokens = parts.flatMap(([key, item]) => [escape(key), escape(String(item))]);
+          if (tokens.length) emit(name, name, tokens.join(','), escape);
+        }
+      }
+    } else {
+      if (!primitive(fieldValue) || (field.kind === 'string' && typeof fieldValue !== 'string') || (field.kind === 'boolean' && typeof fieldValue !== 'boolean') || ((field.kind === 'number' || field.kind === 'integer') && typeof fieldValue !== 'number') || (field.kind === 'integer' && !Number.isInteger(fieldValue))) invalid();
+      emit(name, name, escape(scalar(fieldValue)), escape);
+    }
+  }
+  return { wire: entries.join('&'), names: [...owners.keys()] };
+}

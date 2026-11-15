@@ -22,7 +22,7 @@ try {
   const { toolRuntimeData } = await import(new URL('generated.js', runtime));
   const name = scenario.tool ?? 'inherited';
   const tool = { ...toolRuntimeData[name], ...scenario.metadata };
-  const result = await new ToolExecutor().execute(name, tool, {});
+  const result = await new ToolExecutor().execute(name, tool, scenario.arguments ?? {});
   console.log(JSON.stringify({ result, requests }));
 } finally {
   upstream.closeAllConnections();

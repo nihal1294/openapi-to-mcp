@@ -1,6 +1,7 @@
 import { CACHE_MAX_ENTRIES, CACHE_TTL_MS } from './config.js';
 import type { ToolRuntimeMetadata } from './generated.js';
-import { isSafeMethod } from './request.js';
+import { isSafeMethod, type RequestContext } from './request.js';
+import { serializeQueryEntries } from './query.js';
 
 interface CachedResponse {
   contentType: unknown;
@@ -18,9 +19,23 @@ export function resolveCacheTtlMs(tool: ToolRuntimeMetadata): number {
 
 export function buildCacheKey(
   toolName: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  tool: ToolRuntimeMetadata,
+  request: RequestContext
 ): string {
-  return `${toolName}:${stableSerialize(args)}`;
+  const logicalKey = `${toolName}:${stableSerialize(args)}`;
+  if (!request.wholeQueryType && !tool.requestBody?.form) return logicalKey;
+  const headers = Object.fromEntries(
+    Object.entries(request.headers).filter(([name]) => name !== 'X-Request-Id')
+  );
+  return JSON.stringify([
+    logicalKey,
+    request.wholeQuery,
+    tool.requestBody?.form ? request.wireData : null,
+    serializeQueryEntries(request.queryEntries),
+    stableSerialize(headers),
+    stableSerialize(request.cookies),
+  ]);
 }
 
 export class ToolResponseCache {

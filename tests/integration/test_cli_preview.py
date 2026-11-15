@@ -595,7 +595,7 @@ def test_text_and_json_preserve_each_skipped_operation_source(tmp_path, runner) 
     unsupported = {
         "name": "filter",
         "in": "querystring",
-        "content": {"application/json": {"schema": {"type": "object"}}},
+        "content": {"application/xml": {"schema": {"type": "object"}}},
     }
     operation = {
         "parameters": [unsupported],

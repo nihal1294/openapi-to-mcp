@@ -7,6 +7,14 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote
 
+from openapi_to_mcp.common.form_media import (
+    FormMediaError,
+    normalize_form_media,
+    resolve_local,
+    resolve_local_schema,
+    schema_kind,
+)
+
 if TYPE_CHECKING:
     from openapi_to_mcp.common.operations import OperationRef
 
@@ -25,12 +33,13 @@ class _ParameterRef:
     parameter: dict[str, Any]
     location: str
     invalid_array_ref: bool = False
+    invalid_ref: bool = False
 
 
 _INVALID_ARRAY_REF = object()
 
 
-def openapi_operation_findings(
+def openapi_operation_findings(  # noqa: C901, PLR0912, PLR0915
     spec: dict[str, Any], operation_ref: OperationRef
 ) -> list[OpenAPIFinding]:
     """Return unsupported OpenAPI constructs reachable from one operation."""
@@ -62,7 +71,28 @@ def openapi_operation_findings(
                 OpenAPIFinding("additionalOperations", operation_ref.location, guidance)
             )
 
-    for parameter_ref in _effective_parameters(spec, operation_ref):
+    for candidates, location in (
+        (
+            operation_ref.path_item.get("parameters"),
+            f"paths.{operation_ref.path}.parameters",
+        ),
+        (
+            operation_ref.operation.get("parameters"),
+            f"{operation_ref.location}.parameters",
+        ),
+    ):
+        declared = _parameter_refs(spec, candidates, location)
+        if sum(p.parameter.get("in") == "querystring" for p in declared) > 1:
+            findings.append(
+                OpenAPIFinding(
+                    "in: querystring",
+                    location,
+                    "Multiple whole-query declarations are unsupported.",
+                )
+            )
+    parameters = _effective_parameters(spec, operation_ref)
+    whole = [p for p in parameters if p.parameter.get("in") == "querystring"]
+    for parameter_ref in parameters:
         if parameter_ref.invalid_array_ref:
             findings.append(
                 OpenAPIFinding(
@@ -71,16 +101,77 @@ def openapi_operation_findings(
                     "The local parameter reference contains an invalid or out-of-range array index.",
                 )
             )
-            continue
-        if parameter_ref.parameter.get("in") != "querystring":
-            continue
-        findings.append(
-            OpenAPIFinding(
-                "in: querystring",
-                f"{parameter_ref.location}.in",
-                "Whole-query and content parameter serialization is not supported. Use individual `in: query` parameters instead.",
+        if parameter_ref.invalid_ref and "swagger" not in spec:
+            findings.append(
+                OpenAPIFinding(
+                    "parameter $ref",
+                    f"{parameter_ref.location}.$ref",
+                    "External, cyclic or unresolved parameter references are unsupported.",
+                )
             )
-        )
+    for parameter_ref in whole:
+        try:
+            content = parameter_ref.parameter.get("content")
+            if not isinstance(content, dict) or len(content) != 1:
+                raise FormMediaError(  # noqa: TRY301
+                    "Whole-query parameters require exactly one content media type."
+                )
+            content_type, media = next(iter(content.items()))
+            media = resolve_local(spec, media)
+            schema = resolve_local_schema(spec, media.get("schema"))
+            if content_type == "application/x-www-form-urlencoded":
+                normalize_form_media(spec, media)
+            elif content_type == "text/plain":
+                if not isinstance(schema, dict) or schema_kind(schema) != "string":
+                    raise FormMediaError("Whole text queries require a string schema.")  # noqa: TRY301
+            elif content_type != "application/json":
+                raise FormMediaError("Unsupported whole-query media type.")  # noqa: TRY301
+            if len(whole) > 1 or any(
+                p.parameter.get("in") == "query" for p in parameters
+            ):
+                raise FormMediaError(  # noqa: TRY301
+                    "A whole query cannot coexist with another whole or ordinary query parameter."
+                )
+            name = parameter_ref.parameter.get("name")
+            if any(
+                p is not parameter_ref and p.parameter.get("name") == name
+                for p in parameters
+            ) or (
+                name == "requestBody"
+                and operation_ref.operation.get("requestBody") is not None
+            ):
+                raise FormMediaError(  # noqa: TRY301
+                    "The whole-query argument name collides with another input."
+                )
+        except FormMediaError as exc:
+            findings.append(
+                OpenAPIFinding(
+                    "in: querystring", f"{parameter_ref.location}.in", str(exc)
+                )
+            )
+    body = operation_ref.operation.get("requestBody")
+    if body is not None:
+        try:
+            body = resolve_local(spec, body)
+            content = body.get("content", {})
+            if isinstance(content, dict) and content:
+                selected = (
+                    "application/json"
+                    if isinstance(content.get("application/json"), dict)
+                    else next(iter(content))
+                )
+                if selected == "application/x-www-form-urlencoded":
+                    normalize_form_media(spec, content[selected])
+                elif selected not in ("application/json", "text/plain"):
+                    raise FormMediaError(  # noqa: TRY301
+                        "Selected request-body media type is unsupported."
+                    )
+        except FormMediaError as exc:
+            findings.append(
+                OpenAPIFinding(
+                    "requestBody", f"{operation_ref.location}.requestBody", str(exc)
+                )
+            )
     return list(dict.fromkeys(findings))
 
 
@@ -145,15 +236,15 @@ def _resolve_parameter(
         if ref is None:
             return _ParameterRef(current, current_location)
         if not isinstance(ref, str) or not ref.startswith("#/"):
-            return None
+            return _ParameterRef({}, current_location, invalid_ref=True)
         resolved = _resolve_local_ref(spec, ref)
         if resolved is _INVALID_ARRAY_REF:
             return _ParameterRef({}, current_location, invalid_array_ref=True)
         if not isinstance(resolved, dict):
-            return None
+            return _ParameterRef({}, current_location, invalid_ref=True)
         current = resolved
         current_location = _location_for_ref(ref)
-    return None
+    return _ParameterRef({}, current_location, invalid_ref=True)
 
 
 def _parameter_key(parameter: dict[str, Any]) -> tuple[str, str] | None:

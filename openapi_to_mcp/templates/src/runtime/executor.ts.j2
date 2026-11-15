@@ -60,7 +60,6 @@ export class ToolExecutor {
       tool,
     };
     const cacheTtlMs = resolveCacheTtlMs(tool);
-    const cacheKey = cacheTtlMs > 0 ? buildCacheKey(toolName, args) : null;
     const retryMaxRetries = resolveRetryMaxRetries(tool);
     const retryBudgetPerMinute = resolveRetryBudgetPerMinute(tool);
     const circuitBreakerSettings = resolveCircuitBreakerSettings(tool);
@@ -70,6 +69,7 @@ export class ToolExecutor {
 
     try {
       const requestContext = prepareRequestContext(context, args);
+      const cacheKey = cacheTtlMs > 0 ? buildCacheKey(toolName, args, tool, requestContext) : null;
       emitRequestAudit(toolName, tool, requestContext, context.requestId);
       requestAudited = true;
       this.rateLimiter.assertAllowed(toolName, resolveRateLimitPerMinute(tool));

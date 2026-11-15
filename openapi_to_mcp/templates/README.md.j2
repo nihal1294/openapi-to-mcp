@@ -145,6 +145,23 @@ delimiters (`#`, `&`, `=`, `+`, `[`, and `]`) remain percent encoded so a value
 cannot create another query field or fragment. Parameter names continue to use
 safe standard encoding.
 
+## Form and whole-query encoding
+
+Form request bodies use the OpenAPI schema and Encoding Object. Arrays of
+primitive values normally repeat their field name, and objects default to one
+JSON-valued field. Explicit form styles use RFC 6570 component escaping. OpenAPI
+3.0 and 3.1 `explode: false` arrays use comma-separated items; OpenAPI 3.2
+arrays repeat the name. Optional null fields and empty arrays are omitted.
+
+Migration: older generated servers relied on Axios form serialization, which
+could send bracketed array and object names. Verify the new wire representation
+against every affected endpoint before replacing a generated server.
+
+Whole-query parameters accept supported form, JSON, or plain-text content. They
+cannot be combined with ordinary query parameters or a base URL with an existing
+query or fragment. Query credentials can accompany form content only when their
+names do not collide with emitted form fields.
+
 ## Upstream HTTP Basic authentication
 
 For an OpenAPI 3 `type: http`, `scheme: basic` security scheme, set

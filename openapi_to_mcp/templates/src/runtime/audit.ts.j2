@@ -51,7 +51,7 @@ export function emitRequestAudit(
     path: tool.path,
     targetPath: requestContext.targetPath,
     headers: redactHeaders(requestContext.headers, HEADER_REDACTIONS),
-    query: redactNamedValues(requestContext.queryParams, QUERY_REDACTIONS),
+    query: requestContext.wholeQueryType ? '[REDACTED]' : redactNamedValues(requestContext.queryParams, buildRedactionNames(QUERY_REDACTIONS, requestContext.sensitiveQueryNames)),
     cookies: redactNamedValues(
       requestContext.cookies,
       buildRedactionNames(
