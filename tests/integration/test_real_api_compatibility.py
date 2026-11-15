@@ -75,6 +75,25 @@ def test_doctor(name) -> None:
         assert report["issues"] == []
 
 
+def _assert_stripe_success_responses(spec, listing, detail) -> None:
+    listing_responses = spec["paths"]["/v2/core/events"]["get"]["responses"]
+    listing_schema = listing_responses["200"]["content"]["application/json"]["schema"]
+    assert "data" in listing_schema["required"]
+    # The default also covers otherwise unspecified success statuses such as 204.
+    assert "default" in listing_responses
+    assert "outputSchema" not in listing
+    detail_responses = spec["paths"]["/v2/core/events/{id}"]["get"]["responses"]
+    detail_ref = detail_responses["200"]["content"]["application/json"]["schema"][
+        "$ref"
+    ]
+    assert detail_ref == "#/components/schemas/v2.core.event"
+    assert {"id", "type"} <= set(
+        spec["components"]["schemas"]["v2.core.event"]["required"]
+    )
+    assert "default" in detail_responses
+    assert "outputSchema" not in detail
+
+
 @pytest.mark.parametrize(
     ("name", "transport"),
     [
@@ -141,12 +160,10 @@ def test_generation_and_build(name, transport, tmp_path) -> None:
         assert props["limit"]["type"] == "integer"
         assert props["created"]["type"] == "object"
         assert props["types"]["items"]["type"] == "string"
-        assert listing["outputSchema"]["type"] == "object"
-        assert "data" in listing["outputSchema"]["required"]
+        _assert_stripe_success_responses(spec, listing, tools["GetV2CoreEventsId"])
         detail = tools["GetV2CoreEventsId"]
         assert detail["inputSchema"]["required"] == ["id"]
         assert detail["inputSchema"]["properties"]["id"]["type"] == "string"
-        assert {"id", "type"} <= set(detail["outputSchema"]["required"])
         assert runtime["GetV2CoreEventsId"]["path"] == "/v2/core/events/{id}"
         assert runtime["GetV2CoreEvents"]["security"] == [
             {"basicAuth": []},

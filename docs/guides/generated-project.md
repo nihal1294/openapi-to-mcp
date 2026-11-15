@@ -70,9 +70,15 @@ SSE generation is intentionally gone.
 - optional per-tool execution overrides for retry counts, retry budgets, and circuit-breaker settings
 - tool list filtering and structured denial errors for disallowed tool calls when access control is enabled
 
-`outputSchema` is emitted only for response schemas whose allowed values are all
-objects. Responses that also allow `null` or another scalar/array shape omit it,
-so the generated tool does not advertise unsupported structured output.
+`outputSchema` describes all documented successful responses, including default
+and wildcard responses. Wildcard and default responses can cover bodyless
+success statuses, so their output schemas are omitted. Distinct object schemas are combined with `anyOf`;
+identical schemas remain unchanged. If a successful response can be bodyless,
+non-JSON, nullable, non-object, or cannot be resolved, the schema is omitted.
+Schemas are also omitted when their object shape or nested types cannot be
+established without narrowing the source schema.
+The tool still returns successful responses as text and includes structured
+content for JSON objects.
 
 Input schemas retain JSON Schema `const`, `enum`, and scalar constraints for
 nullable type arrays. Boolean schemas are preserved as `{}` or `{"not": {}}`.
