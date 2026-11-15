@@ -1,18 +1,33 @@
-import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
+import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { OpenApiMcpServer } from './server.js';
 import * as console from 'console';
 
 console.error("Starting STDIO transport");
-const serverInstance = new OpenApiMcpServer();
-const stdioTransport = new StdioServerTransport();
-
-// Connect the server instance to the transport
-serverInstance.server.connect(stdioTransport)
-    .then(() => {
-        console.error("MCP server connected via STDIO and running.");
-        console.error("MCP_SERVER_READY");
-    })
-    .catch(error => {
-        console.error("Failed to connect MCP server via STDIO:", error);
-        process.exit(1);
-    });
+// Validate configuration before reporting readiness, then hand this fresh
+// server to the SDK's first factory invocation.
+let initialServer: OpenApiMcpServer | undefined = new OpenApiMcpServer();
+class ReadyStdioTransport extends StdioServerTransport {
+  public override async start(): Promise<void> {
+    try {
+      await super.start();
+      console.error("MCP_SERVER_READY");
+    } catch (error) {
+      console.error('Failed to start STDIO transport:', error);
+      process.exit(1);
+    }
+  }
+}
+process.stdin.once('end', () => {
+  if (initialServer) {
+    void initialServer.close();
+    initialServer = undefined;
+  }
+});
+serveStdio(() => {
+  const instance = initialServer ?? new OpenApiMcpServer();
+  initialServer = undefined;
+  return instance.server;
+}, {
+  transport: new ReadyStdioTransport(),
+  onerror: (error) => console.error('STDIO transport error:', error),
+});

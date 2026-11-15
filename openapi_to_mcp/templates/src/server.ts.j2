@@ -88,18 +88,20 @@ export class OpenApiMcpServer {
 
   public server: Server;
   private readonly customToolMap = buildCustomToolMap();
-  private readonly executor = new ToolExecutor();
+  private readonly executor: ToolExecutor;
   private readonly allTools = mergeTools(this.customToolMap);
 
-  constructor() {
+  constructor(executor = new ToolExecutor()) {
+    this.executor = executor;
     this.server = new Server(
       { name: '{{ server_name }}', version: '{{ server_version }}' },
-      { capabilities: { resources: {}, tools: {} } }
+      { capabilities: { tools: {} } }
     );
     OpenApiMcpServer.activeInstances.add(this);
     this.setupRequestHandlers();
     OpenApiMcpServer.setupGracefulShutdown();
     this.server.onerror = (error) => console.error('[MCP Server Error]', error);
+    this.server.onclose = () => OpenApiMcpServer.activeInstances.delete(this);
   }
 
   public async close(): Promise<void> {

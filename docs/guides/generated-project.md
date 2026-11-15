@@ -34,7 +34,22 @@ Only two generation targets exist:
 - `stdio`
 - `streamable-http`
 
-SSE generation is intentionally gone.
+Both transports support the 2026-07-28 protocol and legacy 2025-era clients.
+Modern clients use per-request metadata and discovery; legacy clients initialize a
+session. HTTP modern requests do not use a session ID, while legacy HTTP uses
+stateful sessions. The generated server advertises tools, not resources or other
+optional capabilities. The SDK handles protocol negotiation and wire projection;
+this does not imply support for every optional MCP feature.
+
+The modern HTTP transport creates a protocol server per request and shares one
+process-local executor across those requests. Its concurrency, rate, retry and
+circuit-breaker budgets are shared; cache entries are separated by caller identity.
+Legacy HTTP executor state remains per session, and stdio executor state remains
+per connection. Identity headers must be set by a trusted intermediary when used
+for access control or cache isolation. Restarting the process clears this state.
+
+SSE generation is intentionally gone; Streamable HTTP may still return an SSE
+response when required by the protocol.
 
 ## Runtime behavior included today
 
