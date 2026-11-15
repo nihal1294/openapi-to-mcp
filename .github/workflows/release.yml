@@ -26,6 +26,8 @@ jobs:
       tag_name: ${{ steps.detect.outputs.tag_name }}
       version: ${{ steps.detect.outputs.version }}
       pr_number: ${{ steps.authorize.outputs.pr_number }}
+      notes_sha256: ${{ steps.authorize.outputs.notes_sha256 }}
+      notes_artifact_id: ${{ steps.upload-notes.outputs.artifact-id }}
 
     steps:
       - name: Check out repository
@@ -58,7 +60,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-        run: python scripts/release_automation.py authorize --repository "$REPOSITORY" --sha "$GITHUB_SHA"
+        run: python scripts/release_automation.py authorize --repository "$REPOSITORY" --sha "$GITHUB_SHA" --notes-output "$RUNNER_TEMP/release-notes.md"
+
+      - name: Upload authorized migration guidance
+        if: steps.detect.outputs.should_release == 'true'
+        id: upload-notes
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-notes-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: ${{ runner.temp }}/release-notes.md
+          if-no-files-found: error
+          retention-days: 90
 
   build-release:
     name: build-release
@@ -75,6 +87,16 @@ jobs:
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.14"
+
+      - name: Download authorized migration guidance
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.detect-version-bump.outputs.notes_artifact_id }}
+          path: ${{ runner.temp }}/release-notes
+      - name: Verify authorized migration guidance
+        env:
+          NOTES_SHA256: ${{ needs.detect-version-bump.outputs.notes_sha256 }}
+        run: python scripts/release_notes_cli.py verify "$RUNNER_TEMP/release-notes/release-notes.md" "$NOTES_SHA256"
 
       - name: Set up uv
         uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
@@ -144,6 +166,21 @@ jobs:
           name: dist-${{ needs.detect-version-bump.outputs.tag_name }}
           path: dist/
 
+      - name: Set up Python 3.14
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.14"
+
+      - name: Download authorized migration guidance
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.detect-version-bump.outputs.notes_artifact_id }}
+          path: ${{ runner.temp }}/release-notes
+      - name: Verify authorized migration guidance
+        env:
+          NOTES_SHA256: ${{ needs.detect-version-bump.outputs.notes_sha256 }}
+        run: python scripts/release_notes_cli.py verify "$RUNNER_TEMP/release-notes/release-notes.md" "$NOTES_SHA256"
+
       - name: Ensure release tag exists on current master commit
         env:
           TAG_NAME: ${{ needs.detect-version-bump.outputs.tag_name }}
@@ -159,7 +196,7 @@ jobs:
             exit 1
           fi
 
-      - name: Create or update GitHub Release
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ needs.detect-version-bump.outputs.tag_name }}
@@ -168,8 +205,12 @@ jobs:
             echo "Release exists; the finalizer will verify its original assets."
             exit 0
           fi
+          notes_args=()
+          if [[ -s "$RUNNER_TEMP/release-notes/release-notes.md" ]]; then
+            notes_args=(--notes-file "$RUNNER_TEMP/release-notes/release-notes.md")
+          fi
           gh release create "${TAG_NAME}" dist/* \
-            --generate-notes \
+            --generate-notes "${notes_args[@]}" \
             --title "${TAG_NAME}" \
             --target "${GITHUB_SHA}"
 

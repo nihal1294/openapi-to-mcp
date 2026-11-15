@@ -35,7 +35,7 @@ def release_pr() -> dict:
 
 def evidence(pr) -> dict:
     return {
-        "schema": 1,
+        "schema": metadata.EVIDENCE_SCHEMA,
         "repository": REPO,
         "pr_number": 7,
         "head_sha": HEAD,
