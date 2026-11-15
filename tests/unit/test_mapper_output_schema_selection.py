@@ -215,7 +215,7 @@ def test_swagger_non_json_produces_omits_schema() -> None:
 
 def test_composed_object_responses_are_supported() -> None:
     schema = {
-        "oneOf": [
+        "anyOf": [
             {"type": "object", "required": ["a"]},
             {"type": "object", "required": ["b"]},
         ]
@@ -225,7 +225,7 @@ def test_composed_object_responses_are_supported() -> None:
         {"responses": {"200": response}}, {}, lambda _ref: {}
     )
     assert result is not None
-    assert len(result["oneOf"]) == 2
+    assert len(result["anyOf"]) == 2
 
 
 def test_nullable_composition_reference_is_omitted() -> None:
@@ -299,3 +299,63 @@ def test_media_order_does_not_change_output_schema() -> None:
         second, {}, lambda _ref: {}
     )
     assert extract_output_schema(first, {}, lambda _ref: {}) is not None
+
+
+def test_exclusive_branches_with_dropped_constraints_omit_output_schema() -> None:
+    schema = {
+        "oneOf": [
+            {"type": "object", "maxProperties": 1},
+            {"type": "object", "minProperties": 2},
+        ]
+    }
+    validator = Draft202012Validator(schema)
+    assert validator.is_valid({"a": 1})
+    assert validator.is_valid({"a": 1, "b": 2})
+    response = {"content": {"application/json": {"schema": schema}}}
+    assert (
+        extract_output_schema({"responses": {"200": response}}, {}, lambda _ref: {})
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "unsafe",
+    [
+        {
+            "oneOf": [
+                {"type": "object", "maxProperties": 1},
+                {"type": "object", "minProperties": 2},
+            ]
+        },
+        {"type": "object", "not": {"type": "object", "maxProperties": 1}},
+        {
+            "type": "object",
+            "properties": {"nested": {"not": {"type": "object", "maxProperties": 1}}},
+        },
+        {
+            "type": "object",
+            "properties": {"nested": {"$ref": "#/components/schemas/Unsafe"}},
+        },
+        {
+            "type": "object",
+            "properties": {
+                "nested": {
+                    "type": "array",
+                    "items": {"oneOf": [{"type": "string"}, {"type": "integer"}]},
+                }
+            },
+        },
+    ],
+)
+def test_exclusive_and_negative_compositions_omit_output_schema(
+    unsafe: dict[str, Any],
+) -> None:
+    target = {"type": "object", "not": {"type": "object", "maxProperties": 1}}
+    spec = {"components": {"schemas": {"Unsafe": target}}}
+    response = {"content": {"application/json": {"schema": unsafe}}}
+    assert (
+        extract_output_schema(
+            {"responses": {"200": response}}, spec, lambda _ref: target
+        )
+        is None
+    )

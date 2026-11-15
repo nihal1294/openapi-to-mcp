@@ -45,7 +45,7 @@ def extract_output_schema(  # noqa: C901, PLR0911, PLR0912
             if (
                 _possibly_nullable(schema, resolve_ref, set())
                 or not _raw_object_guarantee(schema, resolve_ref, set())
-                or _has_inferred_types(schema, resolve_ref, set())
+                or _has_unsafe_conversion(schema, resolve_ref, set())
             ):
                 return None
             try:
@@ -176,12 +176,16 @@ def _raw_object_guarantee(
     )
 
 
-def _has_inferred_types(
+def _has_unsafe_conversion(
     schema: dict[str, Any],
     resolve_ref: Callable[[str], dict[str, Any]],
     active_refs: set[str],
 ) -> bool:
-    """Avoid converter inference that can narrow a valid source value."""
+    """Avoid conversions that may narrow the set of valid response values."""
+    # Lost constraints can turn exclusive branches into overlaps, or make a
+    # negated schema broader, rejecting values accepted by the source schema.
+    if "oneOf" in schema or "not" in schema:
+        return True
     if "type" not in schema and ("properties" in schema or "items" in schema):
         return True
     ref = schema.get("$ref")
@@ -189,7 +193,7 @@ def _has_inferred_types(
         if ref in active_refs:
             return True
         resolved = resolve_ref(ref)
-        if not isinstance(resolved, dict) or _has_inferred_types(
+        if not isinstance(resolved, dict) or _has_unsafe_conversion(
             resolved, resolve_ref, active_refs | {ref}
         ):
             return True
@@ -204,7 +208,8 @@ def _has_inferred_types(
         if isinstance(branches, list):
             children.extend(branches)
     return any(
-        isinstance(child, dict) and _has_inferred_types(child, resolve_ref, active_refs)
+        isinstance(child, dict)
+        and _has_unsafe_conversion(child, resolve_ref, active_refs)
         for child in children
     )
 

@@ -57,6 +57,26 @@ def _spec() -> dict:
                     "responses": {"default": response("a")},
                 }
             },
+            "/exclusive": {
+                "get": {
+                    "operationId": "exclusive",
+                    "responses": {
+                        "200": {
+                            "description": "ok",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "oneOf": [
+                                            {"type": "object", "maxProperties": 1},
+                                            {"type": "object", "minProperties": 2},
+                                        ]
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            },
             "/scalar": {
                 "get": {
                     "operationId": "scalar",
@@ -131,12 +151,15 @@ def project(
 
 class Upstream(BaseHTTPRequestHandler):
     status = 200
+    exclusive_body = b"{}"
 
     def do_GET(self) -> None:
         self.send_response(self.status)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        if self.status not in (204, 205) and self.path == "/scalar":
+        if self.status not in (204, 205) and self.path == "/exclusive":
+            self.wfile.write(self.exclusive_body)
+        elif self.status not in (204, 205) and self.path == "/scalar":
             self.wfile.write(b'"hello"')
         elif self.status not in (204, 205):
             self.wfile.write(
@@ -151,7 +174,7 @@ def _exercise(rpc: object) -> None:
     call = rpc
     tools = {tool["name"]: tool for tool in call("tools/list", {})["tools"]}
     schema = tools["union"]["outputSchema"]
-    for name in ("mixed", "wildcard", "default", "scalar"):
+    for name in ("mixed", "wildcard", "default", "scalar", "exclusive"):
         assert "outputSchema" not in tools[name]
     validator = Draft202012Validator(schema)
     for status, expected in ((200, {"a": "ok"}), (201, {"b": "created"})):
@@ -180,6 +203,15 @@ def _exercise(rpc: object) -> None:
     assert not result.get("isError", False)
     assert result["content"][0]["text"] == "hello"
     assert "structuredContent" not in result
+    exclusive_schema = _spec()["paths"]["/exclusive"]["get"]["responses"]["200"][
+        "content"
+    ]["application/json"]["schema"]
+    for payload in ({"a": 1}, {"a": 1, "b": 2}):
+        Draft202012Validator(exclusive_schema).validate(payload)
+        Upstream.exclusive_body = json.dumps(payload).encode()
+        result = call("tools/call", {"name": "exclusive", "arguments": {}})
+        assert not result.get("isError", False)
+        assert json.loads(result["content"][0]["text"]) == payload
 
 
 def test_output_schema_on_transport(project: tuple[Path, str]) -> None:
