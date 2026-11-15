@@ -113,11 +113,11 @@ class ReferenceHandler(SchemaHandler):
             )
             return {"description": f"Unresolved reference: {ref}"}
 
-        parts = ref[2:].split("/")
+        parts = requests.utils.unquote(ref[2:]).split("/")
         current: Any = self.converter.full_spec
         try:
             for part_str in parts:
-                decoded_part = requests.utils.unquote(part_str)
+                decoded_part = part_str.replace("~1", "/").replace("~0", "~")
                 if isinstance(current, list):
                     current = current[int(decoded_part)]
                 elif isinstance(current, dict):

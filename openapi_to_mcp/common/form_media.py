@@ -13,6 +13,21 @@ class FormMediaError(ValueError):
 def resolve_local(
     spec: dict[str, Any], value: object, *, form_schema_mode: str | None = None
 ) -> dict[str, Any]:
+    """Resolve a local reference whose target must be an object."""
+    resolved = _resolve_local(spec, value, form_schema_mode=form_schema_mode)
+    if not isinstance(resolved, dict):
+        raise FormMediaError("Missing or invalid local reference or schema.")
+    return resolved
+
+
+def resolve_local_schema(spec: dict[str, Any], value: object) -> dict[str, Any] | bool:
+    """Resolve a local schema reference, including boolean schema targets."""
+    return _resolve_local(spec, value)
+
+
+def _resolve_local(
+    spec: dict[str, Any], value: object, *, form_schema_mode: str | None = None
+) -> dict[str, Any] | bool:
     """Resolve a bounded chain of local JSON Pointer references."""
     seen: set[str] = set()
     while isinstance(value, dict) and "$ref" in value:
@@ -40,9 +55,9 @@ def resolve_local(
             else:
                 current = None
         value = current
-    if not isinstance(value, dict):
+    if not isinstance(value, (dict, bool)):
         raise FormMediaError("Missing or invalid local reference or schema.")
-    if form_schema_mode is not None:
+    if form_schema_mode is not None and isinstance(value, dict):
         _check_form_schema(value, form_schema_mode, reference=False)
     return value
 

@@ -11,6 +11,7 @@ from openapi_to_mcp.common.form_media import (
     FormMediaError,
     normalize_form_media,
     resolve_local,
+    resolve_local_schema,
     schema_kind,
 )
 
@@ -117,12 +118,7 @@ def openapi_operation_findings(  # noqa: C901, PLR0912, PLR0915
                 )
             content_type, media = next(iter(content.items()))
             media = resolve_local(spec, media)
-            raw_schema = media.get("schema")
-            schema = (
-                raw_schema
-                if isinstance(raw_schema, bool)
-                else resolve_local(spec, raw_schema)
-            )
+            schema = resolve_local_schema(spec, media.get("schema"))
             if content_type == "application/x-www-form-urlencoded":
                 normalize_form_media(spec, media)
             elif content_type == "text/plain":
