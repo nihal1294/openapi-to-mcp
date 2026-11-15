@@ -33,6 +33,7 @@ nav:
       - Containers: guides/containers.md
       - Local Workflows: guides/local-workflows.md
       - MCP Inspector: guides/mcp-inspector.md
+      - Maintainer Metrics: guides/maintainer-metrics.md
   - Examples: examples.md
   - Extended Examples: USAGE_EXAMPLES.md
   - Troubleshooting: troubleshooting.md
