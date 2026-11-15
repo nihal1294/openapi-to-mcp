@@ -15,3 +15,6 @@ serialization. In particular, the generated deepObject branch only handles
 objects that are not arrays. The plain-text GitHub zen response does not produce
 an MCP output schema. Generated server builds use npm install, which may contact
 the npm registry; they do not need provider credentials.
+
+Separately authored synthetic form cases live in `../form_compatibility/`; they
+are not part of this pinned provider corpus.

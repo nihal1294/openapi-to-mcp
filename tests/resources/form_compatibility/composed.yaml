@@ -1,0 +1,59 @@
+openapi: 3.2.0
+info:
+  title: Synthetic composed forms
+  version: '1'
+paths:
+  /send:
+    post:
+      operationId: sendComposed
+      parameters:
+        - name: whole
+          in: querystring
+          required: true
+          content:
+            application/x-www-form-urlencoded:
+              schema: { $ref: '#/components/schemas/Form' }
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: { $ref: '#/components/schemas/Form' }
+            encoding:
+              name: { style: form }
+      responses:
+        '200': { description: OK }
+  /neighbor:
+    post:
+      operationId: unsupportedNeighbor
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              allOf:
+                - type: object
+                  properties: { name: { type: string } }
+                  additionalProperties: false
+      responses:
+        '200': { description: OK }
+  /ordinary:
+    get:
+      operationId: ordinaryNeighbor
+      responses:
+        '200': { description: OK }
+components:
+  schemas:
+    Form:
+      type: object
+      allOf:
+        - { $ref: '#/components/schemas/NameChain' }
+        - type: object
+          properties:
+            count: { type: integer, minimum: 1, maximum: 9 }
+          required: [count]
+    NameChain: { $ref: '#/components/schemas/Name' }
+    Name:
+      type: object
+      properties:
+        name: { type: string, minLength: 2, maxLength: 12 }
+      required: [name]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 from urllib.parse import unquote
 
@@ -25,13 +26,16 @@ def resolve_local_schema(spec: dict[str, Any], value: object) -> dict[str, Any] 
     return _resolve_local(spec, value)
 
 
-def _resolve_local(
+def _resolve_local(  # noqa: C901
     spec: dict[str, Any], value: object, *, form_schema_mode: str | None = None
 ) -> dict[str, Any] | bool:
     """Resolve a bounded chain of local JSON Pointer references."""
     seen: set[str] = set()
     while isinstance(value, dict) and "$ref" in value:
-        if form_schema_mode is not None:
+        if form_schema_mode == "composed":
+            if set(value) != {"$ref"}:
+                raise FormMediaError("Composed form references must be pure.")
+        elif form_schema_mode is not None:
             _check_form_schema(value, form_schema_mode, reference=True)
         ref = value["$ref"]
         if not isinstance(ref, str) or not ref.startswith("#/") or ref in seen:
@@ -57,7 +61,7 @@ def _resolve_local(
         value = current
     if not isinstance(value, (dict, bool)):
         raise FormMediaError("Missing or invalid local reference or schema.")
-    if form_schema_mode is not None and isinstance(value, dict):
+    if form_schema_mode not in (None, "composed") and isinstance(value, dict):
         _check_form_schema(value, form_schema_mode, reference=False)
     return value
 
@@ -195,15 +199,142 @@ def _field(spec: dict[str, Any], schema: object, encoding: object) -> dict[str, 
     }
 
 
+def _composed_scalar_matches(kind: str, value: object) -> bool:
+    if kind == "string":
+        return isinstance(value, str)
+    if kind == "boolean":
+        return isinstance(value, bool)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    if isinstance(value, float) and not math.isfinite(value):
+        return False
+    return kind == "number" or isinstance(value, int) or value.is_integer()
+
+
+def _check_composed_field(spec: dict[str, Any], value: object) -> None:  # noqa: C901, PLR0912
+    field = resolve_local(spec, value, form_schema_mode="composed")
+    kind = field.get("type")
+    if kind not in ("string", "integer", "number", "boolean"):
+        raise FormMediaError("Composed form fields need explicit scalar types.")
+    common = {
+        "type",
+        "title",
+        "description",
+        "default",
+        "example",
+        "examples",
+        "deprecated",
+        "readOnly",
+        "writeOnly",
+        "enum",
+        "const",
+    }
+    specific = (
+        {"minLength", "maxLength", "pattern"}
+        if kind == "string"
+        else {"minimum", "maximum", "multipleOf"}
+        if kind in ("number", "integer")
+        else set()
+    )
+    if set(field) - common - specific:
+        raise FormMediaError("Composed form field has unsupported keywords.")
+    for key in ("title", "description", "pattern"):
+        if key in field and not isinstance(field[key], str):
+            raise FormMediaError("Invalid composed form string annotation or pattern.")
+    for key in ("deprecated", "readOnly", "writeOnly"):
+        if key in field and not isinstance(field[key], bool):
+            raise FormMediaError("Invalid composed form annotation.")
+    for key in ("minLength", "maxLength"):
+        if key in field and (
+            isinstance(field[key], bool)
+            or not isinstance(field[key], int)
+            or field[key] < 0
+        ):
+            raise FormMediaError("Invalid composed form length.")
+    for key in ("minimum", "maximum", "multipleOf"):
+        if key in field and (
+            not _composed_scalar_matches("number", field[key])
+            or (key == "multipleOf" and field[key] <= 0)
+        ):
+            raise FormMediaError("Invalid composed form numeric constraint.")
+    for key in ("default", "example", "const"):
+        if key in field and not _composed_scalar_matches(kind, field[key]):
+            raise FormMediaError("Invalid composed form scalar value.")
+    for key in ("enum", "examples"):
+        if key in field:
+            values = field[key]
+            if (
+                not isinstance(values, list)
+                or (key == "enum" and not values)
+                or any(not _composed_scalar_matches(kind, item) for item in values)
+            ):
+                raise FormMediaError("Invalid composed form scalar values.")
+            if key == "enum" and any(
+                item in values[:i] for i, item in enumerate(values)
+            ):
+                raise FormMediaError("Duplicate composed form enum value.")
+
+
+def _composed_properties(spec: dict[str, Any], source: object) -> dict[str, Any]:
+    root = resolve_local(spec, source, form_schema_mode="composed")
+    if (
+        set(root) - {"type", "allOf", "title", "description"}
+        or root.get("type") != "object"
+        or not isinstance(root.get("allOf"), list)
+        or not root["allOf"]
+    ):
+        raise FormMediaError("Composed form object layout is unsupported.")
+    properties: dict[str, Any] = {}
+    for node in [root, *root["allOf"]]:
+        branch = (
+            root
+            if node is root
+            else resolve_local(spec, node, form_schema_mode="composed")
+        )
+        if any(
+            key in branch and not isinstance(branch[key], str)
+            for key in ("title", "description")
+        ):
+            raise FormMediaError("Invalid composed form description.")
+        if node is root:
+            continue
+        if (
+            set(branch) - {"type", "properties", "required", "title", "description"}
+            or branch.get("type") != "object"
+            or not isinstance(branch.get("properties"), dict)
+        ):
+            raise FormMediaError("Composed form branch is unsupported.")
+        fields = branch["properties"]
+        required = branch.get("required", [])
+        if (
+            not isinstance(required, list)
+            or any(not isinstance(name, str) for name in required)
+            or len(set(required)) != len(required)
+            or any(name not in fields for name in required)
+            or any(not isinstance(name, str) or name in properties for name in fields)
+        ):
+            raise FormMediaError("Invalid or overlapping composed form properties.")
+        for name, field in fields.items():
+            _check_composed_field(spec, field)
+            properties[name] = field
+    return properties
+
+
 def normalize_form_media(spec: dict[str, Any], media: object) -> dict[str, Any]:
     """Return a narrow, JSON-serializable description of supported form encoding."""
     media = resolve_local(spec, media)
     if "itemEncoding" in media or "prefixEncoding" in media:
         raise FormMediaError("Nested form encoding is unsupported.")
-    schema = resolve_local(spec, media.get("schema"), form_schema_mode="expanded")
+    source = media.get("schema")
+    schema = resolve_local(spec, source)
+    composed = "allOf" in schema
+    if composed:
+        properties = _composed_properties(spec, source)
+    else:
+        schema = resolve_local(spec, source, form_schema_mode="expanded")
+        properties = schema.get("properties", {})
     if schema_kind(schema) != "object":
         raise FormMediaError("Form media requires an object schema.")
-    properties = schema.get("properties", {})
     encodings = media.get("encoding", {})
     if not isinstance(properties, dict) or not isinstance(encodings, dict):
         raise FormMediaError("Invalid form properties or encoding.")
