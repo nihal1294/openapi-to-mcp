@@ -48,6 +48,7 @@ class RunClickOptions(_GenerationClickOptions):
     max_queue_size: int | None
     queue_timeout_ms: int | None
     tool_timeout_ms: int | None
+    max_response_bytes: int | None
     cache_ttl_ms: int | None
     cache_max_entries: int | None
     rate_limit_per_minute: int | None

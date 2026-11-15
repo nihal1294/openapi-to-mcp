@@ -40,6 +40,7 @@ def test_apply_policy_overrides_auth_and_execution() -> None:
             "GET /pets": ExecutionOverride(
                 max_concurrency=4,
                 timeout_ms=9000,
+                max_response_bytes=1234,
                 cache_ttl_ms=1500,
                 rate_limit_per_minute=12,
                 retry_max_retries=2,
@@ -59,6 +60,7 @@ def test_apply_policy_overrides_auth_and_execution() -> None:
     assert tool["_policy_execution"] == {
         "maxConcurrency": 4,
         "timeoutMs": 9000,
+        "maxResponseBytes": 1234,
         "cacheTtlMs": 1500,
         "rateLimitPerMinute": 12,
         "retryMaxRetries": 2,

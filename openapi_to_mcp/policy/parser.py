@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
 from openapi_to_mcp.mapping.tool_grouping import TOOL_GROUPING_MODES
 
+_MAX_SAFE_INTEGER = 2**53 - 1
 _ALLOWED_TRANSPORTS = {"stdio", "streamable-http"}
 _ALLOWED_ERROR_MODES = {"fail", "skip"}
 _ALLOWED_RUNTIME_VALIDATION = {"none", "input"}
@@ -158,7 +159,15 @@ def _parse_execution_mapping(
 
 def _parse_execution_override(value: object, field_name: str) -> ExecutionOverride:
     entry = mapping_value(value, field_name)
+    max_response_bytes = optional_int(
+        entry.get("max_response_bytes"), f"{field_name}.max_response_bytes", minimum=0
+    )
+    if max_response_bytes is not None and max_response_bytes > _MAX_SAFE_INTEGER:
+        raise PolicyConfigError(
+            f"`{field_name}.max_response_bytes` must be a safe integer."
+        )
     return ExecutionOverride(
+        max_response_bytes=max_response_bytes,
         max_concurrency=optional_int(
             entry.get("max_concurrency"),
             f"{field_name}.max_concurrency",

@@ -53,6 +53,7 @@ class ExecutionOverride:
 
     max_concurrency: int | None = None
     timeout_ms: int | None = None
+    max_response_bytes: int | None = None
     cache_ttl_ms: int | None = None
     rate_limit_per_minute: int | None = None
     retry_max_retries: int | None = None

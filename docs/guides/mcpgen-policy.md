@@ -163,6 +163,7 @@ Current per-tool overrides:
 
 - `max_concurrency`
 - `timeout_ms`
+- `max_response_bytes`: maximum decompressed response bytes (0 disables this layer); a positive global `MCP_MAX_RESPONSE_BYTES` remains a ceiling.
 - `cache_ttl_ms`
 - `rate_limit_per_minute`
 

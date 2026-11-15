@@ -97,6 +97,10 @@ def test_generator_generate_files_success(mocker: MagicMock) -> None:
         ("src/runtime/redaction.ts.j2", output_files["src/runtime/redaction.ts"]),
         ("src/runtime/response.ts.j2", output_files["src/runtime/response.ts"]),
         (
+            "src/runtime/response_body.ts.j2",
+            output_files["src/runtime/response_body.ts"],
+        ),
+        (
             "src/runtime/serialization.ts.j2",
             output_files["src/runtime/serialization.ts"],
         ),
@@ -157,6 +161,9 @@ def _output_files() -> dict[str, MagicMock]:
         "src/runtime/request.ts": MagicMock(spec=Path, name="runtime_request"),
         "src/runtime/redaction.ts": MagicMock(spec=Path, name="runtime_redaction"),
         "src/runtime/response.ts": MagicMock(spec=Path, name="runtime_response"),
+        "src/runtime/response_body.ts": MagicMock(
+            spec=Path, name="runtime_response_body"
+        ),
         "src/runtime/serialization.ts": MagicMock(spec=Path, name="serialization"),
         "src/runtime/tool_access.ts": MagicMock(spec=Path, name="tool_access"),
         "src/runtime/validation.ts": MagicMock(spec=Path, name="validation"),

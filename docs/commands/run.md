@@ -43,6 +43,7 @@ openapi-to-mcp run [OPTIONS]
 | `--per-tool-max-concurrency` | No | None | Override `MCP_PER_TOOL_MAX_CONCURRENCY` |
 | `--max-queue-size` | No | None | Override `MCP_MAX_QUEUE_SIZE` |
 | `--queue-timeout-ms` | No | None | Override `MCP_QUEUE_TIMEOUT_MS` |
+| `--max-response-bytes` | No | None | Maximum decompressed upstream response bytes; 0 disables the limit |
 | `--tool-timeout-ms` | No | None | Override `MCP_TOOL_TIMEOUT_MS` |
 | `--cache-ttl-ms` | No | None | Override `MCP_CACHE_TTL_MS` for safe tools (`GET`, `HEAD`, `OPTIONS`) |
 | `--cache-max-entries` | No | None | Override `MCP_CACHE_MAX_ENTRIES` for bounded in-memory caching |
