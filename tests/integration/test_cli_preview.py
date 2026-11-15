@@ -159,6 +159,11 @@ def test_skip_json_is_clean_and_strict_is_error(tmp_path, runner) -> None:
     report = json.loads(skip.stdout)
     assert report["operations"][0]["status"] == "skipped"
     assert report["skipped_operations"]
+    text_result = runner.invoke(cli, ["preview", "-o", str(source), "--no-strict"])
+    assert text_result.exit_code == 0, text_result.output
+    assert 'GET "/bad": skipped; "bad"' in text_result.stdout
+    assert "mapping skipped:" in text_result.stdout
+    assert "unsupported Swagger 2 construct" in text_result.stdout
 
 
 def test_trace_preserves_swagger_name_allocation_and_secret_boundary(
@@ -309,39 +314,41 @@ def test_preview_does_not_generate_files_or_launch_process(
 
     monkeypatch.setattr(Generator, "__init__", forbidden)
     monkeypatch.setattr(subprocess, "Popen", forbidden)
-    with runner.isolated_filesystem(temp_dir=tmp_path):
-        source = tmp_path / "input.json"
-        source.write_text(
-            json.dumps(
-                {
-                    "openapi": "3.0.0",
-                    "info": {"title": "test", "version": "1"},
-                    "paths": {
-                        "/": {
-                            "get": {
-                                "summary": "café",
-                                "responses": {"200": {"description": "ok"}},
-                            }
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+    source = tmp_path / "input.json"
+    source.write_text(
+        json.dumps(
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "test", "version": "1"},
+                "paths": {
+                    "/": {
+                        "get": {
+                            "summary": "café",
+                            "responses": {"200": {"description": "ok"}},
                         }
-                    },
-                }
-            )
+                    }
+                },
+            }
         )
-        result = runner.invoke(cli, ["preview", "-o", str(source), "--format", "json"])
-        assert result.exit_code == 0, result.output
-        report = json.loads(result.stdout)
-        assert "café" in result.stdout
-        expected = len(
-            json.dumps(
-                report["tools"],
-                sort_keys=True,
-                ensure_ascii=False,
-                separators=(",", ":"),
-                allow_nan=False,
-            ).encode()
-        )
-        assert report["catalog"]["total_bytes"] == expected
-        assert not list(__import__("pathlib").Path.cwd().iterdir())
+    )
+    result = runner.invoke(cli, ["preview", "-o", str(source), "--format", "json"])
+    assert result.exit_code == 0, result.output
+    report = json.loads(result.stdout)
+    assert "café" in result.stdout
+    expected = len(
+        json.dumps(
+            report["tools"],
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode()
+    )
+    assert report["catalog"]["total_bytes"] == expected
+    assert not list(workspace.iterdir())
 
 
 def test_default_preview_equals_generated_catalog_and_exact_threshold(
@@ -371,3 +378,95 @@ def test_default_preview_equals_generated_catalog_and_exact_threshold(
     assert equal.exit_code == 0
     assert over.exit_code == 2
     assert json.loads(over.stdout)["tools"] == tools
+
+
+def test_text_preview_explains_policy_and_grouping_without_override_values(
+    tmp_path, runner, monkeypatch
+) -> None:
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Test", "version": "1"},
+        "paths": {
+            "/a": {
+                "get": {
+                    "operationId": "alpha",
+                    "tags": ["Pets"],
+                    "responses": {"200": {"description": "ok"}},
+                }
+            },
+            "/b": {
+                "get": {
+                    "operationId": "beta",
+                    "tags": ["Cats"],
+                    "responses": {"200": {"description": "ok"}},
+                }
+            },
+            "/c": {
+                "get": {
+                    "operationId": "gamma",
+                    "responses": {"200": {"description": "ok"}},
+                }
+            },
+            "/d": {
+                "get": {
+                    "operationId": "delta",
+                    "responses": {"200": {"description": "ok"}},
+                }
+            },
+        },
+    }
+    source = tmp_path / "spec.json"
+    source.write_text(json.dumps(spec))
+    policy = tmp_path / "policy.yaml"
+    policy.write_text(
+        yaml.safe_dump(
+            {
+                "generate": {"tool_grouping": "tag-prefix"},
+                "tools": {
+                    "include": {"names": ["alpha", "beta", "gamma"]},
+                    "exclude": {"operations": ["GET /c"]},
+                    "rename": {"operations": {"GET /a": "safe\nname"}},
+                    "descriptions": {
+                        "names": {"safe\nname": "secret-description-value"}
+                    },
+                },
+                "auth": {
+                    "operations": {
+                        "GET /a": {
+                            "security": [{"secret-scheme": []}],
+                            "security_schemes": {
+                                "secret-scheme": {
+                                    "type": "apiKey",
+                                    "in": "header",
+                                    "name": "secret-header-value",
+                                }
+                            },
+                        }
+                    }
+                },
+            }
+        )
+    )
+    monkeypatch.setenv("AUTH_SECRET_SCHEME_API_KEY", "secret-env-value")
+    result = runner.invoke(cli, ["preview", "-o", str(source), "--config", str(policy)])
+    assert result.exit_code == 0, result.output
+    output = result.stdout
+    assert 'include name "alpha"' in output
+    assert 'rename by operation "GET /a"' in output
+    assert 'description override by renamed name "safe\\nname"' in output
+    assert 'auth override by operation "GET /a"' in output
+    assert "grouping suppressed by policy rename" in output
+    assert 'group prefix "cats"' in output
+    assert 'include name "gamma"' in output
+    assert 'exclude operation "GET /c"' in output
+    assert "no include selector matched" in output
+    assert '"alpha" -> "safe\\nname"' in output
+    assert "safe\nname" not in output
+    assert all(
+        secret not in result.output
+        for secret in (
+            "secret-description-value",
+            "secret-header-value",
+            "secret-env-value",
+        )
+    )

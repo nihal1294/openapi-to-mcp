@@ -56,6 +56,70 @@ def catalog_sizes(tools: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _quoted(value: object) -> str:
+    """Quote input-derived text without emitting terminal control characters."""
+    return json.dumps(value, ensure_ascii=True)
+
+
+def _decision_lines(decision: dict[str, Any]) -> list[str]:  # noqa: PLR0911
+    kind = decision["kind"]
+    if kind == "selection":
+        lines = [
+            f"{side} {match['type']} {_quoted(match['key'])}"
+            for side in ("include", "exclude")
+            for match in decision[f"{side}_matches"]
+        ]
+        if not lines:
+            lines.append(
+                "selected by default"
+                if decision["selected"]
+                else "no include selector matched"
+            )
+        return lines
+    if kind == "description_mode":
+        return [f"description mode {decision['mode']}"]
+    if kind == "rename" or kind.endswith("_override"):
+        action = (
+            "rename"
+            if kind == "rename"
+            else f"{kind.removesuffix('_override')} override"
+        )
+        match = decision["match"].replace("_", " ")
+        return [f"{action} by {match} {_quoted(decision['key'])}"]
+    if kind == "grouping":
+        if decision["reason"] == "policy_rename":
+            return ["grouping suppressed by policy rename"]
+        if decision["reason"] == "tag_prefix":
+            return [f"group prefix {_quoted(decision['prefix'])}"]
+        return ["grouping skipped: no usable tag"]
+    if kind == "unsupported_openapi_exclusion":
+        return ["excluded before mapping an unsupported OpenAPI operation"]
+    return []
+
+
+def _render_operations(
+    rows: list[dict[str, Any]], skipped: list[dict[str, str]]
+) -> None:
+    skipped_reasons = {
+        (item["method"].upper(), item["path"]): item["reason"] for item in skipped
+    }
+    for row in rows:
+        provisional, final = row["provisional_name"], row["final_name"]
+        names = ""
+        if provisional is not None:
+            names = f"; {_quoted(provisional)}"
+            if final is not None and final != provisional:
+                names += f" -> {_quoted(final)}"
+        click.echo(f"  {row['method']} {_quoted(row['path'])}: {row['status']}{names}")
+        for decision in row["decisions"]:
+            for line in _decision_lines(decision):
+                click.echo(f"    {line}")
+        if row["status"] == "skipped":
+            reason = skipped_reasons.get((row["method"], row["path"]))
+            if reason is not None:
+                click.echo(f"    mapping skipped: {_quoted(reason)}")
+
+
 # Reuse Click's generation options so defaults and parameter sources remain identical.
 _preview_options = [generation_runtime_options[index] for index in (5, 6, 7, 9, 10, 11)]
 
@@ -129,17 +193,14 @@ def preview(
             click.echo("Largest tools (independent JSON component sizes):")
             for entry in catalog["largest_tools"]:
                 click.echo(
-                    f"  {entry['name']}: {entry['bytes']} bytes; "
+                    f"  {_quoted(entry['name'])}: {entry['bytes']} bytes; "
                     f"description {entry['description_bytes']}, input schema {entry['input_schema_bytes']}, "
                     f"output schema {entry['output_schema_bytes']} bytes"
                 )
             click.echo(
                 "Component sizes are independent JSON values, not additive partitions."
             )
-            for row in result.trace or []:
-                click.echo(
-                    f"  {row['method']} {row['path']}: {row['status']} ({row['final_name']})"
-                )
+            _render_operations(result.trace or [], result.report["skipped_operations"])
         if max_catalog_bytes is not None and catalog["total_bytes"] > max_catalog_bytes:
             raise click.exceptions.Exit(2)
     except (
