@@ -21,9 +21,17 @@ can expand into separate names or use comma-separated tokens. OpenAPI 3.0 and
 3.1 form-style arrays with `explode: false` use comma-separated items. OpenAPI
 3.2 applies the encoding to each array item and repeats the field name.
 Nested styled values, nested Encoding Objects, binary fields, multipart bodies,
-other styles, and `allowReserved: true` are unsupported. Composed object layouts
-using `allOf`, `oneOf`, or `anyOf` are unsupported when the form or a styled
-object must expand their fields. JSON-valued object fields can contain composed
+other styles, and `allowReserved: true` are unsupported. A top-level form can
+use a nonempty `allOf` of explicitly typed object branches with disjoint,
+explicitly typed primitive scalar properties and branch-local required lists.
+Pure local references are supported. This subset allows scalar enum, const,
+string length and pattern, and numeric minimum, maximum and multipleOf
+constraints, plus ordinary field annotations. Object closure, additional
+assertions, nested composition, and reference siblings are unsupported in this
+layout. The original composition remains in the validation schema. Unknown
+fields are still rejected by form serialization even when the original schema
+permits them. Other composed form layouts and composed styled objects are
+unsupported. JSON-valued object fields can contain composed
 schemas because they are serialized as a single JSON value. For form schema
 references, siblings that change the serialized type or array items are
 unsupported. When an object must be expanded, reference siblings that declare
