@@ -10,10 +10,14 @@ class FormMediaError(ValueError):
     """An encoding cannot be represented by the form runtime."""
 
 
-def resolve_local(spec: dict[str, Any], value: object) -> dict[str, Any]:
+def resolve_local(
+    spec: dict[str, Any], value: object, *, reject_composed_layout: bool = False
+) -> dict[str, Any]:
     """Resolve a bounded chain of local JSON Pointer references."""
     seen: set[str] = set()
     while isinstance(value, dict) and "$ref" in value:
+        if reject_composed_layout:
+            _reject_composed_layout(value)
         ref = value["$ref"]
         if not isinstance(ref, str) or not ref.startswith("#/") or ref in seen:
             raise FormMediaError(
@@ -38,6 +42,8 @@ def resolve_local(spec: dict[str, Any], value: object) -> dict[str, Any]:
         value = current
     if not isinstance(value, dict):
         raise FormMediaError("Missing or invalid local reference or schema.")
+    if reject_composed_layout:
+        _reject_composed_layout(value)
     return value
 
 
@@ -54,7 +60,13 @@ def _is_binary(schema: dict[str, Any]) -> bool:
     ) or schema.get("format") in ("binary", "byte")
 
 
+def _reject_composed_layout(schema: dict[str, Any]) -> None:
+    if any(keyword in schema for keyword in ("allOf", "oneOf", "anyOf")):
+        raise FormMediaError("Composed form object layouts are unsupported.")
+
+
 def _field(spec: dict[str, Any], schema: object, encoding: object) -> dict[str, Any]:  # noqa: C901, PLR0912
+    original_schema = schema
     schema = resolve_local(spec, schema)
     if not isinstance(encoding, dict):
         raise FormMediaError("Invalid Encoding Object.")
@@ -81,6 +93,7 @@ def _field(spec: dict[str, Any], schema: object, encoding: object) -> dict[str, 
     object_fields: dict[str, object] | None = None
     object_additional = None
     if style and kind == "object":
+        resolve_local(spec, original_schema, reject_composed_layout=True)
         props = schema.get("properties", {})
         if not isinstance(props, dict) or any(
             schema_kind(resolve_local(spec, p))
@@ -134,7 +147,7 @@ def normalize_form_media(spec: dict[str, Any], media: object) -> dict[str, Any]:
     media = resolve_local(spec, media)
     if "itemEncoding" in media or "prefixEncoding" in media:
         raise FormMediaError("Nested form encoding is unsupported.")
-    schema = resolve_local(spec, media.get("schema"))
+    schema = resolve_local(spec, media.get("schema"), reject_composed_layout=True)
     if schema_kind(schema) != "object":
         raise FormMediaError("Form media requires an object schema.")
     properties = schema.get("properties", {})

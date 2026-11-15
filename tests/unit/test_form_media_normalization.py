@@ -6,6 +6,7 @@ import pytest
 
 from openapi_to_mcp.common import MappingError
 from openapi_to_mcp.common.form_media import FormMediaError, normalize_form_media
+from openapi_to_mcp.doctor import DoctorAnalyzer
 from openapi_to_mcp.mapping import Mapper
 from openapi_to_mcp.policy.models import PolicyConfig, SelectorSet
 
@@ -277,3 +278,117 @@ def test_styled_object_binary_children_rejected_strict_and_skip(
     mapper = Mapper(spec, on_mapping_error="skip")
     assert mapper.map_tools() == []
     assert "Binary" in mapper.get_report()["skipped_operations"][0]["reason"]
+
+
+@pytest.mark.parametrize("composition", ["allOf", "oneOf", "anyOf"])
+@pytest.mark.parametrize("use_ref", [False, True])
+@pytest.mark.parametrize("location", ["whole-query", "request-body"])
+@pytest.mark.parametrize("target", ["form", "styled-object"])
+def test_composed_expanded_form_layout_is_rejected(
+    composition: str, location: str, target: str, *, use_ref: bool
+) -> None:
+    composed = {
+        "type": "object",
+        composition: [
+            {"properties": {"name": {"type": "string"}}, "required": ["name"]}
+        ],
+    }
+    referenced = {"$ref": "#/components/schemas/Composed"} if use_ref else composed
+    media = (
+        {"schema": referenced}
+        if target == "form"
+        else {
+            "schema": {"type": "object", "properties": {"obj": referenced}},
+            "encoding": {"obj": {"style": "form"}},
+        }
+    )
+    operation = {"operationId": "send", "responses": {"200": {"description": "OK"}}}
+    if location == "whole-query":
+        operation["parameters"] = [
+            {
+                "name": "whole",
+                "in": "querystring",
+                "content": {"application/x-www-form-urlencoded": media},
+            }
+        ]
+    else:
+        operation["requestBody"] = {
+            "content": {"application/x-www-form-urlencoded": media}
+        }
+    spec = {
+        "openapi": "3.2.1",
+        "components": {"schemas": {"Composed": composed}},
+        "paths": {"/send": {"post": operation}},
+    }
+    with pytest.raises(FormMediaError, match="Composed"):
+        normalize_form_media(spec, media)
+    with pytest.raises(MappingError, match="Composed"):
+        Mapper(spec).map_tools()
+    issues = DoctorAnalyzer(spec).analyze("inline").issues
+    assert any(
+        issue.code == "unsupported_openapi_construct" and "Composed" in issue.hint
+        for issue in issues
+    )
+    mapper = Mapper(spec, on_mapping_error="skip")
+    assert mapper.map_tools() == []
+    assert "Composed" in mapper.get_report()["skipped_operations"][0]["reason"]
+    trace: list[dict] = []
+    policy = PolicyConfig(
+        source_path=Path("policy.yaml"),
+        exclude=SelectorSet(operations=frozenset({"POST /send"})),
+    )
+    assert Mapper(spec, policy_config=policy, trace=trace).map_tools() == []
+    assert trace[0]["status"] == "excluded_before_mapping"
+
+
+@pytest.mark.parametrize("composition", ["allOf", "oneOf", "anyOf"])
+def test_json_valued_object_allows_composed_schema(composition: str) -> None:
+    media = {
+        "schema": {
+            "type": "object",
+            "properties": {"obj": {"$ref": "#/components/schemas/Composed"}},
+        }
+    }
+    spec = {
+        "openapi": "3.2.1",
+        "components": {
+            "schemas": {
+                "Composed": {
+                    "type": "object",
+                    composition: [{"properties": {"name": {"type": "string"}}}],
+                }
+            }
+        },
+    }
+    field = normalize_form_media(spec, media)["fields"]["obj"]
+    assert field["mode"] == "content"
+    assert field["contentType"] == "application/json"
+
+
+@pytest.mark.parametrize("target", ["form", "styled-object"])
+@pytest.mark.parametrize("composition", ["allOf", "oneOf", "anyOf"])
+def test_composed_schema_reference_sibling_is_not_ignored(
+    target: str, composition: str
+) -> None:
+    sibling = {
+        "$ref": "#/components/schemas/Base",
+        composition: [{"properties": {"name": {"type": "string"}}}],
+    }
+    spec = {
+        "openapi": "3.2.1",
+        "components": {
+            "schemas": {
+                "Base": {"type": "object", "properties": {"x": {"type": "string"}}}
+            }
+        },
+    }
+    media = (
+        {"schema": sibling}
+        if target == "form"
+        else {
+            "schema": {"type": "object", "properties": {"obj": sibling}},
+            "encoding": {"obj": {"style": "form"}},
+        }
+    )
+    with pytest.raises(FormMediaError, match="Composed"):
+        normalize_form_media(spec, media)

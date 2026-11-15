@@ -21,7 +21,10 @@ can expand into separate names or use comma-separated tokens. OpenAPI 3.0 and
 3.1 form-style arrays with `explode: false` use comma-separated items. OpenAPI
 3.2 applies the encoding to each array item and repeats the field name.
 Nested styled values, nested Encoding Objects, binary fields, multipart bodies,
-other styles, and `allowReserved: true` are unsupported.
+other styles, and `allowReserved: true` are unsupported. Composed object layouts
+using `allOf`, `oneOf`, or `anyOf` are unsupported when the form or a styled
+object must expand their fields. JSON-valued object fields can contain composed
+schemas because they are serialized as a single JSON value.
 
 A whole query cannot coexist with ordinary query parameters, an existing base
 URL query or fragment, or a colliding input name. Query credentials may be

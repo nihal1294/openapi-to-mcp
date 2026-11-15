@@ -605,3 +605,84 @@ def test_ordinary_json_and_text_bodies_wire(tmp_path: Path, transport: str) -> N
         ("/jsonbody", '{"a":"é +%&=","n":2}', "application/json"),
         ("/textbody", "é +%&=", "text/plain"),
     ]
+
+
+@pytest.mark.parametrize("composition", ["allOf", "oneOf", "anyOf"])
+def test_json_form_field_with_composed_schema_wire(
+    tmp_path: Path, composition: str
+) -> None:
+    composed = {
+        "type": "object",
+        composition: [
+            {"properties": {"name": {"type": "string"}}, "required": ["name"]}
+        ],
+    }
+    media = {
+        "schema": {
+            "type": "object",
+            "properties": {"obj": {"$ref": "#/components/schemas/Composed"}},
+        }
+    }
+    spec = {
+        "openapi": "3.2.1",
+        "info": {"title": "Wire", "version": "1"},
+        "components": {"schemas": {"Composed": composed}},
+        "paths": {
+            "/send": {
+                "post": {
+                    "operationId": "send",
+                    "parameters": [
+                        {
+                            "name": "whole",
+                            "in": "querystring",
+                            "content": {"application/x-www-form-urlencoded": media},
+                        }
+                    ],
+                    "requestBody": {
+                        "content": {"application/x-www-form-urlencoded": media}
+                    },
+                    "responses": {"200": {"description": "OK"}},
+                }
+            }
+        },
+    }
+    source = tmp_path / "spec.json"
+    source.write_text(json.dumps(spec), encoding="utf-8")
+    out = tmp_path / "generated"
+    result = CliRunner().invoke(
+        cli, ["generate", "-o", str(source), "-d", str(out), "--transport", "stdio"]
+    )
+    assert result.exit_code == 0, result.output
+    _build(out)
+    Capture.requests = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Capture)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        connection = ConnectionSettings(
+            server_cmd=f"node {out / 'build' / 'index.js'}",
+            env={"TARGET_API_BASE_URL": f"http://127.0.0.1:{server.server_port}"},
+        )
+        body = {"obj": {"name": "a + b"}}
+        result = asyncio.run(
+            execute_mcp_server(
+                ServerTestRequest(
+                    "stdio",
+                    "call",
+                    {
+                        "tool_name": "send",
+                        "tool_arguments": {"whole": body, "requestBody": body},
+                    },
+                    connection=connection,
+                )
+            )
+        )
+        assert not result.get("isError", False), result
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+    wire = "obj=%7B%22name%22%3A%22a+%2B+b%22%7D"
+    assert Capture.requests == [
+        (f"/send?{wire}", wire, "application/x-www-form-urlencoded")
+    ]
