@@ -6,7 +6,6 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from openapi_to_mcp.commands.generation_models import GenerationBehavior
 from openapi_to_mcp.common import MappingError
 from openapi_to_mcp.mapping.preparation import prepare_tools
 
@@ -45,6 +44,9 @@ def build_tool_surfaces(
     tool_name_policy: str | None = None,
 ) -> dict[str, ToolSurface]:
     """Return comparable tool surfaces keyed by tool name."""
+    # Defer the command package import until diff initialization is complete.
+    from openapi_to_mcp.commands.generation_models import GenerationBehavior  # noqa: PLC0415
+
     defaults = policy.generation if policy else None
     behavior = GenerationBehavior(
         tool_grouping=tool_grouping
