@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.0](https://github.com/nihal1294/openapi-to-mcp/compare/v0.11.0...v0.12.0) (2026-11-15)
+
+
+### Features
+
+* add configurable MCP tool safety annotations ([#150](https://github.com/nihal1294/openapi-to-mcp/issues/150)) ([6a36fdf](https://github.com/nihal1294/openapi-to-mcp/commit/6a36fdffc28cb16648dbfea9218729ea8ee69a58))
+* add configurable upstream response byte budgets ([#151](https://github.com/nihal1294/openapi-to-mcp/issues/151)) ([2ddb0e6](https://github.com/nihal1294/openapi-to-mcp/commit/2ddb0e696e661f521ef4f1e1aa34cdd6ab111fc2))
+* add optional generated runtime telemetry ([#153](https://github.com/nihal1294/openapi-to-mcp/issues/153)) ([027a21f](https://github.com/nihal1294/openapi-to-mcp/commit/027a21f2b34ef30c6d135e6fe3ea558ca7d26859))
+* add read-only maintainer adoption reports ([#152](https://github.com/nihal1294/openapi-to-mcp/issues/152)) ([b257a3d](https://github.com/nihal1294/openapi-to-mcp/commit/b257a3d8bc07a660e09c21342eec8f33042dff6c))
+* expand OpenAPI 3.2 compatibility and HTTP methods ([#148](https://github.com/nihal1294/openapi-to-mcp/issues/148)) ([644151c](https://github.com/nihal1294/openapi-to-mcp/commit/644151ca84ca0fa907804ea790950705b8b2d450))
+
+
+### Documentation
+
+* refresh PyPI version and download badges ([#147](https://github.com/nihal1294/openapi-to-mcp/issues/147)) ([a9a37ce](https://github.com/nihal1294/openapi-to-mcp/commit/a9a37ce362a9114762bceb1d8755a3cc64564ec4))
+
 ## [0.11.0](https://github.com/nihal1294/openapi-to-mcp/compare/v0.10.0...v0.11.0) (2026-11-14)
 
 
