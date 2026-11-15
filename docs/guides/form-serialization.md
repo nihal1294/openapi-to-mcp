@@ -43,9 +43,15 @@ the logical body paths.
 
 ## Migration
 
-Earlier generated servers relied on Axios's implicit form serializer. It could
-emit names such as `tags[]` and `object[key]`. Form serialization now follows
-the selected schema and encoding instead: arrays generally repeat the field
-name, and objects default to JSON. Verify affected endpoints and their wire
+Earlier generated servers relied on Axios's implicit form serializer, which
+could emit bracketed field names such as `tags[]` and `object[key]`. Declared
+form encoding now determines the wire shape. In content mode with default
+content types, primitive arrays use `tags=a&tags=b`; with explicit
+`application/json` content, each array item is JSON-serialized before form
+encoding. Content-mode objects use JSON such as
+`object=%7B%22key%22%3A%22value%22%7D`. Explicit object styles may expand fields
+or use comma-separated tokens. With `style: form, explode: false`, OpenAPI
+3.0/3.1 arrays emit `tags=a,b`; OpenAPI 3.2 applies these settings per item
+and emits `tags=a&tags=b`. Verify each affected endpoint's wire
 expectations before replacing generated servers. Ordinary query parameters and
 JSON/text request bodies retain their previous behavior.

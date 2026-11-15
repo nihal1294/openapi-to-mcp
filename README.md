@@ -100,7 +100,11 @@ conformance. The currently tested compatibility surface is:
 | --- | --- | --- | --- | --- |
 | 3.0.4 | Supported | Not applicable | Not applicable | Not applicable |
 | 3.1.2 | Supported | Not applicable | Not applicable | Not applicable |
-| 3.2.1 | Supported | Uppercase HTTP tokens supported; reserved, invalid, mixed-case and CONNECT methods diagnosed | Supported | Diagnosed; not generated |
+| 3.2.1 | Supported | Uppercase HTTP tokens supported; reserved, invalid, mixed-case and CONNECT methods diagnosed | Supported | Supported for URL-encoded form, JSON, and text; [see supported subset](https://nihal1294.github.io/openapi-to-mcp/guides/form-serialization/) |
+
+Regenerating servers can change URL-encoded body field names from earlier
+bracketed forms such as `tags[]` and `object[key]`. Check affected endpoints
+before regeneration; see the [migration guide](https://nihal1294.github.io/openapi-to-mcp/guides/form-serialization/#migration).
 
 Use `openapi-to-mcp doctor` before generation to identify constructs outside this
 surface. The generated MCP `outputSchema` remains object-shaped.
