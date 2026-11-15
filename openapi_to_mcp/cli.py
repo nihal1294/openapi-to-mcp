@@ -1,6 +1,6 @@
 import rich_click as click
 
-from openapi_to_mcp.commands import diff, doctor, generate, run, test_server
+from openapi_to_mcp.commands import diff, doctor, generate, preview, run, test_server
 from openapi_to_mcp.common import configure_logger
 
 
@@ -39,6 +39,7 @@ cli.add_command(run)
 cli.add_command(test_server)
 cli.add_command(doctor)
 cli.add_command(diff)
+cli.add_command(preview)
 
 
 if __name__ == "__main__":

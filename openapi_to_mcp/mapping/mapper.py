@@ -30,6 +30,7 @@ from openapi_to_mcp.mapping.tool_examples import (
     build_input_examples,
 )
 from openapi_to_mcp.mapping.utils import generate_tool_name, next_available_tool_name
+from openapi_to_mcp.policy.applier import selection_decision
 from openapi_to_mcp.policy.openapi import is_openapi_operation_selected
 from openapi_to_mcp.policy.swagger import effective_swagger_findings
 from openapi_to_mcp.schema.converter import (
@@ -48,7 +49,7 @@ logger = logging.getLogger(__name__)
 class Mapper:
     """Maps OpenAPI operations to MCP tool definitions."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         spec: dict[str, Any],
         *,
@@ -56,6 +57,7 @@ class Mapper:
         on_mapping_error: ErrorMode | None = None,
         on_schema_error: ErrorMode | None = None,
         policy_config: PolicyConfig | None = None,
+        trace: list[dict[str, Any]] | None = None,
     ) -> None:
         """
         Initialize the mapper with the loaded OpenAPI spec.
@@ -70,6 +72,8 @@ class Mapper:
         if not isinstance(spec, dict):
             err_msg = "Invalid OpenAPI specification provided to Mapper."
             raise MappingError(err_msg)
+        self.trace = trace
+        self._trace_row: dict[str, Any] | None = None
         self.spec = spec
         self.strict = strict
         self.policy_config = policy_config
@@ -81,7 +85,7 @@ class Mapper:
         self._tool_name_counts: dict[str, int] = {}
         self._used_tool_names: set[str] = set()
 
-    def map_tools(self) -> list[dict[str, Any]]:
+    def map_tools(self) -> list[dict[str, Any]]:  # noqa: C901
         """
         Iterate through the OpenAPI spec and generate MCP tool definitions.
 
@@ -107,6 +111,18 @@ class Mapper:
             path_item = operation_ref.path_item
             method = operation_ref.method
             operation = operation_ref.operation
+            row = None
+            if self.trace is not None:
+                row = {
+                    "method": method.upper(),
+                    "path": path,
+                    "provisional_name": None,
+                    "final_name": None,
+                    "status": "skipped",
+                    "decisions": [],
+                }
+                self.trace.append(row)
+            self._trace_row = row
             path_level_parameters = path_item.get("parameters", [])
             if not isinstance(path_level_parameters, list):
                 path_level_parameters = []
@@ -116,6 +132,23 @@ class Mapper:
                     if not is_openapi_operation_selected(
                         operation_ref, self.policy_config
                     ):
+                        if row is not None:
+                            row["provisional_name"] = operation.get(
+                                "operationId"
+                            ) or generate_tool_name(method, path)
+                            row["status"] = "excluded_before_mapping"
+                            _, decision = selection_decision(
+                                {
+                                    "name": row["provisional_name"],
+                                    "_original_method": method,
+                                    "_original_path": path,
+                                },
+                                self.policy_config,
+                            )
+                            row["decisions"].append(decision)
+                            row["decisions"].append(
+                                {"kind": "unsupported_openapi_exclusion"}
+                            )
                         continue
                     self._raise_if_unsupported_openapi(operation_ref)
                 merged_parameters = self._merge_parameters(
@@ -128,6 +161,8 @@ class Mapper:
                     operation,
                     merged_parameters,
                 )
+                if row is not None:
+                    row["provisional_name"] = tool_definition["name"]
                 self._raise_if_unsupported_swagger(
                     path_item, operation, tool_definition
                 )
@@ -136,6 +171,9 @@ class Mapper:
                     tool_definition["name"],
                 )
                 self.mcp_tools.append(tool_definition)
+                if row is not None:
+                    row["status"] = "selected"
+                    row["final_name"] = tool_definition["name"]
             except SchemaError as exc:
                 self._handle_schema_error(method, path, exc)
             except PolicyConfigError:
@@ -300,15 +338,20 @@ class Mapper:
     def _resolve_unique_tool_name(self, candidate_name: str) -> str:
         """Return a unique tool name without reserving it."""
         if candidate_name not in self._used_tool_names:
+            if self._trace_row is not None:
+                self._trace_row["provisional_name"] = candidate_name
             return candidate_name
 
         if self.on_mapping_error == "fail":
             err_msg = f"Duplicate tool name detected: {candidate_name}"
             raise MappingError(err_msg)
 
-        return next_available_tool_name(
+        name = next_available_tool_name(
             candidate_name, self._used_tool_names, self._tool_name_counts
         )
+        if self._trace_row is not None:
+            self._trace_row["provisional_name"] = name
+        return name
 
     def _register_tool_name(
         self,

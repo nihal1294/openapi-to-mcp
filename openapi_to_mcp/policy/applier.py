@@ -15,29 +15,89 @@ if TYPE_CHECKING:
     )
 
 
+def _trace_row(
+    trace: list[dict[str, Any]] | None, tool: dict[str, Any]
+) -> dict[str, Any] | None:
+    if trace is None:
+        return None
+    return next(
+        (
+            row
+            for row in trace
+            if row["method"] == tool["_original_method"].upper()
+            and row["path"] == tool["_original_path"]
+        ),
+        None,
+    )
+
+
+def selection_decision(
+    tool: dict[str, Any], policy: PolicyConfig | None
+) -> tuple[bool, dict[str, Any]]:
+    """Resolve selectors with include-before-exclude and record matching keys."""
+    if policy is None:
+        return True, {
+            "kind": "selection",
+            "selected": True,
+            "include_matches": [],
+            "exclude_matches": [],
+        }
+    operation, name = _tool_operation_key(tool), _tool_name(tool)
+
+    def matches(selectors: SelectorSet) -> list[dict[str, str]]:
+        result = []
+        if operation in selectors.operations:
+            result.append({"type": "operation", "key": operation})
+        if name in selectors.names:
+            result.append({"type": "name", "key": name})
+        return result
+
+    include, exclude = matches(policy.include), matches(policy.exclude)
+    selected = (policy.include.is_empty or bool(include)) and not exclude
+    return selected, {
+        "kind": "selection",
+        "selected": selected,
+        "include_matches": include,
+        "exclude_matches": exclude,
+    }
+
+
 def apply_policy(
-    mcp_tools: list[dict[str, Any]], policy: PolicyConfig | None
+    mcp_tools: list[dict[str, Any]],
+    policy: PolicyConfig | None,
+    *,
+    trace: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Return policy-adjusted mapped tools."""
-    if policy is None:
+    if policy is None and trace is None:
         return mcp_tools
-    filtered = [deepcopy(tool) for tool in mcp_tools if is_tool_selected(tool, policy)]
-    updated = [_apply_tool_overrides(tool, policy) for tool in filtered]
-    _ensure_unique_names(updated)
+    updated = []
+    for tool in mcp_tools:
+        selected, decision = selection_decision(tool, policy)
+        row = _trace_row(trace, tool)
+        if row is not None:
+            row["decisions"].append(decision)
+        if not selected:
+            if row is not None:
+                row["status"] = "mapped_then_excluded"
+                row["final_name"] = None
+            continue
+        if policy is None:
+            updated.append(tool)
+            continue
+        item = deepcopy(tool)
+        item = _apply_tool_overrides(item, policy, row)
+        if row is not None:
+            row["final_name"] = item["name"]
+        updated.append(item)
+    if policy is not None:
+        _ensure_unique_names(updated)
     return updated
 
 
 def is_tool_selected(tool: dict[str, Any], policy: PolicyConfig | None) -> bool:
     """Return whether include and exclude selectors retain a tool."""
-    if policy is None:
-        return True
-    operation = _tool_operation_key(tool)
-    original_name = _tool_name(tool)
-    if not policy.include.is_empty and not _matches_selectors(
-        original_name, operation, policy.include
-    ):
-        return False
-    return not _matches_selectors(original_name, operation, policy.exclude)
+    return selection_decision(tool, policy)[0]
 
 
 def preview_auth_policy(
@@ -62,10 +122,12 @@ def _matches_selectors(
     return operation in selectors.operations or original_name in selectors.names
 
 
-def _apply_tool_overrides(tool: dict[str, Any], policy: PolicyConfig) -> dict[str, Any]:
+def _apply_tool_overrides(
+    tool: dict[str, Any], policy: PolicyConfig, row: dict[str, Any] | None = None
+) -> dict[str, Any]:
     operation = _tool_operation_key(tool)
     original_name = _tool_name(tool)
-    renamed_name = _resolve_rename(operation, original_name, policy)
+    renamed_name = _resolve_rename(operation, original_name, policy, row)
     tool["name"] = renamed_name
     description = _lookup_override(
         operation,
@@ -73,31 +135,52 @@ def _apply_tool_overrides(tool: dict[str, Any], policy: PolicyConfig) -> dict[st
         renamed_name,
         policy.description_operations,
         policy.description_names,
+        row=row,
+        kind="description",
     )
     if description is not None:
         tool["description"] = description
-    _apply_annotation_override(tool, operation, original_name, renamed_name, policy)
-    _apply_auth_override(tool, operation, original_name, renamed_name, policy)
-    _apply_execution_override(tool, operation, original_name, renamed_name, policy)
+    _apply_annotation_override(
+        tool, operation, original_name, renamed_name, policy, row=row
+    )
+    _apply_auth_override(tool, operation, original_name, renamed_name, policy, row=row)
+    _apply_execution_override(
+        tool, operation, original_name, renamed_name, policy, row=row
+    )
     return tool
 
 
-def _resolve_rename(operation: str, original_name: str, policy: PolicyConfig) -> str:
+def _resolve_rename(
+    operation: str,
+    original_name: str,
+    policy: PolicyConfig,
+    row: dict[str, Any] | None = None,
+) -> str:
     operation_rename = policy.rename_operations.get(operation)
     if operation_rename is not None:
+        if row is not None:
+            row["decisions"].append(
+                {"kind": "rename", "match": "operation", "key": operation}
+            )
         return operation_rename
     name_rename = policy.rename_names.get(original_name)
     if name_rename is not None:
+        if row is not None:
+            row["decisions"].append(
+                {"kind": "rename", "match": "original_name", "key": original_name}
+            )
         return name_rename
     return original_name
 
 
-def _apply_annotation_override(
+def _apply_annotation_override(  # noqa: PLR0913
     tool: dict[str, Any],
     operation: str,
     original_name: str,
     renamed_name: str,
     policy: PolicyConfig,
+    *,
+    row: dict[str, Any] | None = None,
 ) -> None:
     override = _lookup_override(
         operation,
@@ -105,6 +188,8 @@ def _apply_annotation_override(
         renamed_name,
         policy.annotation_operations,
         policy.annotation_names,
+        row=row,
+        kind="annotation",
     )
     if override is None:
         return
@@ -124,12 +209,14 @@ def _apply_annotation_override(
         tool.pop("annotations", None)
 
 
-def _apply_auth_override(
+def _apply_auth_override(  # noqa: PLR0913
     tool: dict[str, Any],
     operation: str,
     original_name: str,
     renamed_name: str,
     policy: PolicyConfig,
+    *,
+    row: dict[str, Any] | None = None,
 ) -> None:
     override = _lookup_override(
         operation,
@@ -137,6 +224,8 @@ def _apply_auth_override(
         renamed_name,
         policy.auth_operations,
         policy.auth_names,
+        row=row,
+        kind="auth",
     )
     if override is None:
         return
@@ -146,12 +235,14 @@ def _apply_auth_override(
         tool["_original_security_schemes"] = override.security_schemes
 
 
-def _apply_execution_override(
+def _apply_execution_override(  # noqa: PLR0913
     tool: dict[str, Any],
     operation: str,
     original_name: str,
     renamed_name: str,
     policy: PolicyConfig,
+    *,
+    row: dict[str, Any] | None = None,
 ) -> None:
     override = _lookup_override(
         operation,
@@ -159,6 +250,8 @@ def _apply_execution_override(
         renamed_name,
         policy.execution_operations,
         policy.execution_names,
+        row=row,
+        kind="execution",
     )
     if override is None:
         return
@@ -219,22 +312,31 @@ def _build_execution_metadata(override: ExecutionOverride) -> dict[str, int]:
     }
 
 
-def _lookup_override[T](
+def _lookup_override[T](  # noqa: PLR0913
     operation: str,
     original_name: str,
     renamed_name: str,
     operation_overrides: dict[str, T],
     name_overrides: dict[str, T],
+    *,
+    row: dict[str, Any] | None = None,
+    kind: str = "",
 ) -> T | None:
-    operation_override = operation_overrides.get(operation)
-    if operation_override is not None:
-        return operation_override
-    original_override = name_overrides.get(original_name)
-    if original_override is not None:
-        return original_override
-    if renamed_name == original_name:
-        return None
-    return name_overrides.get(renamed_name)
+    candidates = [
+        ("operation", operation, operation_overrides),
+        ("original_name", original_name, name_overrides),
+    ]
+    if renamed_name != original_name:
+        candidates.append(("renamed_name", renamed_name, name_overrides))
+    for match, key, overrides in candidates:
+        value = overrides.get(key)
+        if value is not None:
+            if row is not None:
+                row["decisions"].append(
+                    {"kind": kind + "_override", "match": match, "key": key}
+                )
+            return value
+    return None
 
 
 def _ensure_unique_names(mcp_tools: list[dict[str, Any]]) -> None:

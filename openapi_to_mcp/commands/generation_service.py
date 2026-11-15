@@ -14,20 +14,16 @@ from openapi_to_mcp.adapters.spec_loader import SpecLoader
 from openapi_to_mcp.commands.generation_context import build_template_context
 from openapi_to_mcp.common.exceptions import NoToolsMappedError
 from openapi_to_mcp.common.tool_runtime import (
-    build_public_tools,
-    build_runtime_tool_registry,
     derive_auth_env_vars,
 )
-from openapi_to_mcp.mapping import Mapper
-from openapi_to_mcp.mapping.tool_grouping import apply_tool_grouping
+from openapi_to_mcp.mapping.preparation import prepare_tools
 from openapi_to_mcp.mapping.tool_metadata import (
-    apply_description_mode,
     validate_tool_names,
 )
-from openapi_to_mcp.policy import apply_policy
 
 if TYPE_CHECKING:
     from openapi_to_mcp.commands.generation_models import GenerationRequest
+    from openapi_to_mcp.mapping import Mapper
     from openapi_to_mcp.policy.models import PolicyConfig
 
 logger = logging.getLogger(__name__)
@@ -64,17 +60,8 @@ def _map_tools(
     spec: dict[str, Any], request: GenerationRequest
 ) -> tuple[Mapper, list[dict[str, Any]]]:
     behavior = request.settings.behavior
-    mapper = Mapper(
-        spec=spec,
-        strict=behavior.strict,
-        on_mapping_error=behavior.on_mapping_error,
-        on_schema_error=behavior.on_schema_error,
-        policy_config=request.policy_config,
-    )
-    tools = apply_description_mode(mapper.map_tools(), behavior.tool_descriptions)
-    tools = apply_policy(tools, request.policy_config)
-    tools = apply_tool_grouping(tools, behavior.tool_grouping)
-    warnings = validate_tool_names(tools, behavior.tool_name_policy)
+    prepared = prepare_tools(spec, behavior=behavior, policy=request.policy_config)
+    mapper, tools, warnings = prepared.mapper, prepared.tools, prepared.warnings
     for warning in warnings:
         click.echo(f"Warning: {warning['message']}", err=True)
     logger.info("Mapped %d tools.", len(tools))
@@ -138,12 +125,19 @@ def generate_project(request: GenerationRequest) -> None:
     logger.info("OpenAPI spec loaded and validated successfully.")
     _validate_transport(request)
     logger.info("Mapping OpenAPI paths to MCP tools...")
-    mapper, tools = _map_tools(spec, request)
-    runtime_tools = build_runtime_tool_registry(tools)
+    prepared = prepare_tools(
+        spec, behavior=request.settings.behavior, policy=request.policy_config
+    )
+    mapper, tools = prepared.mapper, prepared.tools
+    for warning in prepared.warnings:
+        click.echo(f"Warning: {warning['message']}", err=True)
+    logger.info("Mapped %d tools.", len(tools))
+    _raise_if_no_tools(tools, request.policy_config)
+    runtime_tools = prepared.runtime_registry
     context = build_template_context(
         spec,
         request.settings,
-        build_public_tools(tools),
+        prepared.public_tools,
         runtime_tools,
         derive_auth_env_vars(runtime_tools),
     )
