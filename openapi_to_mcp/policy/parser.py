@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from openapi_to_mcp.common.exceptions import PolicyConfigError
 from openapi_to_mcp.policy.models import (
     AuthOverride,
     ExecutionOverride,
     GenerationDefaults,
     PolicyConfig,
     SelectorSet,
+    ToolAnnotationOverride,
 )
 from openapi_to_mcp.policy.validators import (
     mapping_value,
@@ -28,6 +30,7 @@ if TYPE_CHECKING:
 
 from openapi_to_mcp.mapping.tool_grouping import TOOL_GROUPING_MODES
 
+_MAX_SAFE_INTEGER = 2**53 - 1
 _ALLOWED_TRANSPORTS = {"stdio", "streamable-http"}
 _ALLOWED_ERROR_MODES = {"fail", "skip"}
 _ALLOWED_RUNTIME_VALIDATION = {"none", "input"}
@@ -36,6 +39,8 @@ _ALLOWED_RUNTIME_VALIDATION = {"none", "input"}
 def parse_policy_config(payload: dict[str, Any], source_path: Path) -> PolicyConfig:
     """Build a typed policy config from a validated payload."""
     tools = mapping_value(payload.get("tools"), "tools")
+    annotations = mapping_value(tools.get("annotations"), "tools.annotations")
+    _reject_unknown(annotations, {"operations", "names"}, "tools.annotations")
     renames = mapping_value(tools.get("rename"), "tools.rename")
     auth = mapping_value(payload.get("auth"), "auth")
     execution = mapping_value(payload.get("execution"), "execution")
@@ -49,6 +54,12 @@ def parse_policy_config(payload: dict[str, Any], source_path: Path) -> PolicyCon
             "tools.rename.operations",
         ),
         rename_names=parse_string_mapping(renames.get("names"), "tools.rename.names"),
+        annotation_operations=_parse_annotation_mapping(
+            annotations.get("operations"), "tools.annotations.operations"
+        ),
+        annotation_names=_parse_annotation_mapping(
+            annotations.get("names"), "tools.annotations.names"
+        ),
         auth_operations=_parse_auth_mapping(auth.get("operations"), "auth.operations"),
         auth_names=_parse_auth_mapping(auth.get("names"), "auth.names"),
         execution_operations=_parse_execution_mapping(
@@ -148,7 +159,15 @@ def _parse_execution_mapping(
 
 def _parse_execution_override(value: object, field_name: str) -> ExecutionOverride:
     entry = mapping_value(value, field_name)
+    max_response_bytes = optional_int(
+        entry.get("max_response_bytes"), f"{field_name}.max_response_bytes", minimum=0
+    )
+    if max_response_bytes is not None and max_response_bytes > _MAX_SAFE_INTEGER:
+        raise PolicyConfigError(
+            f"`{field_name}.max_response_bytes` must be a safe integer."
+        )
     return ExecutionOverride(
+        max_response_bytes=max_response_bytes,
         max_concurrency=optional_int(
             entry.get("max_concurrency"),
             f"{field_name}.max_concurrency",
@@ -190,3 +209,32 @@ def _parse_execution_override(value: object, field_name: str) -> ExecutionOverri
             minimum=1,
         ),
     )
+
+
+def _reject_unknown(entry: dict[str, Any], allowed: set[str], field_name: str) -> None:
+    if any(key not in allowed for key in entry):
+        raise PolicyConfigError(f"`{field_name}` contains unknown fields.")
+
+
+def _parse_annotation_mapping(
+    value: object, field_name: str
+) -> dict[str, ToolAnnotationOverride]:
+    config = mapping_value(value, field_name)
+    result = {}
+    for key, entry in config.items():
+        if not isinstance(key, str) or not key:
+            raise PolicyConfigError(f"`{field_name}` must have non-empty string keys.")
+        if not isinstance(entry, dict):
+            raise PolicyConfigError(f"`{field_name}.{key}` must be a mapping.")
+        _reject_unknown(
+            entry,
+            {"read_only", "destructive", "idempotent", "open_world"},
+            f"{field_name}.{key}",
+        )
+        for name, item in entry.items():
+            if not isinstance(item, bool):
+                raise PolicyConfigError(
+                    f"`{field_name}.{key}.{name}` must be a boolean."
+                )
+        result[key] = ToolAnnotationOverride(**entry)
+    return result

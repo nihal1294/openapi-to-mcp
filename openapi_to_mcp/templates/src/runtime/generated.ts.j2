@@ -1,4 +1,3 @@
-import type { Method } from 'axios';
 import type { CallToolResult, Tool } from '@modelcontextprotocol/server';
 
 export type ParameterLocation = 'path' | 'query' | 'header' | 'cookie';
@@ -27,6 +26,7 @@ export interface SecuritySchemeDefinition {
 export interface ToolExecutionMetadata {
   maxConcurrency?: number;
   timeoutMs?: number;
+  maxResponseBytes?: number;
   cacheTtlMs?: number;
   rateLimitPerMinute?: number;
   retryMaxRetries?: number;
@@ -41,7 +41,7 @@ export interface CustomToolDefinition {
 }
 
 export interface ToolRuntimeMetadata {
-  method: Method;
+  method: string;
   path: string;
   parameters?: ToolParameterMetadata[];
   requestBody?: RequestBodyMetadata | null;

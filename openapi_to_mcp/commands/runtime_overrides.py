@@ -20,6 +20,7 @@ RUNTIME_ENV_MAP = {
     "max_queue_size": "MCP_MAX_QUEUE_SIZE",
     "queue_timeout_ms": "MCP_QUEUE_TIMEOUT_MS",
     "tool_timeout_ms": "MCP_TOOL_TIMEOUT_MS",
+    "max_response_bytes": "MCP_MAX_RESPONSE_BYTES",
     "cache_ttl_ms": "MCP_CACHE_TTL_MS",
     "cache_max_entries": "MCP_CACHE_MAX_ENTRIES",
     "rate_limit_per_minute": "MCP_RATE_LIMIT_PER_MINUTE",
@@ -69,6 +70,11 @@ run_runtime_override_options = [
         "--tool-timeout-ms",
         type=int,
         help="Maximum tool execution time in milliseconds.",
+    ),
+    click.option(
+        "--max-response-bytes",
+        type=click.IntRange(0, 9007199254740991),
+        help="Maximum decompressed upstream response bytes; 0 disables the limit.",
     ),
     click.option(
         "--cache-ttl-ms",

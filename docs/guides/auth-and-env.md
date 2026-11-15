@@ -125,6 +125,7 @@ Current generated `.env.example` includes:
 - `MCP_MAX_QUEUE_SIZE`
 - `MCP_QUEUE_TIMEOUT_MS`
 - `MCP_TOOL_TIMEOUT_MS`
+- `MCP_MAX_RESPONSE_BYTES` (0 or empty disables the decompressed response limit; per-tool policy can tighten a positive global ceiling)
 - auth env vars derived from the OpenAPI security schemes
 
 Invalid runtime-control values fail fast at startup instead of silently using defaults.
