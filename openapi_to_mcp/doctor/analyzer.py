@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from openapi_to_mcp.common.openapi_compatibility import openapi_operation_findings
+from openapi_to_mcp.common.operations import OperationRef, iter_operations
+from openapi_to_mcp.common.spec_compatibility import swagger_operation_findings
 from openapi_to_mcp.doctor.models import DoctorReport
+from openapi_to_mcp.doctor.openapi import report_openapi_compatibility
 from openapi_to_mcp.doctor.security import (
     check_security_header_conflicts,
     check_security_scheme,
@@ -12,25 +16,36 @@ from openapi_to_mcp.doctor.security import (
     security_schemes,
 )
 from openapi_to_mcp.doctor.swagger import report_swagger_compatibility
-from openapi_to_mcp.mapping.utils import generate_tool_name
+from openapi_to_mcp.mapping.security import (
+    operation_security,
+    operation_security_schemes,
+)
+from openapi_to_mcp.mapping.utils import generate_tool_name, next_available_tool_name
+from openapi_to_mcp.policy.openapi import is_openapi_operation_selected
+from openapi_to_mcp.policy.swagger import preview_swagger_findings
 
-_HTTP_METHODS = {"get", "post", "put", "delete", "patch", "options", "head", "trace"}
+if TYPE_CHECKING:
+    from openapi_to_mcp.policy.models import PolicyConfig
+
 _MAX_UNION_DEPTH = 20
 
 
 class DoctorAnalyzer:
     """Analyze an OpenAPI document for MCP-generation readiness."""
 
-    def __init__(self, spec: dict[str, Any]) -> None:
+    def __init__(
+        self, spec: dict[str, Any], policy_config: PolicyConfig | None = None
+    ) -> None:
         """Initialize the analyzer with a loaded OpenAPI document."""
         self.spec = spec
+        self.policy_config = policy_config
 
     def analyze(self, source: str) -> DoctorReport:
         """Return a diagnostics report for the current spec."""
         report = DoctorReport(source=source)
         self._check_base_url(report)
-        operations = list(self._iter_operations())
-        if not operations:
+        discovered_operations = list(self._iter_operations())
+        if not discovered_operations:
             report.add_error(
                 "no_http_operations",
                 "No HTTP operations were found under `paths`.",
@@ -38,10 +53,24 @@ class DoctorAnalyzer:
                 "Add at least one HTTP operation before generating an MCP server.",
             )
             return report
+        operations = self._selected_operations(discovered_operations)
+        if not operations:
+            report.add_error(
+                "no_selected_operations",
+                "No HTTP operations remain after applying the configured policy.",
+                "paths",
+                "Adjust the policy include or exclude selectors to retain at least one HTTP operation.",
+            )
+            return report
         self._check_missing_operation_ids(report, operations)
         self._check_generated_name_collisions(report, operations)
         self._check_security(report, operations)
-        report_swagger_compatibility(report, self.spec, operations)
+        report_swagger_compatibility(
+            report,
+            self.spec,
+            [(item.method, item.path, item.operation) for item in operations],
+        )
+        report_openapi_compatibility(report, self.spec, operations)
         self._check_schema_unions(report, operations)
         return report
 
@@ -64,51 +93,104 @@ class DoctorAnalyzer:
             "`run` will require `--target-api-base-url` or an env override.",
         )
 
-    def _iter_operations(self) -> list[tuple[str, str, dict[str, Any]]]:
-        paths = self.spec.get("paths", {})
-        if not isinstance(paths, dict):
-            return []
-        operations = []
-        for path, path_item in paths.items():
-            if not isinstance(path_item, dict):
+    def _iter_operations(self) -> list[OperationRef]:
+        return iter_operations(self.spec)
+
+    def _selected_operations(
+        self, operations: list[OperationRef]
+    ) -> list[OperationRef]:
+        """Return inventory entries retained by the configured policy selectors."""
+        original_names = self._allocated_operation_names(operations)
+        return [
+            operation_ref
+            for operation_ref, original_name in zip(
+                operations, original_names, strict=True
+            )
+            if is_openapi_operation_selected(
+                operation_ref, self.policy_config, original_name=original_name
+            )
+        ]
+
+    def _allocated_operation_names(
+        self, operations: list[OperationRef]
+    ) -> list[str | None]:
+        """Return deterministic mapper-equivalent names for policy selection."""
+        used_names: set[str] = set()
+        name_counts: dict[str, int] = {}
+        original_names: list[str | None] = []
+        for operation_ref in operations:
+            candidate_name = operation_ref.operation.get(
+                "operationId"
+            ) or generate_tool_name(operation_ref.method, operation_ref.path)
+            if not isinstance(candidate_name, str):
+                original_names.append(None)
                 continue
-            for method, operation in path_item.items():
-                if method.lower() not in _HTTP_METHODS or not isinstance(
-                    operation, dict
-                ):
-                    continue
-                operations.append((method, path, operation))
-        return operations
+            if openapi_operation_findings(self.spec, operation_ref):
+                # OpenAPI compatibility is checked before name allocation.
+                original_names.append(candidate_name)
+                continue
+            allocated_name = next_available_tool_name(
+                candidate_name, used_names, name_counts
+            )
+            original_names.append(allocated_name)
+            findings = swagger_operation_findings(
+                self.spec,
+                operation_ref.method,
+                operation_ref.path,
+                operation_ref.path_item,
+                operation_ref.operation,
+            )
+            requirements = operation_security(self.spec, operation_ref.operation)
+            tool = {
+                "name": allocated_name,
+                "_original_method": operation_ref.method,
+                "_original_path": operation_ref.path,
+                "_original_security": requirements,
+                "_original_security_schemes": operation_security_schemes(
+                    self.spec, requirements
+                ),
+            }
+            if preview_swagger_findings(findings, tool, self.policy_config):
+                # Selected operations with effective findings fail before registration.
+                continue
+            used_names.add(allocated_name)
+            if allocated_name == candidate_name:
+                name_counts[candidate_name] = max(name_counts.get(candidate_name, 0), 1)
+            else:
+                name_counts[candidate_name] = int(
+                    allocated_name.removeprefix(f"{candidate_name}_")
+                )
+        return original_names
 
     def _check_missing_operation_ids(
         self,
         report: DoctorReport,
-        operations: list[tuple[str, str, dict[str, Any]]],
+        operations: list[OperationRef],
     ) -> None:
-        for method, path, operation in operations:
-            operation_id = operation.get("operationId")
+        for operation_ref in operations:
+            operation_id = operation_ref.operation.get("operationId")
             if isinstance(operation_id, str) and operation_id.strip():
                 continue
             report.add_warning(
                 "missing_operation_id",
-                f"{method.upper()} {path} has no explicit operationId.",
-                f"paths.{path}.{method}",
+                f"{operation_ref.method} {operation_ref.path} has no explicit operationId.",
+                operation_ref.location,
                 "Add a stable operationId to avoid generated fallback names.",
             )
 
     def _check_generated_name_collisions(
         self,
         report: DoctorReport,
-        operations: list[tuple[str, str, dict[str, Any]]],
+        operations: list[OperationRef],
     ) -> None:
         seen: dict[str, str] = {}
-        for method, path, operation in operations:
-            candidate_name = operation.get("operationId") or generate_tool_name(
-                method, path
-            )
+        for operation_ref in operations:
+            candidate_name = operation_ref.operation.get(
+                "operationId"
+            ) or generate_tool_name(operation_ref.method, operation_ref.path)
             if not isinstance(candidate_name, str):
                 continue
-            location = f"paths.{path}.{method}"
+            location = operation_ref.location
             first_location = seen.get(candidate_name)
             if first_location is None:
                 seen[candidate_name] = location
@@ -123,25 +205,25 @@ class DoctorAnalyzer:
     def _check_security(
         self,
         report: DoctorReport,
-        operations: list[tuple[str, str, dict[str, Any]]],
+        operations: list[OperationRef],
     ) -> None:
         schemes = security_schemes(self.spec)
-        if any("security" not in operation for _, _, operation in operations):
+        if any("security" not in item.operation for item in operations):
             self._check_security_requirements(
                 report,
                 source=self.spec.get("security", []),
                 schemes=schemes,
                 location="security",
             )
-        for method, path, operation in operations:
-            security = operation.get("security")
+        for operation_ref in operations:
+            security = operation_ref.operation.get("security")
             if security is None:
                 continue
             self._check_security_requirements(
                 report,
                 source=security,
                 schemes=schemes,
-                location=f"paths.{path}.{method}.security",
+                location=f"{operation_ref.location}.security",
             )
 
     def _check_security_requirements(
@@ -169,15 +251,14 @@ class DoctorAnalyzer:
     def _check_schema_unions(
         self,
         report: DoctorReport,
-        operations: list[tuple[str, str, dict[str, Any]]],
+        operations: list[OperationRef],
     ) -> None:
-        for method, path, operation in operations:
-            location = f"paths.{path}.{method}"
-            if self._operation_uses_union_schema(operation):
+        for operation_ref in operations:
+            if self._operation_uses_union_schema(operation_ref.operation):
                 report.add_warning(
                     "risky_union_schema",
-                    f"{method.upper()} {path} uses `oneOf` or `anyOf` in request or response schemas.",
-                    location,
+                    f"{operation_ref.method} {operation_ref.path} uses `oneOf` or `anyOf` in request or response schemas.",
+                    operation_ref.location,
                     "Generation can proceed, but review the generated input/output contract carefully.",
                 )
 

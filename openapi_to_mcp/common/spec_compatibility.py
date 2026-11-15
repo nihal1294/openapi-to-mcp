@@ -25,6 +25,23 @@ def swagger_operation_findings(
     if spec.get("swagger") != "2.0":
         return []
     base = f"paths.{path}"
+    findings = swagger_parameter_findings(spec, method, path, path_item, operation)
+    findings.extend(_security_findings(spec, operation, base, method))
+    findings.extend(_scheme_findings(spec, operation, base, method))
+    return list(dict.fromkeys(findings))
+
+
+def swagger_parameter_findings(
+    spec: dict[str, Any],
+    method: str,
+    path: str,
+    path_item: dict[str, Any],
+    operation: dict[str, Any],
+) -> list[SwaggerFinding]:
+    """Return structural parameter findings unaffected by authentication policy."""
+    if spec.get("swagger") != "2.0":
+        return []
+    base = f"paths.{path}"
     findings = _parameter_findings(
         spec, path_item.get("parameters"), f"{base}.parameters"
     )
@@ -33,8 +50,6 @@ def swagger_operation_findings(
             spec, operation.get("parameters"), f"{base}.{method.lower()}.parameters"
         )
     )
-    findings.extend(_security_findings(spec, operation, base, method))
-    findings.extend(_scheme_findings(spec, operation, base, method))
     return list(dict.fromkeys(findings))
 
 

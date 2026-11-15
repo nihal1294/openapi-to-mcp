@@ -8,18 +8,28 @@ from typing import TYPE_CHECKING, Any
 from openapi_to_mcp.common import MappingError, SchemaError
 from openapi_to_mcp.common.error_policy import ErrorMode, resolve_error_mode
 from openapi_to_mcp.common.exceptions import PolicyConfigError
+from openapi_to_mcp.common.openapi_compatibility import (
+    format_openapi_finding,
+    openapi_operation_findings,
+)
+from openapi_to_mcp.common.operations import iter_operations
 from openapi_to_mcp.common.spec_compatibility import (
     format_swagger_finding,
     swagger_operation_findings,
 )
 from openapi_to_mcp.mapping.output_schema import extract_output_schema
+from openapi_to_mcp.mapping.security import (
+    operation_security,
+    operation_security_schemes,
+)
 from openapi_to_mcp.mapping.tool_description import build_tool_description
 from openapi_to_mcp.mapping.tool_examples import (
     add_media_example,
     add_parameter_example,
     build_input_examples,
 )
-from openapi_to_mcp.mapping.utils import generate_tool_name
+from openapi_to_mcp.mapping.utils import generate_tool_name, next_available_tool_name
+from openapi_to_mcp.policy.openapi import is_openapi_operation_selected
 from openapi_to_mcp.policy.swagger import effective_swagger_findings
 from openapi_to_mcp.schema.converter import (
     SchemaConverter,
@@ -28,6 +38,7 @@ from openapi_to_mcp.schema.converter import (
 from openapi_to_mcp.schema.handlers.reference import ReferenceHandler
 
 if TYPE_CHECKING:
+    from openapi_to_mcp.common.operations import OperationRef
     from openapi_to_mcp.policy.models import PolicyConfig
 
 logger = logging.getLogger(__name__)
@@ -90,53 +101,46 @@ class Mapper:
             err_msg = "Invalid 'paths' object in OpenAPI spec."
             raise MappingError(err_msg)
 
-        for path, path_item in paths.items():
-            if not isinstance(path_item, dict):
-                continue
-
+        for operation_ref in iter_operations(self.spec):
+            path = operation_ref.path
+            path_item = operation_ref.path_item
+            method = operation_ref.method
+            operation = operation_ref.operation
             path_level_parameters = path_item.get("parameters", [])
             if not isinstance(path_level_parameters, list):
                 path_level_parameters = []
 
-            for method, operation in path_item.items():
-                if method.lower() not in [
-                    "get",
-                    "post",
-                    "put",
-                    "delete",
-                    "patch",
-                    "options",
-                    "head",
-                    "trace",
-                ] or not isinstance(operation, dict):
-                    continue
-
-                try:
-                    merged_parameters = self._merge_parameters(
-                        path_level_parameters,
-                        operation.get("parameters", []),
-                    )
-                    tool_definition = self._map_operation_to_tool(
-                        method,
-                        path,
-                        operation,
-                        merged_parameters,
-                    )
-                    self._raise_if_unsupported_swagger(
-                        path_item, operation, tool_definition
-                    )
-                    self._register_tool_name(
-                        operation.get("operationId")
-                        or generate_tool_name(method, path),
-                        tool_definition["name"],
-                    )
-                    self.mcp_tools.append(tool_definition)
-                except SchemaError as exc:
-                    self._handle_schema_error(method, path, exc)
-                except PolicyConfigError:
-                    raise
-                except Exception as exc:  # noqa: BLE001
-                    self._handle_mapping_error(method, path, exc)
+            try:
+                if openapi_operation_findings(self.spec, operation_ref):
+                    if not is_openapi_operation_selected(
+                        operation_ref, self.policy_config
+                    ):
+                        continue
+                    self._raise_if_unsupported_openapi(operation_ref)
+                merged_parameters = self._merge_parameters(
+                    path_level_parameters,
+                    operation.get("parameters", []),
+                )
+                tool_definition = self._map_operation_to_tool(
+                    method,
+                    path,
+                    operation,
+                    merged_parameters,
+                )
+                self._raise_if_unsupported_swagger(
+                    path_item, operation, tool_definition
+                )
+                self._register_tool_name(
+                    operation.get("operationId") or generate_tool_name(method, path),
+                    tool_definition["name"],
+                )
+                self.mcp_tools.append(tool_definition)
+            except SchemaError as exc:
+                self._handle_schema_error(method, path, exc)
+            except PolicyConfigError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                self._handle_mapping_error(method, path, exc)
 
         return self.mcp_tools
 
@@ -158,6 +162,12 @@ class Mapper:
         if findings:
             raise MappingError(format_swagger_finding(findings[0]))
 
+    def _raise_if_unsupported_openapi(self, operation_ref: OperationRef) -> None:
+        """Raise when this operation needs OpenAPI behavior the mapper cannot run."""
+        findings = openapi_operation_findings(self.spec, operation_ref)
+        if findings:
+            raise MappingError(format_openapi_finding(findings[0]))
+
     def get_report(self) -> dict[str, Any]:
         """Get mapper warnings and skipped operations for generation report."""
         return {
@@ -170,7 +180,7 @@ class Mapper:
 
     def _handle_mapping_error(self, method: str, path: str, exc: Exception) -> None:
         """Handle non-schema mapping failures according to the configured policy."""
-        message = f"Failed to map operation {method.upper()} {path}: {exc}"
+        message = f"Failed to map operation {method} {path}: {exc}"
         if self.on_mapping_error == "fail":
             raise MappingError(message) from exc
         self._record_skipped_operation(method, path, str(exc), message)
@@ -190,7 +200,7 @@ class Mapper:
         self._diagnostics.append(message)
         self._skipped_operations.append(
             {
-                "method": method.upper(),
+                "method": method,
                 "path": path,
                 "reason": reason,
             }
@@ -209,55 +219,17 @@ class Mapper:
         ref_handler = ReferenceHandler(SchemaConverter(self.spec))
         return ref_handler.resolve_ref(ref)
 
-    def _normalize_security_requirements(
-        self, security_requirements_maybe: object
-    ) -> list[dict[str, Any]] | None:
-        """Normalize security requirements to a list of requirement objects."""
-        if security_requirements_maybe is None:
-            return None
-        if not isinstance(security_requirements_maybe, list):
-            return None
-
-        valid_requirements: list[dict[str, Any]] = [
-            item for item in security_requirements_maybe if isinstance(item, dict)
-        ]
-        return valid_requirements
-
     def _get_operation_security(
         self, operation: dict[str, Any]
     ) -> list[dict[str, Any]] | None:
         """Return operation-level security, else global security requirements."""
-        if "security" in operation:
-            return self._normalize_security_requirements(operation.get("security"))
-        return self._normalize_security_requirements(self.spec.get("security"))
+        return operation_security(self.spec, operation)
 
     def _build_security_schemes_for_operation(
         self, security_requirements: list[dict[str, Any]] | None
     ) -> dict[str, dict[str, Any]]:
         """Build scheme metadata map for schemes referenced by operation security."""
-        if not security_requirements:
-            return {}
-
-        components = self.spec.get("components", {})
-        if not isinstance(components, dict):
-            return {}
-        security_schemes = components.get("securitySchemes", {})
-        if not isinstance(security_schemes, dict):
-            return {}
-
-        referenced_scheme_names: set[str] = set()
-        for requirement in security_requirements:
-            for scheme_name in requirement:
-                if isinstance(scheme_name, str):
-                    referenced_scheme_names.add(scheme_name)
-
-        resolved_schemes: dict[str, dict[str, Any]] = {}
-        for scheme_name in referenced_scheme_names:
-            scheme = security_schemes.get(scheme_name)
-            if isinstance(scheme, dict):
-                resolved_schemes[scheme_name] = scheme
-
-        return resolved_schemes
+        return operation_security_schemes(self.spec, security_requirements)
 
     def _merge_parameters(
         self,
@@ -333,15 +305,9 @@ class Mapper:
             err_msg = f"Duplicate tool name detected: {candidate_name}"
             raise MappingError(err_msg)
 
-        count = self._tool_name_counts.get(candidate_name, 1)
-        deduped_name = ""
-        while True:
-            count += 1
-            deduped_name = f"{candidate_name}_{count}"
-            if deduped_name not in self._used_tool_names:
-                break
-
-        return deduped_name
+        return next_available_tool_name(
+            candidate_name, self._used_tool_names, self._tool_name_counts
+        )
 
     def _register_tool_name(
         self,

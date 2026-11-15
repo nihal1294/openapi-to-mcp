@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from openapi_to_mcp.policy.applier import apply_policy
+from openapi_to_mcp.policy.applier import apply_policy, preview_auth_policy
 
 if TYPE_CHECKING:
     from openapi_to_mcp.common.spec_compatibility import SwaggerFinding
@@ -22,7 +22,25 @@ def effective_swagger_findings(
     selected = apply_policy([tool], policy)
     if not selected:
         return []
-    if _has_supported_security_metadata(selected[0]):
+    return _filter_security_findings(findings, selected[0])
+
+
+def preview_swagger_findings(
+    findings: list[SwaggerFinding], tool: dict[str, Any], policy: PolicyConfig | None
+) -> list[SwaggerFinding]:
+    """Evaluate selection and auth without unrelated execution policy effects."""
+    if not findings or policy is None:
+        return findings
+    selected = preview_auth_policy(tool, policy)
+    if selected is None:
+        return []
+    return _filter_security_findings(findings, selected)
+
+
+def _filter_security_findings(
+    findings: list[SwaggerFinding], tool: dict[str, Any]
+) -> list[SwaggerFinding]:
+    if _has_supported_security_metadata(tool):
         return [
             finding
             for finding in findings
