@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.0](https://github.com/nihal1294/openapi-to-mcp/compare/v0.12.0...v0.13.0) (2026-11-15)
+
+
+### Features
+
+* add explicit tool metadata controls ([#155](https://github.com/nihal1294/openapi-to-mcp/issues/155)) ([09ee115](https://github.com/nihal1294/openapi-to-mcp/commit/09ee11592a2b208fe2057f3cbe394aa03372e2f9))
+* compare policy-adjusted tool contracts ([#158](https://github.com/nihal1294/openapi-to-mcp/issues/158)) ([3122370](https://github.com/nihal1294/openapi-to-mcp/commit/3122370feb03612c4b8ef9948a3bf80c084771e0))
+* preview generated tools and catalog size ([#156](https://github.com/nihal1294/openapi-to-mcp/issues/156)) ([edb069e](https://github.com/nihal1294/openapi-to-mcp/commit/edb069e4d40ad539421691b207d442a84d3b9cf0))
+
 ## [0.12.0](https://github.com/nihal1294/openapi-to-mcp/compare/v0.11.0...v0.12.0) (2026-11-15)
 
 
