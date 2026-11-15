@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 class _GenerationClickOptions(TypedDict):
     openapi_json: str
+    provenance: bool
     config: str | None
     mcp_server_name: str | None
     mcp_server_version: str | None
@@ -120,6 +121,7 @@ class GenerationRequest:
     output_dir: str
     settings: GenerationSettings
     policy_config: PolicyConfig | None = None
+    provenance: bool = False
 
 
 GENERATION_SETTING_NAMES = (
@@ -150,6 +152,8 @@ def compose_generation_request(
     output_dir: str,
     values: Mapping[str, Any],
     policy_config: PolicyConfig | None,
+    *,
+    provenance: bool = False,
 ) -> GenerationRequest:
     """Compose an immutable generation request from resolved option values."""
     identity = ServerIdentity(
@@ -173,4 +177,4 @@ def compose_generation_request(
         on_schema_error=cast("ErrorMode | None", values["on_schema_error"]),
     )
     settings = GenerationSettings(identity, transport, behavior)
-    return GenerationRequest(source, output_dir, settings, policy_config)
+    return GenerationRequest(source, output_dir, settings, policy_config, provenance)

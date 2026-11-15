@@ -24,6 +24,7 @@ openapi-to-mcp generate [OPTIONS]
 | `--strict/--no-strict` | No | `--strict` | Fail or degrade on unsupported required behavior |
 | `--on-mapping-error` | No | strict=`fail`, non-strict=`skip` | How to handle non-schema operation mapping failures |
 | `--on-schema-error` | No | strict=`fail`, non-strict=`skip` | How to handle schema conversion failures while mapping operations |
+| `--provenance` | No | off | Add input fingerprints to the generation report; unsalted hashes allow guessing, so treat the report as sensitive. See [generation provenance](../guides/generation-provenance.md). |
 | `--runtime-validation` | No | `input` | Runtime validation mode compiled into the generated server (`none` or `input`) |
 | `--tool-grouping` | No | `none` | Optional grouped tool naming strategy (`none` or `tag-prefix`) |
 | `--tool-descriptions` | No | `spec` | Use imported descriptions (`spec`) or fixed HTTP method descriptions (`method`) |

@@ -147,7 +147,14 @@ generation_runtime_options = [
     *tool_metadata_options,
 ]
 
+provenance_option = click.option(
+    "--provenance",
+    is_flag=True,
+    help="Record unsalted input hashes; guesses can be confirmed. Treat the report as sensitive.",
+)
+
 generate_options = [
+    provenance_option,
     *openapi_source_options,
     click.option(
         "--output-dir",
@@ -161,6 +168,7 @@ generate_options = [
 ]
 
 run_options = [
+    provenance_option,
     click.option(
         "--output-dir",
         "-d",

@@ -12,6 +12,10 @@ import rich_click as click
 from openapi_to_mcp.adapters.generator import Generator
 from openapi_to_mcp.adapters.spec_loader import SpecLoader
 from openapi_to_mcp.commands.generation_context import build_template_context
+from openapi_to_mcp.commands.generation_provenance import (
+    build_provenance,
+    validate_settings_containers,
+)
 from openapi_to_mcp.common.exceptions import NoToolsMappedError
 from openapi_to_mcp.common.tool_runtime import (
     derive_auth_env_vars,
@@ -119,9 +123,22 @@ def _log_request(request: GenerationRequest) -> None:
 
 def generate_project(request: GenerationRequest) -> None:
     """Generate project files and a diagnostic report for one request."""
+    if request.provenance:
+        validate_settings_containers(request.settings)
     _log_request(request)
     logger.info("Loading OpenAPI spec from: %s", request.source)
-    spec = SpecLoader(source=request.source).load_and_validate()
+    loader = SpecLoader(source=request.source)
+    spec = loader.load_and_validate()
+    provenance = None
+    if request.provenance:
+        provenance = build_provenance(
+            source_kind="url"
+            if request.source.startswith(("http://", "https://"))
+            else "file",
+            spec_digest=loader.loaded_text_sha256(),
+            settings=request.settings,
+            policy=request.policy_config,
+        )
     logger.info("OpenAPI spec loaded and validated successfully.")
     _validate_transport(request)
     logger.info("Mapping OpenAPI paths to MCP tools...")
@@ -144,6 +161,8 @@ def generate_project(request: GenerationRequest) -> None:
     logger.info("Generating files in: %s", request.output_dir)
     Generator(output_dir=request.output_dir, context=context).generate_files()
     report = _generation_report(mapper, request, len(tools))
+    if provenance is not None:
+        report["provenance"] = provenance
     report["tool_name_warnings"] = validate_tool_names(tools, "preserve")
     _write_report(request, report)
     logger.info("File generation complete.")

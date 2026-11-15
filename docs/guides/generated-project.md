@@ -129,6 +129,10 @@ Generated projects reserve `src/custom/` for user-owned extensions.
 Use this boundary for local tools or helper modules you want to keep across regeneration.
 Do not edit `src/server.ts` or `src/runtime/*.ts` directly.
 
+## Generation provenance
+
+The optional `--provenance` flag records limited input fingerprints in the report. See [generation provenance](generation-provenance.md) for the schema, sensitivity warning, and scope.
+
 ## `generation_report.json`
 
 Use the report to check:

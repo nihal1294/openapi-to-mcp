@@ -43,7 +43,11 @@ def _generation_request(
         generation_cli_values(options), options["config"]
     )
     return compose_generation_request(
-        options["openapi_json"], str(output_path), values, policy
+        options["openapi_json"],
+        str(output_path),
+        values,
+        policy,
+        provenance=options["provenance"],
     )
 
 

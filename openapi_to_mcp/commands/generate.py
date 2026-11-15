@@ -35,7 +35,11 @@ def _generation_request(options: GenerateClickOptions) -> GenerationRequest:
         generation_cli_values(options), options["config"]
     )
     return compose_generation_request(
-        options["openapi_json"], options["output_dir"], values, policy
+        options["openapi_json"],
+        options["output_dir"],
+        values,
+        policy,
+        provenance=options["provenance"],
     )
 
 
