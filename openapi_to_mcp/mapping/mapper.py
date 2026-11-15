@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from openapi_to_mcp.common import MappingError, SchemaError
 from openapi_to_mcp.common.error_policy import ErrorMode, resolve_error_mode
 from openapi_to_mcp.common.exceptions import PolicyConfigError
+from openapi_to_mcp.common.form_media import normalize_form_media, resolve_local
 from openapi_to_mcp.common.openapi_compatibility import (
     format_openapi_finding,
     openapi_operation_findings,
@@ -328,7 +329,11 @@ class Mapper:
             ref_path = resolved.get("$ref")
             if not isinstance(ref_path, str):
                 return None
-            resolved = self._resolve_ref(ref_path)
+            resolved = (
+                self._resolve_ref(ref_path)
+                if "swagger" in self.spec
+                else resolve_local(self.spec, resolved)
+            )
             if not isinstance(resolved, dict):
                 return None
 
@@ -376,7 +381,7 @@ class Mapper:
             f"Duplicate tool name '{candidate_name}' deduped to '{tool_name}'."
         )
 
-    def _process_parameters(
+    def _process_parameters(  # noqa: C901
         self, parameters: list[dict[str, Any]], input_schema: dict[str, Any]
     ) -> list[dict[str, Any]]:
         """
@@ -398,16 +403,35 @@ class Mapper:
             if not isinstance(param, dict):
                 continue
             if "$ref" in param:
-                param = self._resolve_ref(param["$ref"])
+                param = (
+                    self._resolve_ref(param["$ref"])
+                    if "swagger" in self.spec
+                    else resolve_local(self.spec, param)
+                )
                 if not isinstance(param, dict):
                     continue
 
             param_name = param.get("name")
             param_in = param.get("in")
-            if not param_name or param_in not in ["path", "query", "header", "cookie"]:
+            if not param_name or param_in not in [
+                "path",
+                "query",
+                "querystring",
+                "header",
+                "cookie",
+            ]:
                 continue
 
-            param_schema_openapi = param.get("schema", {})
+            media_type = None
+            form_metadata = None
+            if param_in == "querystring":
+                media_type, media = next(iter(param["content"].items()))
+                media = resolve_local(self.spec, media)
+                param_schema_openapi = media["schema"]
+                if media_type == "application/x-www-form-urlencoded":
+                    form_metadata = normalize_form_media(self.spec, media)
+            else:
+                param_schema_openapi = param.get("schema", {})
             param_schema_json = openapi_schema_to_json_schema(
                 param_schema_openapi, self.spec, raise_on_error=True
             )
@@ -428,6 +452,11 @@ class Mapper:
                     "style": param.get("style"),
                     "explode": param.get("explode"),
                     "allow_reserved": param.get("allowReserved"),
+                    **(
+                        {"content_type": media_type, "form": form_metadata}
+                        if param_in == "querystring"
+                        else {}
+                    ),
                 }
             )
         return processed_params
@@ -452,7 +481,7 @@ class Mapper:
 
         request_body = request_body_maybe_ref
         if "$ref" in request_body:
-            request_body = self._resolve_ref(request_body["$ref"])
+            request_body = resolve_local(self.spec, request_body)
             if not isinstance(request_body, dict):
                 return None
 
@@ -469,13 +498,13 @@ class Mapper:
             content["application/json"], dict
         ):
             primary_content_type = "application/json"
-            primary_media = content["application/json"]
+            primary_media = resolve_local(self.spec, content["application/json"])
             body_schema_openapi = primary_media.get("schema")
         elif content:
             first_type = next(iter(content))
             if isinstance(content[first_type], dict):
                 primary_content_type = first_type
-                primary_media = content[first_type]
+                primary_media = resolve_local(self.spec, content[first_type])
                 body_schema_openapi = primary_media.get("schema")
                 logger.info(
                     "Using '%s' as primary content type for request body (application/json not found).",
@@ -494,6 +523,11 @@ class Mapper:
             processed_request_body = {
                 "required": request_body.get("required", False),
                 "content_type": primary_content_type,
+                **(
+                    {"form": normalize_form_media(self.spec, primary_media)}
+                    if primary_content_type == "application/x-www-form-urlencoded"
+                    else {}
+                ),
             }
         elif request_body.get("required", False):
             logger.warning(

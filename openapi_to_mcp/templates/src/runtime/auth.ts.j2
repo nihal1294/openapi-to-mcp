@@ -54,7 +54,7 @@ export function resolveAuthForTool(tool: ToolRuntimeMetadata): ResolvedAuth {
 
     const headers: Record<string, string> = {};
     const headerValues: Array<[string, string]> = [];
-    const query: Record<string, unknown> = {};
+    const query: Record<string, unknown> = Object.create(null);
     const cookies: Record<string, string> = {};
     let satisfied = true;
 

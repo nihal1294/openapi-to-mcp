@@ -86,6 +86,19 @@ def test_mapper_uses_first_non_json_request_body_schema() -> None:
     assert tool["_original_request_body"] == {
         "required": True,
         "content_type": "application/x-www-form-urlencoded",
+        "form": {
+            "version32": False,
+            "additional": None,
+            "fields": {
+                "name": {
+                    "kind": "string",
+                    "itemKind": None,
+                    "mode": "content",
+                    "contentType": "text/plain",
+                    "explode": True,
+                }
+            },
+        },
     }
 
 

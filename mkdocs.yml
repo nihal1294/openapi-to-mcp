@@ -28,6 +28,7 @@ nav:
       - diff: commands/diff.md
   - Guides:
       - Auth and Environment: guides/auth-and-env.md
+      - Form and Whole-query Serialization: guides/form-serialization.md
       - Customization Boundary: guides/customization.md
       - mcpgen.yaml: guides/mcpgen-policy.md
       - Generated Project: guides/generated-project.md

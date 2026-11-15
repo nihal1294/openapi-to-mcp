@@ -1,6 +1,7 @@
 import type { CallToolResult, Tool } from '@modelcontextprotocol/server';
+import type { FormMetadata } from './form_media.js';
 
-export type ParameterLocation = 'path' | 'query' | 'header' | 'cookie';
+export type ParameterLocation = 'path' | 'query' | 'querystring' | 'header' | 'cookie';
 
 export interface ToolParameterMetadata {
   name: string;
@@ -9,11 +10,14 @@ export interface ToolParameterMetadata {
   style?: string | null;
   explode?: boolean | null;
   allow_reserved?: boolean | null;
+  content_type?: string;
+  form?: FormMetadata | null;
 }
 
 export interface RequestBodyMetadata {
   required: boolean;
   content_type: string | null;
+  form?: FormMetadata;
 }
 
 export interface SecuritySchemeDefinition {
@@ -50,8 +54,8 @@ export interface ToolRuntimeMetadata {
   execution?: ToolExecutionMetadata;
 }
 
-export const tools = {{ tools | tojson(indent=2) }} as Tool[];
-export const toolRuntimeData = {{ runtime_tools | tojson(indent=2) }} as Record<
+export const tools = {{ (tools | tojson(indent=2)) | replace('"__proto__":', '["__proto__"]:' | safe) }} as Tool[];
+export const toolRuntimeData = {{ (runtime_tools | tojson(indent=2)) | replace('"__proto__":', '["__proto__"]:' | safe) }} as Record<
   string,
   ToolRuntimeMetadata
 >;

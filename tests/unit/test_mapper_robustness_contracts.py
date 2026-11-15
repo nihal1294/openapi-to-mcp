@@ -1,5 +1,8 @@
 from typing import Any
 
+import pytest
+
+from openapi_to_mcp.common import MappingError
 from openapi_to_mcp.mapping.mapper import Mapper
 
 
@@ -50,6 +53,10 @@ def test_mapper_ignores_malformed_parameter_entries_and_refs() -> None:
         "components": {"parameters": {"BadParam": ["oops"]}},
     }
 
+    with pytest.raises(MappingError, match=r"parameter \$ref"):
+        Mapper(spec=spec).map_tools()
+    spec["paths"]["/items"]["parameters"] = []
+    spec["paths"]["/items"]["get"]["parameters"].pop(0)
     tool = Mapper(spec=spec).map_tools()[0]
 
     assert set(tool["inputSchema"]["properties"]) == {"good"}
@@ -132,7 +139,9 @@ def test_mapper_ignores_invalid_request_body_refs_and_content() -> None:
         "components": {"requestBodies": {"BadBody": ["oops"]}},
     }
 
-    tools = {tool["name"]: tool for tool in Mapper(spec=spec).map_tools()}
-
-    assert tools["postRef"]["_original_request_body"] is None
+    with pytest.raises(MappingError, match="requestBody"):
+        Mapper(spec=spec).map_tools()
+    mapper = Mapper(spec=spec, on_mapping_error="skip")
+    tools = {tool["name"]: tool for tool in mapper.map_tools()}
+    assert "postRef" not in tools
     assert tools["postContent"]["_original_request_body"] is None

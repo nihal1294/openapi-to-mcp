@@ -1,9 +1,10 @@
 import type { AxiosInstance } from 'axios';
 
 import { resolveAuthForTool } from './auth.js';
-import { MAX_RESPONSE_BYTES, TARGET_API_AUTH_HEADER, TOOL_TIMEOUT_MS } from './config.js';
+import { MAX_RESPONSE_BYTES, TARGET_API_AUTH_HEADER, TARGET_API_BASE_URL, TOOL_TIMEOUT_MS } from './config.js';
 import { admitResponseBody, resolveResponseByteLimit } from './response_body.js';
 import { createToolExecutionError } from './errors.js';
+import { componentEscape, serializeForm, serializeWholeJson } from './form_media.js';
 import type { ToolRuntimeMetadata } from './generated.js';
 import {
   replaceSafeQueryEntries,
@@ -19,6 +20,11 @@ export interface RequestContext {
   queryParams: Record<string, unknown>;
   requestData: unknown;
   sensitiveCookieNames: string[];
+  sensitiveQueryNames: string[];
+  wholeQuery: string | null;
+  wholeQueryNames: string[];
+  wholeQueryType: string | null;
+  wireData: unknown;
   targetPath: string;
 }
 
@@ -42,16 +48,24 @@ export function buildRequestContext(
 ): RequestContext {
   const requestContext = applyParameterValues(tool, args);
   requestContext.headers['X-Request-Id'] = requestId;
-  requestContext.sensitiveCookieNames = applyAuthContext(
+  const authNames = applyAuthContext(
     tool,
     requestContext.headers,
     requestContext.queryEntries,
     requestContext.queryParams,
-    requestContext.cookies
+    requestContext.cookies,
+    requestContext.wholeQueryType,
+    requestContext.wholeQueryNames
   );
+  requestContext.sensitiveCookieNames = authNames.cookies;
+  requestContext.sensitiveQueryNames = authNames.query;
   applyDefaultAuthHeader(requestContext.headers);
   applyCookieHeader(requestContext.headers, requestContext.cookies);
   requestContext.requestData = applyRequestBody(tool, args, requestContext.headers);
+  requestContext.wireData = requestContext.requestData;
+  if (tool.requestBody?.form && requestContext.requestData !== undefined) {
+    requestContext.wireData = serializeForm(requestContext.requestData, tool.requestBody.form).wire;
+  }
   return requestContext;
 }
 
@@ -71,12 +85,12 @@ export async function executeHttpRequest(
     const response = await axiosInstance.request({
       method: tool.method,
       url: requestContext.targetPath,
-      params: requestContext.queryParams,
+      params: requestContext.wholeQueryType ? { whole: true } : requestContext.queryParams,
       paramsSerializer: {
-        serialize: () => serializeQueryEntries(requestContext.queryEntries),
+        serialize: () => requestContext.wholeQueryType ? [requestContext.wholeQuery, serializeQueryEntries(requestContext.queryEntries)].filter(Boolean).join('&') : serializeQueryEntries(requestContext.queryEntries),
       },
       headers: requestContext.headers,
-      data: requestContext.requestData,
+      data: requestContext.wireData,
       signal: abortController.signal,
       validateStatus: limit > 0 ? () => true : (status) => status >= 200 && status < 300,
       ...(limit > 0 ? { responseType: 'stream' as const, transformResponse: [(data: unknown) => data] } : {}),
@@ -98,15 +112,38 @@ function applyParameterValues(
 ): RequestContext {
   let targetPath = tool.path;
   const queryEntries: QueryEntry[] = [];
-  const queryParams: Record<string, unknown> = {};
+  const queryParams: Record<string, unknown> = Object.create(null);
   const headers: Record<string, string> = { Accept: 'application/json' };
   const cookies: Record<string, string> = {};
+  let wholeQuery: string | null = null;
+  let wholeQueryNames: string[] = [];
+  let wholeQueryType: string | null = null;
 
   for (const parameter of tool.parameters || []) {
     const paramValue = args[parameter.name];
+    if (parameter.in === 'querystring') {
+      wholeQueryType = parameter.content_type ?? null;
+      if (/[?#]/.test(TARGET_API_BASE_URL) || /[?#]/.test(targetPath)) {
+        throw createToolExecutionError('whole_query_url_conflict', 'validation', false, 'Whole-query operations cannot use a base or target URL with a query or fragment.');
+      }
+    }
     if (paramValue === undefined || paramValue === null) {
       if (parameter.required) {
         throw createToolExecutionError('missing_required_parameter', 'validation', false, `Missing required parameter: ${parameter.name}`);
+      }
+      continue;
+    }
+    if (parameter.in === 'querystring') {
+      if (parameter.content_type === 'application/x-www-form-urlencoded' && parameter.form) {
+        const result = serializeForm(paramValue, parameter.form);
+        wholeQuery = result.wire;
+        wholeQueryNames = result.names;
+      } else if (parameter.content_type === 'application/json') {
+        wholeQuery = serializeWholeJson(paramValue);
+      } else if (parameter.content_type === 'text/plain' && typeof paramValue === 'string') {
+        wholeQuery = componentEscape(paramValue);
+      } else {
+        throw createToolExecutionError('invalid_whole_query', 'validation', false, 'Unsupported whole-query value.');
       }
       continue;
     }
@@ -126,6 +163,9 @@ function applyParameterValues(
       applyCookieParam(cookies, parameter, paramValue);
     }
   }
+  if (wholeQueryType && /[?#]/.test(targetPath)) {
+    throw createToolExecutionError('whole_query_url_conflict', 'validation', false, 'Whole-query operations cannot use a base or target URL with a query or fragment.');
+  }
   return {
     cookies,
     headers,
@@ -133,6 +173,11 @@ function applyParameterValues(
     queryParams,
     requestData: undefined,
     sensitiveCookieNames: [],
+    sensitiveQueryNames: [],
+    wholeQuery,
+    wholeQueryNames,
+    wholeQueryType,
+    wireData: undefined,
     targetPath,
   };
 }
@@ -142,8 +187,10 @@ function applyAuthContext(
   headers: Record<string, string>,
   queryEntries: QueryEntry[],
   queryParams: Record<string, unknown>,
-  cookies: Record<string, string>
-): string[] {
+  cookies: Record<string, string>,
+  wholeQueryType: string | null,
+  wholeQueryNames: string[]
+): { cookies: string[]; query: string[] } {
   const resolvedAuth = resolveAuthForTool(tool);
   if (!resolvedAuth.ok) {
     const invalid = resolvedAuth.invalid || [];
@@ -156,11 +203,18 @@ function applyAuthContext(
         : `Missing credentials for required security scheme(s): ${resolvedAuth.missing.join(', ')}`
     );
   }
+  const queryNames = Object.keys(resolvedAuth.query);
+  if (wholeQueryType && queryNames.length && wholeQueryType !== 'application/x-www-form-urlencoded') {
+    throw createToolExecutionError('whole_query_auth_conflict', 'auth', false, 'Query credentials cannot be combined with this whole-query media type.');
+  }
+  if (queryNames.some((name) => wholeQueryNames.includes(name))) {
+    throw createToolExecutionError('whole_query_auth_conflict', 'auth', false, 'Query credentials collide with a whole-query form field.');
+  }
   Object.assign(headers, resolvedAuth.headers);
   Object.assign(queryParams, resolvedAuth.query);
   replaceSafeQueryEntries(queryEntries, resolvedAuth.query);
   Object.assign(cookies, resolvedAuth.cookies);
-  return Object.keys(resolvedAuth.cookies);
+  return { cookies: Object.keys(resolvedAuth.cookies), query: queryNames };
 }
 
 function applyDefaultAuthHeader(headers: Record<string, string>): void {

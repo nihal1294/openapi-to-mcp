@@ -22,6 +22,7 @@ RUNTIME_TEMPLATE_NAMES = (
     "executor",
     "executor_support",
     "generated",
+    "form_media",
     "http_transport",
     "limiter",
     "observability",
