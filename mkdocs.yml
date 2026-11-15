@@ -23,6 +23,7 @@ nav:
       - generate: commands/generate.md
       - run: commands/run.md
       - test-server: commands/test-server.md
+      - preview: commands/preview.md
       - doctor: commands/doctor.md
       - diff: commands/diff.md
   - Guides:

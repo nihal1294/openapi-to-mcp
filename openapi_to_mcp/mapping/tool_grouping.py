@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from openapi_to_mcp.common.exceptions import GenerationError
+from openapi_to_mcp.common.trace import trace_row
 
 TOOL_GROUPING_MODES = frozenset({"none", "tag-prefix"})
 
@@ -13,6 +14,8 @@ TOOL_GROUPING_MODES = frozenset({"none", "tag-prefix"})
 def apply_tool_grouping(
     mcp_tools: list[dict[str, Any]],
     tool_grouping: str,
+    *,
+    trace: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Return mapped tools after applying an optional grouping strategy."""
     if tool_grouping == "none":
@@ -22,19 +25,26 @@ def apply_tool_grouping(
 
     grouped_tools = [{**tool} for tool in mcp_tools]
     for tool in grouped_tools:
-        _apply_tag_prefix(tool)
+        row = trace_row(trace, tool)
+        _apply_tag_prefix(tool, row)
     _ensure_unique_names(grouped_tools)
     return grouped_tools
 
 
-def _apply_tag_prefix(tool: dict[str, Any]) -> None:
+def _apply_tag_prefix(tool: dict[str, Any], row: dict[str, Any] | None = None) -> None:
     original_name = _original_name(tool)
     if _was_renamed(tool, original_name):
-        return
-    tag_prefix = _first_tag_prefix(tool)
-    if tag_prefix is None:
-        return
-    tool["name"] = f"{tag_prefix}_{original_name}"
+        reason, tag_prefix = "policy_rename", None
+    else:
+        tag_prefix = _first_tag_prefix(tool)
+        reason = "tag_prefix" if tag_prefix else "no_usable_tag"
+        if tag_prefix is not None:
+            tool["name"] = f"{tag_prefix}_{original_name}"
+    if row is not None:
+        row["decisions"].append(
+            {"kind": "grouping", "reason": reason, "prefix": tag_prefix}
+        )
+        row["final_name"] = tool["name"]
 
 
 def _was_renamed(tool: dict[str, Any], original_name: str) -> bool:

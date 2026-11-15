@@ -55,6 +55,49 @@ generation_identity_options = [
     ),
 ]
 
+mapping_options = [
+    click.option(
+        "--strict/--no-strict",
+        default=True,
+        show_default=True,
+        help="Strict mode fails generation on unsupported required constructs.",
+    ),
+    click.option(
+        "--on-mapping-error",
+        type=ERROR_MODE_CHOICE,
+        help="How to handle operation mapping failures. Defaults to fail in strict mode and skip in non-strict mode.",
+    ),
+    click.option(
+        "--on-schema-error",
+        type=ERROR_MODE_CHOICE,
+        help="How to handle schema conversion failures. Defaults to fail in strict mode and skip in non-strict mode.",
+    ),
+]
+
+tool_metadata_options = [
+    click.option(
+        "--tool-descriptions",
+        default="spec",
+        show_default=True,
+        type=click.Choice(["spec", "method"], case_sensitive=False),
+        help="Choose imported or method-only tool descriptions.",
+    ),
+    click.option(
+        "--tool-name-policy",
+        default="preserve",
+        show_default=True,
+        type=click.Choice(["preserve", "validate"], case_sensitive=False),
+        help="Preserve names with warnings or require recommended names.",
+    ),
+    click.option(
+        "--tool-grouping",
+        default="none",
+        show_default=True,
+        type=TOOL_GROUPING_CHOICE,
+        help="Optional grouped tool naming strategy for generated tools.",
+    ),
+]
+
 generation_runtime_options = [
     click.option(
         "--telemetry",
@@ -93,22 +136,7 @@ generation_runtime_options = [
         show_default=True,
         help="HTTP endpoint path for MCP streamable-http transport.",
     ),
-    click.option(
-        "--strict/--no-strict",
-        default=True,
-        show_default=True,
-        help="Strict mode fails generation on unsupported required constructs.",
-    ),
-    click.option(
-        "--on-mapping-error",
-        type=ERROR_MODE_CHOICE,
-        help="How to handle operation mapping failures. Defaults to fail in strict mode and skip in non-strict mode.",
-    ),
-    click.option(
-        "--on-schema-error",
-        type=ERROR_MODE_CHOICE,
-        help="How to handle schema conversion failures. Defaults to fail in strict mode and skip in non-strict mode.",
-    ),
+    *mapping_options,
     click.option(
         "--runtime-validation",
         default="input",
@@ -116,27 +144,7 @@ generation_runtime_options = [
         type=RUNTIME_VALIDATION_CHOICE,
         help="Runtime validation applied by the generated server.",
     ),
-    click.option(
-        "--tool-descriptions",
-        default="spec",
-        show_default=True,
-        type=click.Choice(["spec", "method"], case_sensitive=False),
-        help="Choose imported or method-only tool descriptions.",
-    ),
-    click.option(
-        "--tool-name-policy",
-        default="preserve",
-        show_default=True,
-        type=click.Choice(["preserve", "validate"], case_sensitive=False),
-        help="Preserve names with warnings or require recommended names.",
-    ),
-    click.option(
-        "--tool-grouping",
-        default="none",
-        show_default=True,
-        type=TOOL_GROUPING_CHOICE,
-        help="Optional grouped tool naming strategy for generated tools.",
-    ),
+    *tool_metadata_options,
 ]
 
 generate_options = [
