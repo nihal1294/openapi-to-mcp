@@ -14,6 +14,65 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 _HTTP_STATUS_CODE_LENGTH = 3
 
+# Only keywords whose conversion is understood here can contribute to an
+# advertised output promise. Annotations are not traversed as schemas.
+_ANNOTATIONS = frozenset(
+    {
+        "title",
+        "description",
+        "default",
+        "examples",
+        "example",
+        "readOnly",
+        "writeOnly",
+        "deprecated",
+        "externalDocs",
+    }
+)
+_COMMON_KEYWORDS = frozenset(
+    {"type", "enum", "const", "nullable", "$ref", "allOf", "anyOf"}
+)
+_OBJECT_KEYWORDS = frozenset({"properties", "required", "additionalProperties"})
+_ARRAY_KEYWORDS = frozenset({"items", "minItems", "maxItems", "uniqueItems"})
+_STRING_KEYWORDS = frozenset({"minLength", "maxLength", "pattern"})
+_NUMBER_KEYWORDS = frozenset(
+    {"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf"}
+)
+_SUPPORTED_KEYWORDS = (
+    _ANNOTATIONS
+    | _COMMON_KEYWORDS
+    | _OBJECT_KEYWORDS
+    | _ARRAY_KEYWORDS
+    | _STRING_KEYWORDS
+    | _NUMBER_KEYWORDS
+    | {"format"}
+)
+_KNOWN_STRING_FORMATS = frozenset(
+    {
+        "date",
+        "date-time",
+        "time",
+        "duration",
+        "email",
+        "idn-email",
+        "hostname",
+        "idn-hostname",
+        "ipv4",
+        "ipv6",
+        "uri",
+        "uri-reference",
+        "iri",
+        "iri-reference",
+        "uuid",
+        "json-pointer",
+        "relative-json-pointer",
+        "regex",
+        "byte",
+        "binary",
+        "password",
+    }
+)
+
 
 def extract_output_schema(  # noqa: C901, PLR0911, PLR0912
     operation: dict[str, Any],
@@ -21,6 +80,12 @@ def extract_output_schema(  # noqa: C901, PLR0911, PLR0912
     resolve_ref: Callable[[str], dict[str, Any]],
 ) -> dict[str, Any] | None:
     """Describe every documented success, or omit an unsafe output promise."""
+    if (
+        "jsonSchemaDialect" in spec
+        or ("openapi" in spec and not str(spec["openapi"]).startswith(("3.0.", "3.1.")))
+        or ("swagger" in spec and spec["swagger"] != "2.0")
+    ):
+        return None
     responses = operation.get("responses")
     if not isinstance(responses, dict):
         return None
@@ -176,58 +241,112 @@ def _raw_object_guarantee(
     )
 
 
-def _has_unsafe_conversion(
+def _has_unsafe_conversion(  # noqa: C901, PLR0911, PLR0912
     schema: dict[str, Any],
     resolve_ref: Callable[[str], dict[str, Any]],
     active_refs: set[str],
 ) -> bool:
-    """Avoid conversions that may narrow the set of valid response values."""
-    # Lost constraints can turn exclusive branches into overlaps, or make a
-    # negated schema broader, rejecting values accepted by the source schema.
-    if "oneOf" in schema or "not" in schema:
+    """Reject source schema semantics the converter cannot faithfully preserve."""
+    if any(
+        key not in _SUPPORTED_KEYWORDS and not key.startswith("x-") for key in schema
+    ):
         return True
-    if "type" not in schema and ("properties" in schema or "items" in schema):
+    if schema.get("writeOnly") is True:
         return True
+    schema_type = schema.get("type")
+    types = [schema_type] if isinstance(schema_type, str) else schema_type
+    if types is not None and (
+        not isinstance(types, list)
+        or not types
+        or not all(
+            isinstance(t, str)
+            and t
+            in {"object", "array", "string", "integer", "number", "boolean", "null"}
+            for t in types
+        )
+    ):
+        return True
+    types = types or []
+    if schema.get("nullable") is True and not types:
+        return True
+    if any(key in schema for key in _OBJECT_KEYWORDS) and "object" not in types:
+        return True
+    if any(key in schema for key in _ARRAY_KEYWORDS) and "array" not in types:
+        return True
+    if any(key in schema for key in _STRING_KEYWORDS) and "string" not in types:
+        return True
+    if any(key in schema for key in _NUMBER_KEYWORDS) and not {
+        "integer",
+        "number",
+    }.intersection(types):
+        return True
+    if "format" in schema:
+        fmt = schema["format"]
+        if "string" in types and (
+            not isinstance(fmt, str) or fmt not in _KNOWN_STRING_FORMATS
+        ):
+            return True
+        if not {"string", "number", "integer"}.intersection(types):
+            return True
     ref = schema.get("$ref")
-    if isinstance(ref, str):
-        if ref in active_refs:
+    if ref is not None:
+        if not isinstance(ref, str) or not ref.startswith("#/") or ref in active_refs:
+            return True
+        # The converter merges siblings after dereferencing; avoid altered semantics.
+        if any(
+            key not in _ANNOTATIONS and key != "$ref" and not key.startswith("x-")
+            for key in schema
+        ):
             return True
         resolved = resolve_ref(ref)
         if not isinstance(resolved, dict) or _has_unsafe_conversion(
             resolved, resolve_ref, active_refs | {ref}
         ):
             return True
-    children: list[object] = []
-    for key in ("properties", "patternProperties", "$defs", "definitions"):
-        mapping = schema.get(key)
-        if isinstance(mapping, dict):
-            children.extend(mapping.values())
-    children.extend(schema.get(key) for key in ("items", "additionalProperties", "not"))
-    for key in ("allOf", "anyOf", "oneOf", "prefixItems"):
-        branches = schema.get(key)
-        if isinstance(branches, list):
+    properties = schema.get("properties", {})
+    if not isinstance(properties, dict):
+        return True
+    children = list(properties.values())
+    children.extend(
+        schema[key] for key in ("items", "additionalProperties") if key in schema
+    )
+    for key in ("allOf", "anyOf"):
+        if key in schema:
+            branches = schema[key]
+            if not isinstance(branches, list) or not branches:
+                return True
             children.extend(branches)
     return any(
-        isinstance(child, dict)
-        and _has_unsafe_conversion(child, resolve_ref, active_refs)
+        not isinstance(child, (dict, bool))
+        or (
+            isinstance(child, dict)
+            and _has_unsafe_conversion(child, resolve_ref, active_refs)
+        )
         for child in children
     )
 
 
-def _has_resolution_error(value: object) -> bool:
-    if isinstance(value, dict):
-        description = value.get("description")
-        if isinstance(description, str) and description.startswith(
-            (
-                "Unresolved reference:",
-                "Resolved reference is not an object:",
-                "Cyclic reference detected:",
-            )
-        ):
-            return True
-        return any(_has_resolution_error(child) for child in value.values())
-    return isinstance(value, list) and any(
-        _has_resolution_error(child) for child in value
+def _has_resolution_error(schema: dict[str, Any]) -> bool:
+    description = schema.get("description")
+    if isinstance(description, str) and description.startswith(
+        (
+            "Unresolved reference:",
+            "Resolved reference is not an object:",
+            "Cyclic reference detected:",
+        )
+    ):
+        return True
+    children: list[object] = []
+    properties = schema.get("properties")
+    if isinstance(properties, dict):
+        children.extend(properties.values())
+    children.extend(schema.get(key) for key in ("items", "additionalProperties", "not"))
+    for key in ("allOf", "anyOf", "oneOf"):
+        branches = schema.get(key)
+        if isinstance(branches, list):
+            children.extend(branches)
+    return any(
+        isinstance(child, dict) and _has_resolution_error(child) for child in children
     )
 
 

@@ -359,3 +359,225 @@ def test_exclusive_and_negative_compositions_omit_output_schema(
         )
         is None
     )
+
+
+@pytest.mark.parametrize(
+    ("schema", "payload"),
+    [
+        (
+            {
+                "anyOf": [
+                    {
+                        "type": "object",
+                        "patternProperties": {"^x": {"type": "string"}},
+                        "additionalProperties": False,
+                    }
+                ]
+            },
+            {"x": "ok"},
+        ),
+        (
+            {
+                "type": "object",
+                "properties": {
+                    "value": {
+                        "type": "array",
+                        "prefixItems": [{"type": "string"}],
+                        "items": False,
+                    }
+                },
+            },
+            {"value": ["ok"]},
+        ),
+    ],
+)
+def test_unsupported_applicators_omit_schema_for_valid_payload(
+    schema: dict[str, Any], payload: dict[str, Any]
+) -> None:
+    from openapi_to_mcp.schema.converter import openapi_schema_to_json_schema  # noqa: PLC0415
+
+    assert Draft202012Validator(schema).is_valid(payload)
+    converted = openapi_schema_to_json_schema(schema, {})
+    assert not Draft202012Validator(converted).is_valid(payload)
+    response = {"content": {"application/json": {"schema": schema}}}
+    assert (
+        extract_output_schema({"responses": {"200": response}}, {}, lambda _ref: {})
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "keyword",
+    [
+        "$schema",
+        "$id",
+        "$dynamicRef",
+        "$anchor",
+        "unevaluatedProperties",
+        "if",
+        "minProperties",
+        "contentSchema",
+        "unknownKeyword",
+    ],
+)
+def test_unknown_schema_semantics_are_rejected(keyword: str) -> None:
+    schema = {"type": "object", keyword: {}}
+    response = {"content": {"application/json": {"schema": schema}}}
+    assert (
+        extract_output_schema({"responses": {"200": response}}, {}, lambda _ref: {})
+        is None
+    )
+
+
+def test_metadata_literals_are_not_treated_as_schema() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            "data": {"type": "string", "pattern": "^x", "minLength": 1},
+            "oneOf": {"type": "string"},
+            "items": {"type": "string"},
+        },
+        "examples": [{"oneOf": "literal", "patternProperties": "literal"}],
+        "default": {"$dynamicRef": "literal"},
+    }
+    response = {"content": {"application/json": {"schema": schema}}}
+    result = extract_output_schema(
+        {"responses": {"200": response}}, {}, lambda _ref: {}
+    )
+    assert result is not None
+    validator = Draft202012Validator(result)
+    assert validator.is_valid({"data": "x"})
+    assert not validator.is_valid({"data": "bad"})
+
+
+def test_dialect_and_reference_semantics_are_guarded() -> None:
+    response = {"content": {"application/json": {"schema": {"type": "object"}}}}
+    op = {"responses": {"200": response}}
+    assert (
+        extract_output_schema(
+            op,
+            {"jsonSchemaDialect": "https://example.invalid/dialect"},
+            lambda _ref: {},
+        )
+        is None
+    )
+    assert extract_output_schema(op, {"openapi": "4.0.0"}, lambda _ref: {}) is None
+    response["content"]["application/json"]["schema"] = {
+        "$ref": "https://example.invalid/schema"
+    }
+    assert extract_output_schema(op, {}, lambda _ref: {"type": "object"}) is None
+    response["content"]["application/json"]["schema"] = {
+        "$ref": "#/schema",
+        "additionalProperties": False,
+    }
+    assert extract_output_schema(op, {}, lambda _ref: {"type": "object"}) is None
+
+
+def test_unsupported_nested_reference_schema_is_omitted() -> None:
+    schema = {
+        "type": "object",
+        "properties": {"data": {"$ref": "#/components/schemas/Unsafe"}},
+    }
+    target = {
+        "type": "object",
+        "patternProperties": {"^x": {"type": "string"}},
+        "additionalProperties": False,
+    }
+    spec = {"components": {"schemas": {"Unsafe": target}}}
+    response = {"content": {"application/json": {"schema": schema}}}
+    assert (
+        extract_output_schema(
+            {"responses": {"200": response}}, spec, lambda _ref: target
+        )
+        is None
+    )
+
+
+def test_write_only_required_response_does_not_advertise_schema() -> None:
+    from openapi_schema_validator import OAS30ReadValidator  # noqa: PLC0415
+
+    from openapi_to_mcp.schema.converter import openapi_schema_to_json_schema  # noqa: PLC0415
+
+    schema = {
+        "type": "object",
+        "properties": {"secret": {"type": "string", "writeOnly": True}},
+        "required": ["secret"],
+    }
+    assert OAS30ReadValidator(schema).is_valid({})
+    assert not Draft202012Validator(openapi_schema_to_json_schema(schema, {})).is_valid(
+        {}
+    )
+    good = {
+        "content": {
+            "application/json": {
+                "schema": {
+                    "type": "object",
+                    "properties": {"ok": {"type": "boolean"}},
+                    "required": ["ok"],
+                }
+            }
+        }
+    }
+    alternate = {"content": {"application/json": {"schema": schema}}}
+    assert (
+        extract_output_schema(
+            {"responses": {"200": good, "201": alternate}},
+            {"openapi": "3.0.0"},
+            lambda _ref: {},
+        )
+        is None
+    )
+
+
+def test_write_only_nested_reference_and_literal_metadata() -> None:
+    target = {"type": "string", "writeOnly": True}
+    schema = {
+        "type": "object",
+        "properties": {"secret": {"$ref": "#/components/schemas/Secret"}},
+    }
+    spec = {"components": {"schemas": {"Secret": target}}}
+    response = {"content": {"application/json": {"schema": schema}}}
+    assert (
+        extract_output_schema(
+            {"responses": {"200": response}}, spec, lambda _ref: target
+        )
+        is None
+    )
+    safe = {
+        "type": "object",
+        "default": {"description": "Unresolved reference: literal", "writeOnly": True},
+        "examples": [{"description": "Cyclic reference detected: literal"}],
+    }
+    response["content"]["application/json"]["schema"] = safe
+    assert (
+        extract_output_schema({"responses": {"200": response}}, {}, lambda _ref: {})
+        is not None
+    )
+
+
+def test_head_omits_output_schema_while_get_retains_it() -> None:
+    response = {
+        "description": "OK",
+        "content": {
+            "application/json": {
+                "schema": {
+                    "type": "object",
+                    "properties": {"ok": {"type": "boolean"}},
+                    "required": ["ok"],
+                }
+            }
+        },
+    }
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "HEAD", "version": "1"},
+        "paths": {
+            "/status": {
+                "get": {"operationId": "getStatus", "responses": {"200": response}},
+                "head": {"operationId": "headStatus", "responses": {"200": response}},
+            }
+        },
+    }
+    tools = {tool["name"]: tool for tool in Mapper(spec=spec).map_tools()}
+    assert tools["getStatus"]["outputSchema"]["required"] == ["ok"]
+    assert "outputSchema" not in tools["headStatus"]

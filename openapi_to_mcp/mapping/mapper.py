@@ -609,7 +609,10 @@ class Mapper:
         annotations = derive_tool_annotations(method)
         if annotations:
             tool_definition["annotations"] = annotations
-        output_schema = extract_output_schema(operation, self.spec, self._resolve_ref)
-        if output_schema:
-            tool_definition["outputSchema"] = output_schema
+        if method.lower() != "head":
+            output_schema = extract_output_schema(
+                operation, self.spec, self._resolve_ref
+            )
+            if output_schema:
+                tool_definition["outputSchema"] = output_schema
         return tool_definition

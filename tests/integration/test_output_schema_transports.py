@@ -38,10 +38,22 @@ def _spec() -> dict:
             },
         }
 
+    def json_response(schema: dict) -> dict:
+        return {
+            "description": "ok",
+            "content": {"application/json": {"schema": schema}},
+        }
+
     return {
-        "openapi": "3.0.0",
+        "openapi": "3.1.0",
         "info": {"title": "Outcomes", "version": "1"},
         "paths": {
+            "/head": {
+                "head": {
+                    "operationId": "headStatus",
+                    "responses": {"200": response("a")},
+                }
+            },
             "/union": {
                 "get": {
                     "operationId": "union",
@@ -55,6 +67,60 @@ def _spec() -> dict:
                 "get": {
                     "operationId": "default",
                     "responses": {"default": response("a")},
+                }
+            },
+            "/write-only": {
+                "get": {
+                    "operationId": "writeOnly",
+                    "responses": {
+                        "200": response("a"),
+                        "201": json_response(
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "secret": {"type": "string", "writeOnly": True}
+                                },
+                                "required": ["secret"],
+                            }
+                        ),
+                    },
+                }
+            },
+            "/pattern": {
+                "get": {
+                    "operationId": "pattern",
+                    "responses": {
+                        "200": json_response(
+                            {
+                                "anyOf": [
+                                    {
+                                        "type": "object",
+                                        "patternProperties": {"^x": {"type": "string"}},
+                                        "additionalProperties": False,
+                                    }
+                                ]
+                            }
+                        )
+                    },
+                }
+            },
+            "/tuple": {
+                "get": {
+                    "operationId": "tuple",
+                    "responses": {
+                        "200": json_response(
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "value": {
+                                        "type": "array",
+                                        "prefixItems": [{"type": "string"}],
+                                        "items": False,
+                                    }
+                                },
+                            }
+                        )
+                    },
                 }
             },
             "/exclusive": {
@@ -153,11 +219,22 @@ class Upstream(BaseHTTPRequestHandler):
     status = 200
     exclusive_body = b"{}"
 
+    def do_HEAD(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+
     def do_GET(self) -> None:
         self.send_response(self.status)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        if self.status not in (204, 205) and self.path == "/exclusive":
+        if self.path == "/write-only" and self.status == 201:
+            self.wfile.write(b"{}")
+        elif self.path == "/pattern":
+            self.wfile.write(b'{"x":"ok"}')
+        elif self.path == "/tuple":
+            self.wfile.write(b'{"value":["ok"]}')
+        elif self.status not in (204, 205) and self.path == "/exclusive":
             self.wfile.write(self.exclusive_body)
         elif self.status not in (204, 205) and self.path == "/scalar":
             self.wfile.write(b'"hello"')
@@ -174,8 +251,22 @@ def _exercise(rpc: object) -> None:
     call = rpc
     tools = {tool["name"]: tool for tool in call("tools/list", {})["tools"]}
     schema = tools["union"]["outputSchema"]
-    for name in ("mixed", "wildcard", "default", "scalar", "exclusive"):
+    for name in (
+        "mixed",
+        "wildcard",
+        "default",
+        "scalar",
+        "exclusive",
+        "pattern",
+        "tuple",
+        "writeOnly",
+        "headStatus",
+    ):
         assert "outputSchema" not in tools[name]
+    head_result = call("tools/call", {"name": "headStatus", "arguments": {}})
+    assert not head_result.get("isError", False)
+    assert head_result["content"][0]["type"] == "text"
+    assert "structuredContent" not in head_result
     validator = Draft202012Validator(schema)
     for status, expected in ((200, {"a": "ok"}), (201, {"b": "created"})):
         Upstream.status = status
@@ -203,6 +294,20 @@ def _exercise(rpc: object) -> None:
     assert not result.get("isError", False)
     assert result["content"][0]["text"] == "hello"
     assert "structuredContent" not in result
+    for status, payload in ((200, {"a": "ok"}), (201, {})):
+        Upstream.status = status
+        result = call("tools/call", {"name": "writeOnly", "arguments": {}})
+        assert not result.get("isError", False)
+        assert json.loads(result["content"][0]["text"]) == payload
+    Upstream.status = 200
+    for name, payload in (("pattern", {"x": "ok"}), ("tuple", {"value": ["ok"]})):
+        source_schema = _spec()["paths"][f"/{name}"]["get"]["responses"]["200"][
+            "content"
+        ]["application/json"]["schema"]
+        Draft202012Validator(source_schema).validate(payload)
+        result = call("tools/call", {"name": name, "arguments": {}})
+        assert not result.get("isError", False)
+        assert json.loads(result["content"][0]["text"]) == payload
     exclusive_schema = _spec()["paths"]["/exclusive"]["get"]["responses"]["200"][
         "content"
     ]["application/json"]["schema"]

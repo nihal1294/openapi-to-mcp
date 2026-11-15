@@ -76,9 +76,12 @@ success statuses, so their output schemas are omitted. Distinct object schemas a
 identical schemas remain unchanged. If a successful response can be bodyless,
 non-JSON, nullable, non-object, or cannot be resolved, the schema is omitted.
 Schemas are also omitted when their object shape or nested types cannot be
-established without narrowing the source schema. Output schemas containing
-`oneOf` or `not` are omitted because conversion may not preserve the
-constraints needed to represent exclusive or negative composition.
+established without narrowing the source schema, or when the schema uses
+keywords, references, or a dialect that the output conversion cannot reliably
+preserve. For example, schemas using `oneOf`, `not`, `patternProperties`, or
+`prefixItems` are omitted. Schemas with `writeOnly: true` are also omitted
+because the response may omit a write-only required property. HEAD operations
+also omit it because their responses have no body.
 The tool still returns successful responses as text and includes structured
 content for JSON objects.
 
