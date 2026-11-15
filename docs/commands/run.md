@@ -34,6 +34,8 @@ openapi-to-mcp run [OPTIONS]
 | `--on-schema-error` | No | strict=`fail`, non-strict=`skip` | How to handle schema conversion failures during generation |
 | `--runtime-validation` | No | `input` | Runtime validation mode compiled into the generated server (`none` or `input`) |
 | `--tool-grouping` | No | `none` | Optional grouped tool naming strategy (`none` or `tag-prefix`) |
+| `--tool-descriptions` | No | `spec` | Use imported descriptions (`spec`) or fixed HTTP method descriptions (`method`) |
+| `--tool-name-policy` | No | `preserve` | Warn on non-recommended names (`preserve`) or reject them (`validate`) |
 | `--target-api-base-url` | No | None | Override `TARGET_API_BASE_URL` explicitly |
 | `--env-source` | No | None | Runtime env values as JSON string or path to `.json` or `.env` |
 | `--performance-preset` | No | None | Apply a named bundle of runtime defaults; explicit runtime overrides still win |

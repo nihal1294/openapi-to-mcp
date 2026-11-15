@@ -18,6 +18,8 @@ class _GenerationClickOptions(TypedDict):
     mcp_server_name: str | None
     mcp_server_version: str | None
     tool_grouping: str
+    tool_descriptions: str
+    tool_name_policy: str
     transport: str
     telemetry: str
     host: str
@@ -97,6 +99,8 @@ class GenerationBehavior:
     runtime_validation: str
     on_mapping_error: ErrorMode | None
     on_schema_error: ErrorMode | None
+    tool_descriptions: str = "spec"
+    tool_name_policy: str = "preserve"
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +126,8 @@ GENERATION_SETTING_NAMES = (
     "mcp_server_name",
     "mcp_server_version",
     "tool_grouping",
+    "tool_descriptions",
+    "tool_name_policy",
     "transport",
     "telemetry",
     "host",
@@ -158,6 +164,8 @@ def compose_generation_request(
     )
     behavior = GenerationBehavior(
         tool_grouping=cast("str", values["tool_grouping"]),
+        tool_descriptions=cast("str", values.get("tool_descriptions", "spec")),
+        tool_name_policy=cast("str", values.get("tool_name_policy", "preserve")),
         telemetry=cast("str", values["telemetry"]),
         strict=cast("bool", values["strict"]),
         runtime_validation=cast("str", values["runtime_validation"]),

@@ -25,6 +25,8 @@ class GenerationDefaults:
     runtime_validation: str | None = None
     on_mapping_error: str | None = None
     on_schema_error: str | None = None
+    tool_descriptions: str | None = None
+    tool_name_policy: str | None = None
 
 
 @dataclass(frozen=True)
@@ -91,3 +93,5 @@ class PolicyConfig:
     annotation_names: dict[str, ToolAnnotationOverride] = field(default_factory=dict)
     execution_operations: dict[str, ExecutionOverride] = field(default_factory=dict)
     execution_names: dict[str, ExecutionOverride] = field(default_factory=dict)
+    description_operations: dict[str, str] = field(default_factory=dict)
+    description_names: dict[str, str] = field(default_factory=dict)

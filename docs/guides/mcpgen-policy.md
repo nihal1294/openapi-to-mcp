@@ -126,6 +126,38 @@ Rename a generated tool by either:
 
 If a rename policy produces duplicate names, generation fails.
 
+### Tool descriptions and names
+
+Set `generate.tool_descriptions` to `spec` (the default) or `method`. The latter
+replaces each generated top-level tool description with `Perform an HTTP {METHOD} request.`
+Parameter and schema metadata, tool names, and custom-source metadata still come
+from their sources. This option is not general prompt-injection prevention.
+
+Use `tools.descriptions.operations` and `tools.descriptions.names` to supply
+non-empty explicit descriptions. Operation keys take precedence over original
+names, then renamed names. These overrides apply after the description mode.
+
+Set `generate.tool_name_policy` to `preserve` (the default) to retain final names
+and warn when they do not match `[A-Za-z0-9_.-]{1,128}`. Set it to `validate`
+to reject those names before writing output. Validation considers selected names
+after renaming and grouping. Repair a name explicitly with a policy rename:
+
+```yaml
+generate:
+  tool_descriptions: method
+  tool_name_policy: validate
+tools:
+  rename:
+    operations:
+      "GET /pets": list_pets
+  descriptions:
+    operations:
+      "GET /pets": List available pets.
+```
+
+Command-line options override these generation defaults. Warnings are also
+recorded in `generation_report.json`.
+
 ### `tools.annotations`
 
 MCP tool annotations are advisory hints to clients, not authorization or runtime
