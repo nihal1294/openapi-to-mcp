@@ -108,7 +108,7 @@ def test_generate_stdio_omits_http_dependencies(
     assert "@types/express" not in package_json["devDependencies"]
     assert package_json["engines"] == {"node": ">=22"}
     assert "quiet: true" in _read_source(output_dir, "src/index.ts")
-    assert "StdioServerTransport" in _read_source(output_dir, "src/transport.ts")
+    assert "serveStdio" in _read_source(output_dir, "src/transport.ts")
 
 
 @pytest.mark.parametrize(

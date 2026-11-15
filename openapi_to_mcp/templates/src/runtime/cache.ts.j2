@@ -2,6 +2,7 @@ import { CACHE_MAX_ENTRIES, CACHE_TTL_MS } from './config.js';
 import type { ToolRuntimeMetadata } from './generated.js';
 import { isSafeMethod, type RequestContext } from './request.js';
 import { serializeQueryEntries } from './query.js';
+import { getRequestCallerContext } from './request_context.js';
 
 interface CachedResponse {
   contentType: unknown;
@@ -23,7 +24,7 @@ export function buildCacheKey(
   tool: ToolRuntimeMetadata,
   request: RequestContext
 ): string {
-  const logicalKey = `${toolName}:${stableSerialize(args)}`;
+  const logicalKey = JSON.stringify([getRequestCallerContext().identity, toolName, stableSerialize(args)]);
   if (!request.wholeQueryType && !tool.requestBody?.form) return logicalKey;
   const headers = Object.fromEntries(
     Object.entries(request.headers).filter(([name]) => name !== 'X-Request-Id')
