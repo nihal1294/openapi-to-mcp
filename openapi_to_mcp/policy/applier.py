@@ -67,6 +67,7 @@ def _apply_tool_overrides(tool: dict[str, Any], policy: PolicyConfig) -> dict[st
     original_name = _tool_name(tool)
     renamed_name = _resolve_rename(operation, original_name, policy)
     tool["name"] = renamed_name
+    _apply_annotation_override(tool, operation, original_name, renamed_name, policy)
     _apply_auth_override(tool, operation, original_name, renamed_name, policy)
     _apply_execution_override(tool, operation, original_name, renamed_name, policy)
     return tool
@@ -80,6 +81,38 @@ def _resolve_rename(operation: str, original_name: str, policy: PolicyConfig) ->
     if name_rename is not None:
         return name_rename
     return original_name
+
+
+def _apply_annotation_override(
+    tool: dict[str, Any],
+    operation: str,
+    original_name: str,
+    renamed_name: str,
+    policy: PolicyConfig,
+) -> None:
+    override = _lookup_override(
+        operation,
+        original_name,
+        renamed_name,
+        policy.annotation_operations,
+        policy.annotation_names,
+    )
+    if override is None:
+        return
+    hints = {
+        key: value
+        for key, value in (
+            ("readOnlyHint", override.read_only),
+            ("destructiveHint", override.destructive),
+            ("idempotentHint", override.idempotent),
+            ("openWorldHint", override.open_world),
+        )
+        if value is not None
+    }
+    if hints:
+        tool["annotations"] = hints
+    else:
+        tool.pop("annotations", None)
 
 
 def _apply_auth_override(

@@ -49,6 +49,13 @@ tools:
       GET /pets: fetchPets
     names:
       listPets: fetchPets
+  annotations:
+    operations:
+      GET /pets:
+        destructive: true
+    names:
+      fetchPets:
+        open_world: false
 
 auth:
   operations:
@@ -116,6 +123,21 @@ Rename a generated tool by either:
 - original mapped name
 
 If a rename policy produces duplicate names, generation fails.
+
+### `tools.annotations`
+
+MCP tool annotations are advisory hints to clients, not authorization or runtime
+execution controls. GET, HEAD, OPTIONS and supported QUERY operations default to
+read-only, non-destructive and idempotent; PUT defaults to idempotent; DELETE
+defaults to destructive and idempotent. Other methods have no inferred hints.
+Open-world behavior is never inferred.
+
+Set `read_only`, `destructive`, `idempotent`, or `open_world` to a boolean under
+`operations` or `names`. The first matching entry wins: operation key, original
+name, then renamed name. A selected entry **replaces** the entire inferred set: its
+omitted fields remain unspecified, explicit `false` values are retained, and an
+empty mapping removes all inferred hints. No match retains the defaults. Tag-prefix
+grouping changes the final name but preserves the selected annotations.
 
 ### `auth`
 
