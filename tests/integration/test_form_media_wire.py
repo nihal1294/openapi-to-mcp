@@ -607,7 +607,9 @@ def test_ordinary_json_and_text_bodies_wire(tmp_path: Path, transport: str) -> N
     ]
 
 
-@pytest.mark.parametrize("composition", ["allOf", "oneOf", "anyOf"])
+@pytest.mark.parametrize(
+    "composition", ["allOf", "oneOf", "anyOf", "reference-sibling", "opaque-pattern"]
+)
 def test_json_form_field_with_composed_schema_wire(
     tmp_path: Path, composition: str
 ) -> None:
@@ -617,10 +619,21 @@ def test_json_form_field_with_composed_schema_wire(
             {"properties": {"name": {"type": "string"}}, "required": ["name"]}
         ],
     }
+    obj_schema = {"$ref": "#/components/schemas/Composed"}
+    if composition == "opaque-pattern":
+        composed = {
+            "type": "object",
+            "patternProperties": {"^name$": {"type": "string"}},
+        }
+    if composition == "reference-sibling":
+        composed = {"type": "object"}
+        obj_schema.update(
+            {"properties": {"name": {"type": "string"}}, "required": ["name"]}
+        )
     media = {
         "schema": {
             "type": "object",
-            "properties": {"obj": {"$ref": "#/components/schemas/Composed"}},
+            "properties": {"obj": obj_schema},
         }
     }
     spec = {

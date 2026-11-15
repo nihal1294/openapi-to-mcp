@@ -392,3 +392,381 @@ def test_composed_schema_reference_sibling_is_not_ignored(
     )
     with pytest.raises(FormMediaError, match="Composed"):
         normalize_form_media(spec, media)
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "root",
+        "styled",
+        "styled-property",
+        "styled-additional",
+        "field",
+        "array",
+        "array-item",
+        "form-additional",
+    ],
+)
+@pytest.mark.parametrize("link", ["outer", "intermediate"])
+def test_form_shape_changing_reference_siblings_are_rejected(
+    target: str, link: str
+) -> None:
+    base = (
+        {"type": "object"}
+        if target in ("root", "styled")
+        else {"type": "array", "items": {"type": "string"}}
+        if target == "array"
+        else {"type": "string"}
+    )
+    sibling_key = (
+        "properties"
+        if target in ("root", "styled")
+        else "items"
+        if target == "array"
+        else "type"
+    )
+    sibling_value = (
+        {"name": {"type": "string"}}
+        if sibling_key == "properties"
+        else {"type": "integer"}
+        if sibling_key == "items"
+        else "integer"
+    )
+    schema = {"$ref": "#/components/schemas/Base", sibling_key: sibling_value}
+    spec = {"openapi": "3.2.1", "components": {"schemas": {"Base": base}}}
+    if link == "intermediate":
+        spec["components"]["schemas"]["Middle"] = schema
+        schema = {"$ref": "#/components/schemas/Middle"}
+    if target == "root":
+        media = {"schema": schema}
+    elif target == "styled":
+        media = {
+            "schema": {"type": "object", "properties": {"f": schema}},
+            "encoding": {"f": {"style": "form"}},
+        }
+    elif target in ("styled-property", "styled-additional"):
+        obj = (
+            {"type": "object", "properties": {"x": schema}}
+            if target == "styled-property"
+            else {"type": "object", "additionalProperties": schema}
+        )
+        media = {
+            "schema": {"type": "object", "properties": {"f": obj}},
+            "encoding": {"f": {"style": "form"}},
+        }
+    elif target == "array-item":
+        media = {
+            "schema": {
+                "type": "object",
+                "properties": {"f": {"type": "array", "items": schema}},
+            }
+        }
+    elif target == "form-additional":
+        media = {"schema": {"type": "object", "additionalProperties": schema}}
+    else:
+        media = {"schema": {"type": "object", "properties": {"f": schema}}}
+    with pytest.raises(FormMediaError, match="sibling"):
+        normalize_form_media(spec, media)
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        {"format": "binary"},
+        {"format": "byte"},
+        {"contentEncoding": "base64"},
+        {"contentMediaType": "application/octet-stream"},
+    ],
+)
+@pytest.mark.parametrize(
+    "target",
+    ["field", "array-item", "styled-property", "styled-additional", "form-additional"],
+)
+@pytest.mark.parametrize("link", ["outer", "intermediate"])
+def test_form_reference_binary_siblings_are_rejected(
+    marker: dict, target: str, link: str
+) -> None:
+    spec = {"openapi": "3.2.1", "components": {"schemas": {"Base": {"type": "string"}}}}
+    ref = {"$ref": "#/components/schemas/Base", **marker}
+    if link == "intermediate":
+        spec["components"]["schemas"]["Middle"] = ref
+        ref = {"$ref": "#/components/schemas/Middle"}
+    if target == "array-item":
+        field = {"type": "array", "items": ref}
+    elif target in ("styled-property", "styled-additional"):
+        field = (
+            {"type": "object", "properties": {"x": ref}}
+            if target == "styled-property"
+            else {"type": "object", "additionalProperties": ref}
+        )
+    else:
+        field = ref
+    media = (
+        {"schema": {"type": "object", "additionalProperties": field}}
+        if target == "form-additional"
+        else {"schema": {"type": "object", "properties": {"f": field}}}
+    )
+    if target.startswith("styled-"):
+        media["encoding"] = {"f": {"style": "form"}}
+    with pytest.raises(FormMediaError, match="Binary"):
+        normalize_form_media(spec, media)
+
+
+@pytest.mark.parametrize("location", ["querystring", "body"])
+@pytest.mark.parametrize(
+    "case",
+    [
+        "root-properties",
+        "root-required",
+        "field-type",
+        "item-binary",
+        "styled-additional",
+    ],
+)
+def test_form_reference_sibling_diagnostics_follow_policy(
+    location: str, case: str
+) -> None:
+    components = {"Root": {"type": "object"}, "Field": {"type": "string"}}
+    if case == "root-properties":
+        media = {
+            "schema": {
+                "$ref": "#/components/schemas/Root",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            }
+        }
+    elif case == "root-required":
+        media = {"schema": {"$ref": "#/components/schemas/Root", "required": ["name"]}}
+    else:
+        ref = (
+            {"$ref": "#/components/schemas/Field", "type": "integer"}
+            if case == "field-type"
+            else {"$ref": "#/components/schemas/Field", "contentEncoding": "base64"}
+        )
+        field = (
+            {"type": "array", "items": ref}
+            if case == "item-binary"
+            else {"type": "object", "additionalProperties": ref}
+            if case == "styled-additional"
+            else ref
+        )
+        media = {"schema": {"type": "object", "properties": {"f": field}}}
+        if case == "styled-additional":
+            media["encoding"] = {"f": {"style": "form"}}
+    operation = {"operationId": "send", "responses": {"200": {"description": "OK"}}}
+    if location == "querystring":
+        operation["parameters"] = [
+            {
+                "name": "whole",
+                "in": "querystring",
+                "content": {"application/x-www-form-urlencoded": media},
+            }
+        ]
+    else:
+        operation["requestBody"] = {
+            "content": {"application/x-www-form-urlencoded": media}
+        }
+    spec = {
+        "openapi": "3.2.1",
+        "components": {"schemas": components},
+        "paths": {"/send": {"post": operation}},
+    }
+    with pytest.raises(MappingError, match=r"sibling|Binary"):
+        Mapper(spec).map_tools()
+    issues = DoctorAnalyzer(spec).analyze("inline").issues
+    assert any(
+        issue.code == "unsupported_openapi_construct"
+        and ("sibling" in issue.hint or "Binary" in issue.hint)
+        for issue in issues
+    )
+    mapper = Mapper(spec, on_mapping_error="skip")
+    assert mapper.map_tools() == []
+    assert len(mapper.get_report()["skipped_operations"]) == 1
+    policy = PolicyConfig(
+        source_path=Path("policy.yaml"),
+        exclude=SelectorSet(operations=frozenset({"POST /send"})),
+    )
+    trace: list[dict] = []
+    assert Mapper(spec, policy_config=policy, trace=trace).map_tools() == []
+    assert trace[0]["status"] == "excluded_before_mapping"
+
+
+def test_opaque_object_reference_sibling_validation_is_preserved() -> None:
+    from jsonschema import Draft202012Validator  # noqa: PLC0415
+
+    inner = {
+        "$ref": "#/components/schemas/Base",
+        "properties": {"name": {"type": "string"}},
+        "required": ["name"],
+    }
+    media = {"schema": {"type": "object", "properties": {"obj": inner}}}
+    spec = {
+        "openapi": "3.2.1",
+        "components": {"schemas": {"Base": {"type": "object"}}},
+        "paths": {
+            "/send": {
+                "post": {
+                    "operationId": "send",
+                    "requestBody": {
+                        "content": {"application/x-www-form-urlencoded": media}
+                    },
+                    "responses": {"200": {"description": "OK"}},
+                }
+            }
+        },
+    }
+    tool = Mapper(spec).map_tools()[0]
+    assert (
+        tool["_original_request_body"]["form"]["fields"]["obj"]["contentType"]
+        == "application/json"
+    )
+    validator = Draft202012Validator(tool["inputSchema"])
+    assert validator.is_valid({"requestBody": {"obj": {"name": "valid"}}})
+    assert not validator.is_valid({"requestBody": {"obj": {}}})
+
+
+def test_form_reference_nonstructural_siblings_remain_supported() -> None:
+    spec = {
+        "openapi": "3.2.1",
+        "components": {
+            "schemas": {
+                "Root": {
+                    "type": "object",
+                    "properties": {
+                        "f": {"$ref": "#/components/schemas/Field", "maxLength": 20}
+                    },
+                },
+                "Field": {"type": "string"},
+            }
+        },
+    }
+    media = {
+        "schema": {"$ref": "#/components/schemas/Root", "description": "Form input"}
+    }
+    field = normalize_form_media(spec, media)["fields"]["f"]
+    assert field["kind"] == "string"
+    assert field["mode"] == "content"
+
+
+@pytest.mark.parametrize(
+    ("keyword", "value"),
+    [
+        ("patternProperties", {"^x": {"type": "string"}}),
+        ("dependentSchemas", {"flag": {"properties": {"x": {"type": "string"}}}}),
+        ("dependencies", {"flag": {"properties": {"x": {"type": "string"}}}}),
+        ("if", {"properties": {"flag": {"const": True}}}),
+        ("then", {"properties": {"x": {"type": "string"}}}),
+        ("else", {"properties": {"y": {"type": "string"}}}),
+    ],
+)
+@pytest.mark.parametrize("target", ["root", "styled"])
+@pytest.mark.parametrize("use_ref", [False, True])
+def test_expanded_form_layout_applicators_rejected(
+    keyword: str, value: object, target: str, *, use_ref: bool
+) -> None:
+    schema = {
+        "type": "object",
+        "properties": {"flag": {"type": "boolean"}},
+        keyword: value,
+    }
+    spec = {"openapi": "3.2.1", "components": {"schemas": {"Object": schema}}}
+    obj = {"$ref": "#/components/schemas/Object"} if use_ref else schema
+    media = (
+        {"schema": obj}
+        if target == "root"
+        else {
+            "schema": {"type": "object", "properties": {"obj": obj}},
+            "encoding": {"obj": {"style": "form"}},
+        }
+    )
+    with pytest.raises(FormMediaError, match="layout"):
+        normalize_form_media(spec, media)
+
+
+@pytest.mark.parametrize(
+    ("keyword", "value"),
+    [
+        ("patternProperties", {"^x": {"type": "string"}}),
+        ("dependentSchemas", {"flag": {"properties": {"x": {"type": "string"}}}}),
+        ("if", {"properties": {"flag": {"const": True}}}),
+    ],
+)
+def test_opaque_json_object_layout_applicators_preserved(
+    keyword: str, value: object
+) -> None:
+    media = {
+        "schema": {
+            "type": "object",
+            "properties": {"obj": {"type": "object", keyword: value}},
+        }
+    }
+    assert (
+        normalize_form_media({"openapi": "3.2.1"}, media)["fields"]["obj"][
+            "contentType"
+        ]
+        == "application/json"
+    )
+
+
+def test_expanded_object_validation_only_constraints_are_supported() -> None:
+    media = {
+        "schema": {
+            "type": "object",
+            "properties": {"a": {"type": "string"}},
+            "dependentRequired": {"a": ["b"]},
+            "propertyNames": {"type": "string"},
+            "dependencies": {"a": ["b"]},
+        }
+    }
+    assert (
+        normalize_form_media({"openapi": "3.2.1"}, media)["fields"]["a"]["kind"]
+        == "string"
+    )
+
+
+@pytest.mark.parametrize("location", ["querystring", "body"])
+@pytest.mark.parametrize(
+    "keyword", ["patternProperties", "dependentSchemas", "dependencies", "if"]
+)
+def test_expanded_applicators_report_mapping_and_doctor(
+    location: str, keyword: str
+) -> None:
+    values = {
+        "patternProperties": {"^x": {"type": "string"}},
+        "dependentSchemas": {"a": {"properties": {"x": {"type": "string"}}}},
+        "dependencies": {"a": {"properties": {"x": {"type": "string"}}}},
+        "if": {"properties": {"a": {"const": "x"}}},
+    }
+    media = {"schema": {"$ref": "#/components/schemas/Root"}}
+    op = {"operationId": "send", "responses": {"200": {"description": "OK"}}}
+    if location == "querystring":
+        op["parameters"] = [
+            {
+                "name": "whole",
+                "in": "querystring",
+                "content": {"application/x-www-form-urlencoded": media},
+            }
+        ]
+    else:
+        op["requestBody"] = {"content": {"application/x-www-form-urlencoded": media}}
+    spec = {
+        "openapi": "3.2.1",
+        "components": {
+            "schemas": {"Root": {"type": "object", keyword: values[keyword]}}
+        },
+        "paths": {"/send": {"post": op}},
+    }
+    with pytest.raises(MappingError, match="layouts"):
+        Mapper(spec).map_tools()
+    assert any(
+        issue.code == "unsupported_openapi_construct" and "layouts" in issue.hint
+        for issue in DoctorAnalyzer(spec).analyze("inline").issues
+    )
+    mapper = Mapper(spec, on_mapping_error="skip")
+    assert mapper.map_tools() == []
+    assert "layouts" in mapper.get_report()["skipped_operations"][0]["reason"]
+    policy = PolicyConfig(
+        source_path=Path("policy.yaml"),
+        exclude=SelectorSet(operations=frozenset({"POST /send"})),
+    )
+    assert Mapper(spec, policy_config=policy).map_tools() == []

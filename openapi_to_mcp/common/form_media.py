@@ -11,13 +11,13 @@ class FormMediaError(ValueError):
 
 
 def resolve_local(
-    spec: dict[str, Any], value: object, *, reject_composed_layout: bool = False
+    spec: dict[str, Any], value: object, *, form_schema_mode: str | None = None
 ) -> dict[str, Any]:
     """Resolve a bounded chain of local JSON Pointer references."""
     seen: set[str] = set()
     while isinstance(value, dict) and "$ref" in value:
-        if reject_composed_layout:
-            _reject_composed_layout(value)
+        if form_schema_mode is not None:
+            _check_form_schema(value, form_schema_mode, reference=True)
         ref = value["$ref"]
         if not isinstance(ref, str) or not ref.startswith("#/") or ref in seen:
             raise FormMediaError(
@@ -42,8 +42,8 @@ def resolve_local(
         value = current
     if not isinstance(value, dict):
         raise FormMediaError("Missing or invalid local reference or schema.")
-    if reject_composed_layout:
-        _reject_composed_layout(value)
+    if form_schema_mode is not None:
+        _check_form_schema(value, form_schema_mode, reference=False)
     return value
 
 
@@ -63,6 +63,34 @@ def _is_binary(schema: dict[str, Any]) -> bool:
 def _reject_composed_layout(schema: dict[str, Any]) -> None:
     if any(keyword in schema for keyword in ("allOf", "oneOf", "anyOf")):
         raise FormMediaError("Composed form object layouts are unsupported.")
+    dependencies = schema.get("dependencies")
+    if any(
+        keyword in schema
+        for keyword in ("patternProperties", "dependentSchemas", "if", "then", "else")
+    ) or (
+        isinstance(dependencies, dict)
+        and any(isinstance(value, dict) for value in dependencies.values())
+    ):
+        raise FormMediaError(
+            "Pattern, conditional and dependent form object layouts are unsupported."
+        )
+
+
+def _check_form_schema(schema: dict[str, Any], mode: str, *, reference: bool) -> None:
+    if _is_binary(schema):
+        raise FormMediaError("Binary form fields are unsupported.")
+    if mode == "expanded":
+        _reject_composed_layout(schema)
+    if reference:
+        shape_keys = {"type", "items", "prefixItems"}
+        if mode == "expanded":
+            shape_keys.update(
+                {"properties", "additionalProperties", "required", "patternProperties"}
+            )
+        if shape_keys.intersection(schema):
+            raise FormMediaError(
+                "Form schema reference siblings affecting serialization are unsupported."
+            )
 
 
 def _field(spec: dict[str, Any], schema: object, encoding: object) -> dict[str, Any]:  # noqa: C901, PLR0912
@@ -74,40 +102,50 @@ def _field(spec: dict[str, Any], schema: object, encoding: object) -> dict[str, 
         raise FormMediaError("Nested form encoding is unsupported.")
     if encoding.get("allowReserved") is True:
         raise FormMediaError("allowReserved=true is unsupported for forms.")
-    if _is_binary(schema):
-        raise FormMediaError("Binary form fields are unsupported.")
     kind = schema_kind(schema)
     if kind not in ("string", "number", "integer", "boolean", "object", "array"):
         raise FormMediaError("Form fields need a supported explicit type.")
+    style = any(key in encoding for key in ("style", "explode", "allowReserved"))
+    mode = (
+        "expanded"
+        if style and kind == "object"
+        else "opaque"
+        if kind == "object"
+        else "value"
+    )
+    schema = resolve_local(spec, original_schema, form_schema_mode=mode)
     item_kind = None
     if kind == "array":
-        item = resolve_local(spec, schema.get("items"))
+        item = resolve_local(spec, schema.get("items"), form_schema_mode="value")
         item_kind = schema_kind(item)
         if item_kind not in ("string", "number", "integer", "boolean") or _is_binary(
             item
         ):
             raise FormMediaError("Form arrays require primitive items.")
-    style = any(key in encoding for key in ("style", "explode", "allowReserved"))
     if style and encoding.get("style", "form") != "form":
         raise FormMediaError("Only form style is supported.")
     object_fields: dict[str, object] | None = None
     object_additional = None
     if style and kind == "object":
-        resolve_local(spec, original_schema, reject_composed_layout=True)
         props = schema.get("properties", {})
         if not isinstance(props, dict) or any(
-            schema_kind(resolve_local(spec, p))
+            schema_kind(resolve_local(spec, p, form_schema_mode="value"))
             not in ("string", "number", "integer", "boolean")
             for p in props.values()
         ):
             raise FormMediaError("Styled objects require flat primitive properties.")
-        children = {name: resolve_local(spec, prop) for name, prop in props.items()}
+        children = {
+            name: resolve_local(spec, prop, form_schema_mode="value")
+            for name, prop in props.items()
+        }
         if any(_is_binary(child) for child in children.values()):
             raise FormMediaError("Binary form fields are unsupported.")
         object_fields = {name: schema_kind(child) for name, child in children.items()}
         additional_schema = schema.get("additionalProperties")
         if isinstance(additional_schema, dict):
-            resolved_additional = resolve_local(spec, additional_schema)
+            resolved_additional = resolve_local(
+                spec, additional_schema, form_schema_mode="value"
+            )
             if _is_binary(resolved_additional):
                 raise FormMediaError("Binary form fields are unsupported.")
             object_additional = schema_kind(resolved_additional)
@@ -147,7 +185,7 @@ def normalize_form_media(spec: dict[str, Any], media: object) -> dict[str, Any]:
     media = resolve_local(spec, media)
     if "itemEncoding" in media or "prefixEncoding" in media:
         raise FormMediaError("Nested form encoding is unsupported.")
-    schema = resolve_local(spec, media.get("schema"), reject_composed_layout=True)
+    schema = resolve_local(spec, media.get("schema"), form_schema_mode="expanded")
     if schema_kind(schema) != "object":
         raise FormMediaError("Form media requires an object schema.")
     properties = schema.get("properties", {})
