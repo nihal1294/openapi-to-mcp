@@ -11,8 +11,9 @@ from openapi_to_mcp.adapters.spec_loader import SpecLoader
 from openapi_to_mcp.commands.generation_models import GenerationBehavior
 from openapi_to_mcp.commands.options import (
     add_options,
-    generation_runtime_options,
+    mapping_options,
     openapi_source_options,
+    tool_metadata_options,
 )
 from openapi_to_mcp.commands.policy_support import load_policy_and_settings
 from openapi_to_mcp.common.exceptions import (
@@ -118,12 +119,8 @@ def _render_operations(rows: list[dict[str, Any]]) -> None:
                 click.echo(f"    mapping skipped: {_quoted(reason)}")
 
 
-# Reuse Click's generation options so defaults and parameter sources remain identical.
-_preview_options = [generation_runtime_options[index] for index in (5, 6, 7, 9, 10, 11)]
-
-
 @click.command()
-@add_options([*openapi_source_options, *_preview_options])
+@add_options([*openapi_source_options, *mapping_options, *tool_metadata_options])
 @click.option(
     "--format",
     "output_format",
@@ -201,11 +198,12 @@ def preview(
             _render_operations(result.trace or [])
         if max_catalog_bytes is not None and catalog["total_bytes"] > max_catalog_bytes:
             raise click.exceptions.Exit(2)
+    except PolicyConfigError as error:
+        raise click.ClickException("Invalid policy configuration.") from error
     except (
         SpecLoaderError,
         MappingError,
         GenerationError,
-        PolicyConfigError,
         SchemaError,
         ValueError,
     ) as error:
