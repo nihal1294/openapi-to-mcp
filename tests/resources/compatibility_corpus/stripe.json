@@ -1,0 +1,410 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Stripe API",
+    "description": "The Stripe REST API. Please see https://stripe.com/docs/api for more details.",
+    "termsOfService": "https://stripe.com/us/terms/",
+    "contact": {
+      "name": "Stripe Dev Platform Team",
+      "url": "https://stripe.com",
+      "email": "dev-platform@stripe.com"
+    },
+    "version": "2026-10-28.endive",
+    "x-stripeReleasePhase": "ga",
+    "x-stripeSpecAudience": "public",
+    "x-stripeSpecFilename": "spec3.ga.public"
+  },
+  "servers": [
+    {
+      "url": "https://api.stripe.com/"
+    }
+  ],
+  "security": [
+    {
+      "basicAuth": []
+    },
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/v2/core/events": {
+      "get": {
+        "summary": "List Events",
+        "description": "List events, going back up to 30 days.",
+        "operationId": "GetV2CoreEvents",
+        "parameters": [
+          {
+            "name": "created",
+            "in": "query",
+            "description": "Set of filters to query events within a range of `created` timestamps.",
+            "required": false,
+            "style": "deepObject",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "gt": {
+                  "type": "string",
+                  "description": "Filter for events created after the specified timestamp.",
+                  "format": "date-time"
+                },
+                "gte": {
+                  "type": "string",
+                  "description": "Filter for events created at or after the specified timestamp.",
+                  "format": "date-time"
+                },
+                "lt": {
+                  "type": "string",
+                  "description": "Filter for events created before the specified timestamp.",
+                  "format": "date-time"
+                },
+                "lte": {
+                  "type": "string",
+                  "description": "Filter for events created at or before the specified timestamp.",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The page size.",
+            "required": false,
+            "style": "form",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "object_id",
+            "in": "query",
+            "description": "Primary object ID used to retrieve related events.",
+            "required": false,
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "The requested page.",
+            "required": false,
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "description": "An array of up to 20 strings containing specific event names.",
+            "required": false,
+            "style": "deepObject",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "required": [
+                    "data",
+                    "next_page_url",
+                    "previous_page_url"
+                  ],
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "description": "List of events.",
+                      "items": {
+                        "$ref": "#/components/schemas/v2.core.event"
+                      }
+                    },
+                    "next_page_url": {
+                      "type": "string",
+                      "description": "URL to fetch the next page of the list. If there are no more pages, the value is null.",
+                      "nullable": true
+                    },
+                    "previous_page_url": {
+                      "type": "string",
+                      "description": "URL to fetch the previous page of the list. If there are no previous pages, the value is null.",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/v2.error"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/core/events/{id}": {
+      "get": {
+        "summary": "Retrieve an Event",
+        "description": "Retrieves the details of an event if it was created in the last 30 days. Supply the unique\nidentifier of the event, which might have been delivered to your event destination.",
+        "operationId": "GetV2CoreEventsId",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Unique identifier for the object.",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/v2.core.event"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/v2.error.not_found"
+                    },
+                    {
+                      "$ref": "#/components/schemas/v2.error"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "basicAuth": {
+        "type": "http",
+        "description": "Basic HTTP authentication. Allowed headers-- Authorization: Basic <api_key> | Authorization: Basic <base64 hash of `api_key:`>",
+        "scheme": "basic"
+      },
+      "bearerAuth": {
+        "type": "http",
+        "description": "Bearer HTTP authentication. Allowed headers-- Authorization: Bearer <api_key>",
+        "scheme": "bearer",
+        "bearerFormat": "auth-scheme"
+      }
+    },
+    "schemas": {
+      "v2.core.event": {
+        "title": "Event",
+        "required": [
+          "created",
+          "id",
+          "livemode",
+          "object",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "changes": {
+            "type": "object",
+            "description": "Before and after changes for the primary related object."
+          },
+          "context": {
+            "type": "string",
+            "description": "Authentication context needed to fetch the event or related object."
+          },
+          "created": {
+            "type": "string",
+            "description": "Time at which the object was created.",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "description": "Additional data about the event."
+          },
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the event."
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode."
+          },
+          "object": {
+            "type": "string",
+            "description": "String representing the object's type. Objects of the same type share the same value of the object field.",
+            "enum": [
+              "v2.core.event"
+            ]
+          },
+          "reason": {
+            "required": [
+              "type"
+            ],
+            "type": "object",
+            "properties": {
+              "request": {
+                "required": [
+                  "id",
+                  "idempotency_key"
+                ],
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "ID of the API request that caused the event."
+                  },
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "The idempotency key transmitted during the request."
+                  }
+                },
+                "description": "Information on the API request that instigated the event."
+              },
+              "type": {
+                "type": "string",
+                "description": "Event reason type.",
+                "enum": [
+                  "request"
+                ]
+              }
+            },
+            "description": "Reason for the event."
+          },
+          "related_object": {
+            "required": [
+              "type",
+              "url"
+            ],
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Unique identifier for the object relevant to the event."
+              },
+              "type": {
+                "type": "string",
+                "description": "Object tag of the resource relevant to the event."
+              },
+              "url": {
+                "type": "string",
+                "description": "URL to retrieve the resource."
+              }
+            },
+            "description": "Object containing the reference to API resource relevant to the event."
+          },
+          "snapshot_event": {
+            "type": "string",
+            "description": "For thin events with a corresponding snapshot event, this is the snapshot event ID."
+          },
+          "type": {
+            "type": "string",
+            "description": "The type of the event."
+          }
+        },
+        "description": "Events are generated to keep you informed of activity in your business account. APIs in the /v2 namespace generate [thin events](https://docs.stripe.com/event-destinations#benefits-of-thin-events) which have small, unversioned payloads that include a reference to the ID of the object that has changed. The Events v2 API returns these new thin events. [Retrieve the event object](https://docs.stripe.com/event-destinations#fetch-data) for additional data about the event. Use the related object ID in the event payload to [fetch the API resource](https://docs.stripe.com/event-destinations#retrieve-the-object-associated-with-thin-events) of the object associated with the event. Comparatively, events generated by most API v1 include a versioned snapshot of an API object in their payload.\nYou can access events through the [Retrieve Event API](https://docs.stripe.com/api/v2/core/events/retrieve) for 30 days."
+      },
+      "v2.error": {
+        "required": [
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Short code to identify the error, should not be handled programmatically"
+              },
+              "doc_url": {
+                "type": "string",
+                "description": "A URL to more information about the error reported"
+              },
+              "message": {
+                "type": "string",
+                "description": "A human-readable message providing more details about the error"
+              },
+              "type": {
+                "type": "string",
+                "description": "The type of error returned"
+              },
+              "user_message": {
+                "type": "string",
+                "description": "A user-friendly message that can be shown to end-users"
+              }
+            },
+            "description": "Information about the error that occurred"
+          }
+        },
+        "description": "Stripe error response"
+      },
+      "v2.error.not_found": {
+        "required": [
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Short code to identify the error, should not be handled programmatically",
+                "enum": [
+                  "not_found"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "description": "A human-readable message providing more details about the error"
+              }
+            },
+            "description": "Information about the error that occurred"
+          }
+        },
+        "description": "The resource wasn't found."
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "extraction": "Parse source JSON; copy top-level keys except paths, components, and webhooks; retain each selected path with its GET and path-level metadata; recursively copy complete local component targets reached by $ref; retain security schemes; serialize UTF-8 JSON with ensure_ascii=false, indent=2 and trailing newline.",
+  "fixtures": {
+    "github": {
+      "project": "GitHub REST API",
+      "version": "3.1.0",
+      "commit": "2a33d9cc5d1dc6ca603b908e0796454af88c1999",
+      "source_url": "https://raw.githubusercontent.com/github/rest-api-description/2a33d9cc5d1dc6ca603b908e0796454af88c1999/descriptions-next/api.github.com/api.github.com.json",
+      "source_sha256": "930d09ccdb9365bb97d7aa3454b707a6a8938664d94c762f4f7c6fbfc926440e",
+      "license_url": "https://raw.githubusercontent.com/github/rest-api-description/2a33d9cc5d1dc6ca603b908e0796454af88c1999/LICENSE.md",
+      "license_sha256": "3243761cbac07e6d169a5a2f4e7c25cc544da85248e735df74c3672e055cc87b",
+      "operations": [
+        "GET /repos/{owner}/{repo}",
+        "GET /zen"
+      ],
+      "subset_sha256": "b0fbfddef8f7c4fac8187c82527a1c209a6f62f48d17c44c620d94c443bf233e"
+    },
+    "stripe": {
+      "project": "Stripe GA API",
+      "version": "3.0.0",
+      "commit": "a045100cf4af0acb548cb9c6f236bb117f83458f",
+      "source_url": "https://raw.githubusercontent.com/stripe/openapi/a045100cf4af0acb548cb9c6f236bb117f83458f/latest/openapi.spec3.json",
+      "source_sha256": "27e7f9681bfe4423708023338fd14096600581718fc2e15efd0d946d6a522c25",
+      "license_url": "https://raw.githubusercontent.com/stripe/openapi/a045100cf4af0acb548cb9c6f236bb117f83458f/LICENSE",
+      "license_sha256": "8c1ce883f4eee7b531e0b7872dbfc72d410ced87dfff9501305de05ca8d203e5",
+      "operations": [
+        "GET /v2/core/events",
+        "GET /v2/core/events/{id}"
+      ],
+      "subset_sha256": "81d2f19c3f08133a248ae9ab64896181030f08287e3065bc65eb0059ee4ab462"
+    }
+  }
+}
