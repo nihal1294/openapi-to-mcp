@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 **Form serialization migration:** Earlier generated servers used Axios's implicit form serializer, which could emit names such as `tags[]` and `object[key]`. Declared form encoding now uses repeated array names or comma-separated items and serializes content-mode objects as JSON. Check affected endpoints before regenerating; see the [migration guide](https://nihal1294.github.io/openapi-to-mcp/guides/form-serialization/#migration).
 
+## [0.16.1](https://github.com/nihal1294/openapi-to-mcp/compare/v0.16.0...v0.16.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **deps:** bump click from 8.5.0 to 8.5.1 in the python-runtime group ([#172](https://github.com/nihal1294/openapi-to-mcp/issues/172)) ([03831b9](https://github.com/nihal1294/openapi-to-mcp/commit/03831b961ec72872ae3ab1a19d713eb3c2adb8f2))
+
 ## [0.16.0](https://github.com/nihal1294/openapi-to-mcp/compare/v0.15.0...v0.16.0) (2026-11-15)
 
 
